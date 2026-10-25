@@ -22,6 +22,7 @@
     fx: store.get(LS.fx) === '1',
     year: null,
     yPage: 0,
+    kindSort: store.get('dh_kindsort') || null,
     openKinds: new Set(),
     openMonths: new Set(),
     openTrades: new Set(),
@@ -740,7 +741,7 @@
           <span><i style="background:var(--accent)"></i>모은 돈 (수입 − 지출) <b>${won0(last.saveCum)}</b></span>
           <span><i style="background:${last.pnlCum >= 0 ? 'var(--up)' : 'var(--down)'}"></i>투자 손익 (실현) <b class="${cls(last.pnlCum)}">${won0(last.pnlCum)}</b></span>
         </div>
-        <div class="legend">${series.map(s => `<span><i class="${s.solid ? '' : 'dash'}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
+        <div class="legend">${series.map(s => `<span><i class="${s.key === 'inv' || s.key === 'save' ? 'dash' : ''}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
         ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, areaKey: 'nw', valFmt: v => `${compact(v)}원`, meta })}
         <p class="note">편한가계부 장부 기준(산 가격). 아직 안 판 종목의 평가손익 <b class="${cls(unreal)}">${won0(unreal)}원</b>은 빠져 있어요 → 반영하면 순자산 약 ${compact(last.nw + unreal)}원.</p>
       </div>`;
@@ -793,12 +794,12 @@
     const rows = series.filter(s => s.key !== 'inv').map(s => ({ s, v: last[s.key] })).sort((a, b) => b.v - a.v);
     return `
       <div class="card">
-        <div class="card-head"><h2 class="card-title">지수별 비교</h2><span class="card-aside">같은 돈을 넣었다면</span></div>
-        <div class="legend">${series.map(s => `<span><i class="${s.solid ? '' : 'dash'}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
+        <div class="card-head"><h2 class="card-title">지수별 비교</h2></div>
+        <div class="legend">${series.map(s => `<span><i class="${s.key === 'inv' || s.key === 'save' ? 'dash' : ''}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
         ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, valFmt: v => `${compact(v)}원`, meta })}
         <div class="sim-list num">
           <div class="sim-row head"><span>넣은 돈 (${pts[0].label}~)</span><b>${won(last.inv)}</b></div>
-          ${rows.map(({ s, v }) => `<div class="sim-row ${s.key === 'mine' ? 'me' : ''}"><span><i style="background:${s.color}"></i>${s.key === 'mine' ? '내 투자 (지금 평가금)' : `${s.label}에 넣었다면`}</span>
+          ${rows.map(({ s, v }) => `<div class="sim-row ${s.key === 'mine' ? 'me' : ''}"><span><i style="background:${s.color}"></i>${s.key === 'mine' ? '내 투자 (지금 평가금)' : s.label}</span>
             <b>${compact(v)}원 <em class="${cls(r(v))}">${pct(r(v), 1)}</em></b></div>`).join('')}
         </div>
         <p class="note">매달 투자 계좌로 옮긴 돈(순투입)으로 그 달 말 지수 ETF(KODEX 200·SPY·QQQ)를 샀다고 가정해 원화로 계산했어요(환율 포함). 내 투자 선은 지난달까지 장부 기준(원금+실현손익)이고 마지막 점만 지금 평가금이에요. 월말 기록이 쌓이면 그 달부터는 실제 평가금으로 바뀌어요.
@@ -1004,11 +1005,10 @@
               ? [['누적 실현', compactSigned(m.amt), cls(m.amt)], [`${ty}년`, m.thisYear ? compactSigned(m.thisYear) : '—', cls(m.thisYear)], ['지금 수익률', m.value > 0 ? pct(m.ret, 1) : '보유 없음', cls(m.ret)]]
               : [[`${y}년 실현`, m.amt ? compactSigned(m.amt) : '—', cls(m.amt)], ['기준원금 대비', pct(m.baseRet, 1), cls(m.baseRet)], ['지금 수익률', m.value > 0 ? pct(m.ret, 1) : '보유 없음', cls(m.ret)]]]; })) })}
           <div class="pick small">
-            <span class="pick-title">비교 중</span>
+            <button class="pick-edit" id="cmpPick" aria-label="비교할 항목 바꾸기"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>변경</button>
             ${sel.map(n => `<span class="pick-chip on" style="--c:${color(n)}"><i></i>${esc(n)}</span>`).join('')}
-            <button class="pick-add" id="cmpPick">변경</button>
           </div>
-          <p class="note">위의 연도를 바꾸면 그 해 기준으로 비교해요. 지금 수익률 = 보유 중인 평가금 기준${state.cmpMode === 'sub' ? '(종목은 평단 대비)' : ''}.</p>`
+          <p class="note">위의 연도를 바꾸면 그 해 기준으로 비교해요.<br>지금 수익률 = 보유 중인 평가금 기준${state.cmpMode === 'sub' ? '(종목은 평단 대비)' : ''}.</p>`
         : `<p class="empty">${yearLabel}에 비교할 기록이 없어요.</p>
           <div class="pick small"><button class="pick-add" id="cmpPick">+ 비교할 자산 고르기</button></div>`}
       </div>`;
@@ -1251,9 +1251,9 @@
         ${state.kindsOpen ? `<p class="note" style="margin:-6px 0 8px">종류를 누르면 자산·종목별로 펼쳐져요</p>
         <div class="table-wrap">
           <table class="grid num kinds">
-            <thead><tr><th>종류</th><th>수익금</th><th>수익률</th></tr></thead>
+            <thead><tr><th>종류</th>${[['amt', '수익금'], ['ret', '수익률']].map(([k, l]) => `<th><button class="th-sort ${state.kindSort === k ? 'on' : ''}" data-sort="${k}" aria-pressed="${state.kindSort === k}">${l}<span aria-hidden="true">${state.kindSort === k ? '↓' : '↕'}</span></button></th>`).join('')}</tr></thead>
             <tbody>
-              ${kinds.map(k => `
+              ${(state.kindSort ? kinds.slice().sort((p, q) => (q[state.kindSort] ?? -Infinity) - (p[state.kindSort] ?? -Infinity)) : kinds).map(k => `
                 <tr class="kind-row" data-kind="${esc(k.k)}">
                   <td><span class="caret">${state.openKinds.has(k.k) ? '▼' : '▶'}</span>${esc(k.k)}</td>
                   <td class="${cls(k.amt)}">${signWon(k.amt)}</td>
@@ -1284,6 +1284,12 @@
     $$('#yearBody [data-trades]').forEach(el => el.onclick = () => {
       const key = `${y}-${el.dataset.trades}`;
       state.openTrades.has(key) ? state.openTrades.delete(key) : state.openTrades.add(key);
+      keepScroll(renderYearBody);
+    });
+    $$('#yearBody .th-sort').forEach(b => b.onclick = e => {
+      e.stopPropagation();
+      state.kindSort = state.kindSort === b.dataset.sort ? null : b.dataset.sort;
+      store.set('dh_kindsort', state.kindSort || '');
       keepScroll(renderYearBody);
     });
     $$('#yearBody .kind-row').forEach(tr => tr.onclick = () => {

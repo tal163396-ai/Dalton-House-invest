@@ -641,3 +641,13 @@ button.nw-card { display: block; width: 100%; text-align: left; border: 0; color
 #yTabs { margin-bottom: 4px; }
 #yTabs + .year-chips { margin-bottom: 10px; }
 .year-chips[hidden] { display: none; }
+
+/* v17 */
+.pager { overflow-y: hidden; }
+.pick-edit { display: inline-flex; align-items: center; gap: 5px; border: 0; background: var(--accent); color: #fff; border-radius: 999px; padding: 8px 14px; font-size: 14px; font-weight: 800; cursor: pointer; }
+.pick-edit:active { transform: scale(.97); }
+.pick.small { gap: 6px; }
+.th-sort { border: 0; background: none; color: inherit; font: inherit; font-weight: inherit; padding: 4px 0; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; }
+.th-sort span { font-size: 11px; opacity: .55; }
+.th-sort.on { color: var(--accent); }
+.th-sort.on span { opacity: 1; }
