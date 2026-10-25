@@ -477,11 +477,11 @@ function saveMonth_(mo) {
   for (let r = 1; r < t.values.length; r++) {
     if (num_(t.values[r][t.col['연도']]) === y && num_(t.values[r][t.col['월']]) === m) {
       Object.keys(obj).forEach(h => { if (h in t.col) setCell_(t, r, h, obj[h]); });
-      return { ok: true, message: `${y}년 ${m}월 마감을 고쳤어요` };
+      return { ok: true, message: `${y}년 ${m}월 마감을 수정했습니다` };
     }
   }
   appendByHeader_('가계부월별', obj);
-  return { ok: true, message: `${y}년 ${m}월 마감을 저장했어요` };
+  return { ok: true, message: `${y}년 ${m}월 마감을 저장했습니다` };
 }
 
 /* ───────────────────────── 공통 도우미 ───────────────────────── */

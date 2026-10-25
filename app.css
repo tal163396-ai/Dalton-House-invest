@@ -733,3 +733,20 @@ body { word-break: keep-all; overflow-wrap: anywhere; }
 .rz-month .trade:first-of-type { border-top: 1px solid var(--line); }
 .rz-year summary { grid-template-columns: auto 1fr auto auto; }
 .nb { white-space: nowrap; }
+
+/* v25: 종류 팝업 정리 */
+.pop-sub-gap { margin-top: 6px; opacity: .85; }
+.kasset { border-top: 1px solid var(--fill); }
+.kasset:first-child { border-top: 0; }
+.kasset .row { border-top: 0; }
+.rz-fold { margin: -4px 0 12px; background: var(--fill); border-radius: 12px; }
+.rz-fold summary { list-style: none; display: grid; grid-template-columns: 1fr auto auto 14px; gap: 14px; align-items: center; padding: 10px 12px; cursor: pointer; }
+.rz-fold summary::-webkit-details-marker { display: none; }
+.rz-fold summary::after { content: '›'; color: var(--ink-3); font-weight: 700; transition: transform .2s; justify-self: end; }
+.rz-fold[open] summary::after { transform: rotate(90deg); }
+.rf-l { font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.rf-l small { font-weight: 600; color: var(--ink-3); margin-left: 2px; }
+.rf-v { display: grid; justify-items: end; line-height: 1.25; white-space: nowrap; }
+.rf-v small { font-size: 10.5px; color: var(--ink-3); font-weight: 600; }
+.rf-v b { font-size: 13.5px; font-weight: 800; }
+.rz-fold .rz-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px 14px; align-items: center; padding: 4px 12px 12px; border-top: 1px solid var(--line); padding-top: 10px; margin: 0 0; }

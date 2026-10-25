@@ -71,11 +71,11 @@
       state.data = prepare(j.data);
       store.set(LS.cache, JSON.stringify(j.data));
       render();
-      if (!quiet) toast('최신 데이터로 바꿨어요');
+      if (!quiet) toast('최신 데이터로 갱신했습니다');
     } catch (e) {
-      if (e.code === 'auth') { logout('비밀번호가 바뀌었거나 틀렸습니다. 다시 입력해 주세요.'); return; }
+      if (e.code === 'auth') { logout('비밀번호가 바뀌었거나 틀렸습니다. 다시 입력하십시오.'); return; }
       toast(state.data ? `새로고침 실패: ${e.message}` : `불러오기 실패: ${e.message}`, true);
-      if (!state.data) $('#view-home').innerHTML = `<div class="card"><p class="empty">데이터를 불러오지 못했습니다.<br>${esc(e.message)}<br><br>인터넷 연결을 확인하고 새로고침을 눌러 주세요.</p></div>`;
+      if (!state.data) $('#view-home').innerHTML = `<div class="card"><p class="empty">데이터를 불러오지 못했습니다.<br>${esc(e.message)}<br><br>인터넷 연결을 확인하고 새로고침을 누르십시오.</p></div>`;
     } finally {
       btn.classList.remove('spin');
     }
@@ -151,7 +151,7 @@
     if (!D) return;
     $('#updated').textContent = D.updatedAt ? `${D.updatedAt.slice(5).replace('-', '/')} 기준 · 환율 ${D.rate.toFixed(1)}원` : '';
     const banner = $('#banner');
-    if (D.bad.length) { banner.hidden = false; banner.textContent = `시세를 못 불러온 종목이 있어요: ${D.bad.join(', ')}. 잠시 후 새로고침해 주세요.`; }
+    if (D.bad.length) { banner.hidden = false; banner.textContent = `시세를 불러오지 못한 종목이 있습니다: ${D.bad.join(', ')}. 잠시 후 새로고침하십시오.`; }
     else banner.hidden = true;
     renderHome(); renderRecord(); renderYears(); renderAssets();
   }
@@ -285,7 +285,7 @@
       const mx = Math.max(...arr.map(a => Math.abs(a.pl)), 1);
       hero = { t: '평가손익', v: signWon(T.pl), s: `원금 ${won(T.cost)} 대비 ${pct(T.ret)}`, c: T.pl >= 0 ? 'gain' : 'loss' };
       list = arr.map(a => row(a.name, `${esc(a.kind)} · ${pct(a.ret, 1)}`, signWon(a.pl), cls(a.pl), Math.abs(a.pl) / mx, a.pl >= 0 ? 'var(--bar-up)' : 'var(--down)', `data-asset="${esc(a.name)}"`)).join('')
-        || '<p class="empty">손익이 있는 자산이 없어요.</p>';
+        || '<p class="empty">손익이 있는 자산이 없습니다.</p>';
     } else if (type === 'rz') {
       const rz = D.realized.filter(r => r.year === y);
       const sum = rz.reduce((t, r) => t + r.amount, 0);
@@ -333,7 +333,7 @@
       </div>
       <div class="pop-list">
         ${bySub.length > 1 ? `<div class="sub-chips">${bySub.map(x => `<span class="sub-chip num">${esc(x.k)} <b class="${cls(x.amt)}">${compactSigned(x.amt)}</b></span>`).join('')}</div>` : ''}
-        ${list.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('') || '<p class="empty">거래가 없어요.</p>'}
+        ${list.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('') || '<p class="empty">거래가 없습니다.</p>'}
       </div>
       <button class="btn pop-close" data-close>닫기</button>`, 'pop');
     $('#rzBack').onclick = () => openStat('rz');
@@ -490,7 +490,7 @@
           </button>`;
         }).join('')}
       </div>
-      <p class="note" style="padding:0 6px">링은 전체 ${state.sort === 'cost' ? '원금' : '평가금'} 중 비중이에요. 누르면 수익률과 종목이 나와요.</p>`;
+      <p class="note" style="padding:0 6px"><span class="nb">링은 전체 ${state.sort === 'cost' ? '원금' : '평가금'} 중 비중입니다.</span> <span class="nb">누르면 수익률과 종목이 나옵니다.</span></p>`;
     $$('#view-assets .seg button').forEach(b => b.onclick = () => {
       if (state.sort === b.dataset.sort) state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
       else { state.sort = b.dataset.sort; state.sortDir = 'desc'; }
@@ -533,34 +533,42 @@
           <div class="pop-sub num">원금 ${won(g.c)}</div>
           <div class="pop-sub num">평가손익 <b>${signWon(g.v - g.c)} (${pct(g.ret)})</b></div>
           ${(() => { const ty = new Date().getFullYear(), names = g.list.map(a => a.name), rz = D.realized.filter(x => names.includes(x.asset)); const yr = rz.filter(x => x.year === ty).reduce((t, x) => t + x.amount, 0), all = rz.reduce((t, x) => t + x.amount, 0);
-            return rz.length ? `<div class="pop-sub num">실현손익 ${String(ty).slice(2)}년 <b>${compactSigned(yr)}</b> · 누적 <b>${compactSigned(all)}</b></div>` : ''; })()}
+            return rz.length ? `<div class="pop-sub num pop-sub-gap">자산 실현손익 합계</div><div class="pop-sub num">${String(ty).slice(2)}년 <b>${compactSigned(yr)}</b> · 누적 <b>${compactSigned(all)}</b></div>` : ''; })()}
         </div>
         <span class="kt-donut big" style="--p:${(w * 100).toFixed(1)}" aria-hidden="true"><b>${(w * 100).toFixed(1)}%</b></span>
       </div>
       <div class="pop-list">
-        ${g.list.map(a => `
+        ${g.list.map(a => `<div class="kasset">
           <button class="row" data-asset="${esc(a.name)}">
             <span>
               <span class="row-name">${esc(a.name)}</span><br>
-              <span class="row-sub num"><span class="nb">평가금 ${compact(a.value)}원</span> · <span class="nb">원금 ${compact(a.cost)}원</span></span>
+              <span class="row-sub num">평가금 ${compact(a.value)}원</span><br>
+              <span class="row-sub num">원금 ${compact(a.cost)}원</span>
             </span>
             <span class="row-right">
               <span class="row-value num ${cls(a.ret)}">${pct(a.ret)}</span><br>
               <span class="row-sub num">평가손익 <span class="${cls(a.pl)}">${compactSigned(a.pl)}</span></span>
             </span>
             ${bar(a.ret)}
+          </button>
             ${(() => {
               const rz = D.realized.filter(x => x.asset === a.name);
               const ty = new Date().getFullYear();
               const bySub = [...groupBy(rz, x => String(x.sub || a.name))].map(([k, l]) => ({ k, all: l.reduce((t, x) => t + x.amount, 0), yr: l.filter(x => x.year === ty).reduce((t, x) => t + x.amount, 0), g: l.filter(x => x.amount > 0).length, lo: l.filter(x => x.amount < 0).length }))
                 .sort((p, q) => Math.abs(q.all) - Math.abs(p.all));
               if (!bySub.length) return '';
-              return `<span class="row-subs rz-grid">
-                <span class="rz-h">실현손익</span><span class="rz-h r">${String(ty).slice(2)}년</span><span class="rz-h r">누적</span>
-                ${bySub.map(x => `<span class="rz-name"><span class="rz-n">${esc(x.k)}</span><small>익절 ${x.g} · 손절 ${x.lo}</small></span><b class="r num ${cls(x.yr)}">${x.yr ? compactSigned(x.yr) : '—'}</b><b class="r num ${cls(x.all)}">${compactSigned(x.all)}</b>`).join('')}
-              </span>`;
+              const yrSum = bySub.reduce((t, x) => t + x.yr, 0), allSum = bySub.reduce((t, x) => t + x.all, 0), n = rz.length;
+              return `<details class="rz-fold">
+                <summary class="num"><span class="rf-l">실현손익 <small>${n}건</small></span>
+                  <span class="rf-v"><small>${String(ty).slice(2)}년</small><b class="${cls(yrSum)}">${yrSum ? compactSigned(yrSum) : '—'}</b></span>
+                  <span class="rf-v"><small>누적</small><b class="${cls(allSum)}">${compactSigned(allSum)}</b></span></summary>
+                <div class="rz-grid">
+                  <span class="rz-h">종목</span><span class="rz-h r">${String(ty).slice(2)}년</span><span class="rz-h r">누적</span>
+                  ${bySub.map(x => `<span class="rz-name"><span class="rz-n">${esc(x.k)}</span><small>익절 ${x.g} · 손절 ${x.lo}</small></span><b class="r num ${cls(x.yr)}">${x.yr ? compactSigned(x.yr) : '—'}</b><b class="r num ${cls(x.all)}">${compactSigned(x.all)}</b>`).join('')}
+                </div>
+              </details>`;
             })()}
-          </button>`).join('')}
+          </div>`).join('')}
       </div>
       <button class="btn pop-close" data-close>닫기</button>`, 'pop');
     $$('#sheetBody .row').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
@@ -835,7 +843,7 @@
         </div>
         <dl class="defs">
           <dt>지수</dt><dd><span class="nb">KODEX 200·SPY·QQQ 종가,</span> <span class="nb">${pts[0].label} 대비 등락률</span> <span class="nb">(배당·환율 미반영)</span></dd>
-          <dt>내 투자</dt><dd><span class="nb">누적 순투입 대비 손익률.</span> <span class="nb">전월까지 장부가,</span> <span class="nb">당월은 평가금 기준</span></dd>
+          <dt>내 투자</dt><dd><span class="nb">누적 순투입 대비 손익률.</span> <span class="nb">전월까지 장부가격,</span> <span class="nb">당월은 평가금 기준</span></dd>
         </dl>
       </div>`;
   }
@@ -857,7 +865,7 @@
           ${SERIES.map(s => `<div><small>${s.label === '내 투자' ? '내 투자' : s.label}</small><b style="color:${C.avail.has(s.key) ? s.color : 'var(--ink-4)'}">${C.avail.has(s.key) ? pct(last[s.key], 1) : '—'}</b></div>`).join('')}
         </div>
         <p class="note">내 투자 = ${C.pts[1]?.label.replace('.', '년 ')}월부터 쌓인 실현손익 ÷ 현재 투자원금. 지수는 대표 ETF(KODEX 200·SPY·QQQ) 주간 종가로 비교${state.fx ? ', 미국 지수는 원화 환산' : ''}.
-        ${C.avail.size > 1 ? '' : '<br>지수 선은 Apps Script를 새 버전으로 바꾸면 나타나요.'}</p>
+        ${C.avail.size > 1 ? '' : '<br>지수 선은 Apps Script를 새 버전으로 배포하면 표시됩니다.'}</p>
       </div>`;
   }
 
@@ -953,11 +961,11 @@
     };
     const hits = series.map(s => `<path class="hit" data-k="${s.key}" d="${linePath(ptsArr(s))}" fill="none" stroke="transparent" stroke-width="22" stroke-linejoin="round"/>`).join('');
     return `<div class="line-wrap" ${opt.detail ? 'data-detail="1"' : ''} data-info='${esc(JSON.stringify(info))}'>
-      <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="비교 그래프. 선을 누르면 이름과 금액이 나와요">${svgInner}
+      <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="비교 그래프. 선을 누르면 이름과 금액이 표시됩니다">${svgInner}
         <line class="guide" x1="0" x2="0" y1="${T}" y2="${H - B}" style="display:none"/>${hits}
         <circle class="pick-halo" r="9" style="display:none" cx="0" cy="0"/>
         <circle class="pick-dot" r="4.5" stroke="var(--card)" stroke-width="2" style="display:none" cx="0" cy="0"/></svg>
-      <div class="ro-row"><div class="line-readout num">선을 누르면 자세한 내용이 나와요</div>${opt.action || ''}</div>
+      <div class="ro-row"><div class="line-readout num">선을 누르면 상세 내용이 표시됩니다</div>${opt.action || ''}</div>
     </div>`;
   }
 
@@ -1075,7 +1083,7 @@
             <dt>기간</dt><dd>위에서 고른 연도 기준</dd>
             <dt>지금 수익률</dt><dd>보유분 평가금 기준${state.cmpMode === 'sub' ? ' (종목은 평단 대비)' : ''}</dd>
           </dl>`
-        : `<p class="empty">${yearLabel}에 비교할 기록이 없어요.</p>
+        : `<p class="empty">${yearLabel}에 비교할 기록이 없습니다.</p>
           <div class="pick small"><button class="pick-add" id="cmpPick">+ 비교할 자산 고르기</button></div>`}
       </div>`;
   }
@@ -1116,7 +1124,7 @@
       $$('#sheetBody .picker-item').forEach(b => b.onclick = () => {
         const n = b.dataset.name;
         if (sel.includes(n)) sel.splice(sel.indexOf(n), 1);
-        else if (sel.length >= CMP_MAX) { toast(`최대 ${CMP_MAX}개까지 비교할 수 있어요`); return; }
+        else if (sel.length >= CMP_MAX) { toast(`최대 ${CMP_MAX}개까지 비교할 수 있습니다`); return; }
         else sel.push(n);
         const sc = $('.picker-list').scrollTop; draw(); $('.picker-list').scrollTop = sc;
       });
@@ -1161,7 +1169,7 @@
         $$('.area', svg).forEach(a => a.classList.toggle('on', a.dataset.k === info.areaKey));
         ['.pick-dot', '.pick-halo', '.guide'].forEach(q => { $(q, svg).style.display = 'none'; });
         ro.classList.remove('on', 'tap'); ro.onclick = null; ro.onkeydown = null; ro.removeAttribute('role'); ro.removeAttribute('tabindex');
-        ro.innerHTML = '선을 누르면 자세한 내용이 나와요';
+        ro.innerHTML = '선을 누르면 상세 내용이 표시됩니다';
       };
       $$('.hit', svg).forEach(h => h.onclick = e => {
         const k = h.dataset.k;
@@ -1218,7 +1226,7 @@
             <div class="sd-trades" hidden>
               ${x.items.slice().sort((a, b) => b.date - a.date).map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)}${isKind ? ` · ${esc(r.sub || r.asset)}` : ''}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}
             </div>
-          </div>`).join('')}` : '<p class="empty">이 기간에는 실현손익 기록이 없어요.</p>'}
+          </div>`).join('')}` : '<p class="empty">이 기간에는 실현손익 기록이 없습니다.</p>'}
         ${hold.length ? `<h3 class="section-title">지금 보유 <span class="note">${compact(hVal)}원 · 원금 ${compact(hCost)}원</span></h3>
           ${hold.map(r => {
             const ret = r.avg > 0 && r.price > 0 && isTradable(r) ? (r.price - r.avg) / r.avg : (r.cost > 0 ? (r.value - r.cost) / r.cost : null);
@@ -1286,7 +1294,7 @@
           <h2 class="card-title">월별 상세</h2>
           <span class="fold-right num"><span class="fold-hint">${state.monthsOpen ? '접기' : `${activeMonths.length}개월`}</span><span class="chev ${state.monthsOpen ? 'up' : ''}" aria-hidden="true"></span></span>
         </button>
-        ${!activeMonths.length ? `<p class="empty">${y}년 실현손익 기록이 아직 없어요.</p>` : !state.monthsOpen ? `
+        ${!activeMonths.length ? `<p class="empty">${y}년 실현손익 기록이 아직 없습니다.</p>` : !state.monthsOpen ? `
         <div class="fold-preview num">
           ${best && best[1] > 0 ? `<span>가장 좋았던 달 ${best[0]}월 <b class="up">${compactSigned(best[1])}</b></span>` : ''}
           ${worst && worst[1] < 0 ? `<span>가장 아쉬운 달 ${worst[0]}월 <b class="down">${compactSigned(worst[1])}</b></span>` : ''}
@@ -1324,7 +1332,7 @@
           <h2 class="card-title">종류별 비교</h2>
           <span class="fold-right num">${state.kindsOpen ? '<span class="fold-hint">접기</span>' : `<span class="${cls(sum)}">${compactSigned(sum)}원</span>`}<span class="chev ${state.kindsOpen ? 'up' : ''}" aria-hidden="true"></span></span>
         </button>
-        ${state.kindsOpen ? `<p class="note" style="margin:-6px 0 8px">종류를 누르면 자산·종목별로 펼쳐져요</p>
+        ${state.kindsOpen ? `<p class="note" style="margin:-6px 0 8px">종류를 누르면 자산·종목별로 펼쳐집니다</p>
         <div class="table-wrap">
           <table class="grid num kinds">
             <thead><tr><th>종류</th>${[['amt', '수익금'], ['ret', '수익률']].map(([k, l]) => `<th><button class="th-sort ${state.kindSort === k ? 'on' : ''}" data-sort="${k}" aria-pressed="${state.kindSort === k}">${l}<span aria-hidden="true">${state.kindSort === k ? '↓' : '↕'}</span></button></th>`).join('')}</tr></thead>
@@ -1340,7 +1348,7 @@
             </tbody>
           </table>
         </div>
-        <p class="note">수익률 = 실현손익 ÷ 기준원금(시트의 연도별구성 탭). 기준원금이 없는 자산은 수익금만 보여요.</p>` : `
+        <p class="note">수익률 = 실현손익 ÷ 기준원금(시트의 연도별구성 탭). 기준원금이 없는 자산은 수익금만 표시됩니다.</p>` : `
         <div class="fold-preview num">${kinds.filter(k => k.amt !== 0).sort((p, q) => Math.abs(q.amt) - Math.abs(p.amt)).slice(0, 3)
           .map(k => `<span>${esc(k.k)} <b class="${cls(k.amt)}">${compactSigned(k.amt)}</b></span>`).join('')}</div>`}
       </div>
@@ -1454,7 +1462,7 @@
     const [ll, lv] = pairs[last] || ['', 0];
     return `<div class="bar-wrap" data-mode="${ctx.mode || ''}" data-year="${ctx.year || ''}">
       <div class="bar-readout num"><span class="br-label">${esc(ll)}</span><b class="br-value ${cls(lv)}">${signWon(lv)}</b><span class="br-hint">한 번 더 누르면 자세히</span></div>
-      <svg class="chart bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="실현손익 막대 그래프. 막대를 누르면 금액이 나와요">
+      <svg class="chart bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="실현손익 막대 그래프. 막대를 누르면 금액이 표시됩니다">
         <line x1="0" x2="${W}" y1="${zy}" y2="${zy}" stroke="var(--line)" stroke-width="1"/>${bars}</svg>
     </div>`;
   }
@@ -1491,7 +1499,7 @@
         ${ks.map(k => `<div class="stat-row"><div class="stat-row-top"><span class="stat-row-name">${esc(k.k)}</span><b class="num ${cls(k.amt)}">${signWon(k.amt)}</b></div>
           <div class="stat-row-sub num">${k.n}건 (${[k.g ? `익절 ${k.g}` : '', k.l ? `손절 ${k.l}` : ''].filter(Boolean).join(' · ')})</div>
           <div class="stat-meter" aria-hidden="true"><i style="width:${Math.max(1.5, Math.abs(k.amt) / mx * 100)}%;background:${k.amt >= 0 ? 'var(--bar-up)' : 'var(--down)'}"></i></div></div>`).join('')}
-        ${list.length ? `<h3 class="section-title">거래 ${list.length}건</h3>` : '<p class="empty">이 기간에는 기록이 없어요.</p>'}
+        ${list.length ? `<h3 class="section-title">거래 ${list.length}건</h3>` : '<p class="empty">이 기간에는 기록이 없습니다.</p>'}
         ${list.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}
       </div>
       <button class="btn pop-close" data-close>닫기</button>`, 'pop');
@@ -1499,10 +1507,10 @@
 
   /* ── 기록 ── */
   const TYPE_HELP = {
-    '매수': '주식·코인을 샀을 때. 수량과 평단이 바뀌고, 연결된 예수금에서 돈이 빠져요.',
-    '매도': '팔았을 때. 실현손익(익절·손절)이 자동 계산되어 월별 수익에 들어가요.',
-    '입금': '계좌에 새 돈을 넣었을 때 (예: 월급에서 ISA로 이체). 원금과 예수금이 같이 늘어서 수익으로 잘못 잡히지 않아요.',
-    '출금': '계좌에서 돈을 뺐을 때. 원금과 예수금이 같이 줄어요.',
+    '매수': '주식·코인을 샀을 때. 수량과 평단이 바뀌고, 연결된 예수금에서 차감됩니다.',
+    '매도': '팔았을 때. 실현손익(익절·손절)이 자동 계산되어 월별 수익에 반영됩니다.',
+    '입금': '계좌에 새 돈을 넣었을 때 (예: 월급에서 ISA로 이체). 원금과 예수금이 함께 늘어나 수익으로 잘못 잡히지 않습니다.',
+    '출금': '계좌에서 돈을 뺐을 때. 원금과 예수금이 함께 줄어듭니다.',
     '금액 수정': '예수금·금·현용주화처럼 직접 관리하는 금액을 지금 값으로 맞출 때.',
   };
 
@@ -1524,7 +1532,7 @@
       const cur = findRow(F.key);
       const usd = cur && cur.cur === 'USD';
       body = `
-        <label class="field"><span>무엇을 고칠까요?</span>
+        <label class="field"><span>수정할 항목</span>
           <select id="fManual">${manualRows.map(r => `<option value="${esc(rowKey(r))}" ${rowKey(r) === F.key ? 'selected' : ''}>${esc(r.kind)} · ${esc(r.asset === r.sub ? r.asset : r.sub)}</option>`).join('')}</select>
         </label>
         <label class="field"><span>${usd ? '지금 금액 (달러)' : '지금 금액 (원)'}</span>
@@ -1611,7 +1619,7 @@
             <span><span class="tag ${t['구분'] === '매수' ? 'buy' : t['구분'] === '매도' ? 'sell' : ''}">${esc(t['구분'])}</span>${esc(t['세부종목'] || t['자산'])}${t['수량'] ? ` ${esc(t['수량'])}주` : ''}<br>
               <small>${fmtDate(new Date(t['날짜']))}${t['입력자'] ? ` · ${esc(t['입력자'])}` : ''}${t['메모'] ? ` · ${esc(t['메모'])}` : ''}</small></span>
             <span class="num" style="text-align:right">${won(num(t['금액(원)']))}${isNum(t['실현손익(원)']) && t['실현손익(원)'] !== '' ? `<br><small class="${cls(num(t['실현손익(원)']))}">${signWon(num(t['실현손익(원)']))}</small>` : ''}</span>
-          </div>`).join('') : `<p class="empty">아직 앱에서 기록한 거래가 없어요.<br>매수·매도를 기록하면 보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
+          </div>`).join('') : `<p class="empty">아직 앱에서 기록한 거래가 없습니다.<br>매수·매도를 기록하면 보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
       </div>`;
 
     $$('.type-seg button', el).forEach(b => b.onclick = () => { F.type = b.dataset.type; renderRecord(); });
@@ -1675,7 +1683,7 @@
     return `
       <div class="card mc-card">
         <div class="card-head"><h2 class="card-title">월 마감</h2><span class="card-aside">마지막 저장 ${String(last.y).slice(2)}.${last.m}</span></div>
-        <p class="help">매달 한 번, 편한가계부 <b>자산 → 전체통계</b> 화면의 숫자 3개를 그대로 옮겨 적어 주세요. 투자손익과 넣은 돈은 앱 기록으로 자동 계산돼요.</p>
+        <p class="help">매달 한 번, 편한가계부 <b>자산 → 전체통계</b> 화면의 숫자 3개를 그대로 입력하십시오. 투자손익과 넣은 돈은 앱 기록으로 자동 계산됩니다.</p>
         <div class="form">
           <label class="field"><span>마감할 달</span><input type="month" id="mcMonth" value="${y}-${String(m).padStart(2, '0')}"></label>
           <label class="field"><span>누적잔액</span><input id="mcNw" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="예: 285,322,041" value="${fmtComma(v('nw'))}"></label>
@@ -1687,7 +1695,7 @@
             <div><small>실현손익 ${C.kept ? '(저장된 값)' : '(앱 기록)'}</small><b class="${cls(C.pnl)}">${signWon(C.pnl)}</b></div>
             <div><small>넣은 돈 ${C.kept ? '(저장된 값)' : '(앱 입금−출금)'}</small><b>${signWon(C.flow)}</b></div>
           </div>
-          <p class="note" style="margin:0">수입에서 그 달 익절(${compact(C.gains)}원)은 빼고 저장해요. ${C.saved ? '<b>이미 저장된 달이에요. 누적잔액·수입·지출만 고쳐요.</b>' : ''}</p>
+          <p class="note" style="margin:0">수입에서 그 달 익절(${compact(C.gains)}원)은 빼고 저장합니다. ${C.saved ? '<b>이미 저장된 달입니다. 누적잔액·수입·지출만 수정합니다.</b>' : ''}</p>
           <p id="mcErr" class="form-error" role="alert"></p>
           <button class="btn primary" id="mcSave">${y}년 ${m}월 마감 저장</button>
         </div>
@@ -1702,18 +1710,18 @@
       const [y, m] = mi.value.split('-').map(Number);
       const val = id => Number(String($(id).value).replace(/[^\d.-]/g, ''));
       const nw = val('#mcNw'), inc = val('#mcInc'), exp = val('#mcExp');
-      if (!y || !m) { err.textContent = '마감할 달을 고르세요.'; return; }
-      if (!(nw > 0)) { err.textContent = '누적잔액을 입력하세요.'; return; }
-      if (!Number.isFinite(inc) || !Number.isFinite(exp)) { err.textContent = '수입과 지출을 입력하세요.'; return; }
+      if (!y || !m) { err.textContent = '마감할 달을 선택하십시오.'; return; }
+      if (!(nw > 0)) { err.textContent = '누적잔액을 입력하십시오.'; return; }
+      if (!Number.isFinite(inc) || !Number.isFinite(exp)) { err.textContent = '수입과 지출을 입력하십시오.'; return; }
       const C = monthCloseCalc(y, m);
       const btn = $('#mcSave'); btn.disabled = true; btn.textContent = '저장 중…';
       try {
         const r = await api('month', { month: { y, m, nw, inc: Math.max(0, inc - C.gains), exp, pnl: C.pnl, flow: C.flow, book: C.book } });
         state.mc = null;
         await load({ quiet: true });
-        toast(r.message || '저장했어요');
+        toast(`${y}년 ${m}월 마감을 저장했습니다`);
       } catch (e) {
-        if (e.code === 'auth') { logout('비밀번호를 다시 입력해 주세요.'); return; }
+        if (e.code === 'auth') { logout('비밀번호를 다시 입력하십시오.'); return; }
         err.textContent = e.message; btn.disabled = false; btn.textContent = `${y}년 ${m}월 마감 저장`;
       }
     };
@@ -1728,32 +1736,32 @@
     if (F.type === '금액 수정') {
       const row = findRow($('#fManual').value);
       const v = String($('#fValue').value).replace(/,/g, '');
-      if (!row) { err.textContent = '고칠 항목을 고르세요.'; return; }
-      if (v === '' || !Number.isFinite(Number(v))) { err.textContent = '금액을 입력하세요.'; return; }
+      if (!row) { err.textContent = '수정할 항목을 선택하십시오.'; return; }
+      if (v === '' || !Number.isFinite(Number(v))) { err.textContent = '금액을 입력하십시오.'; return; }
       action = 'manual';
       payload = { manual: row.cur === 'USD' ? { asset: row.asset, sub: row.sub, usd: Number(v) } : { asset: row.asset, sub: row.sub, value: Number(v) } };
     } else if (F.type === '입금' || F.type === '출금') {
       const t = { ...base(), asset: $('#fCash').value, amountKrw: Number(String($('#fKrw').value).replace(/,/g, '')) };
-      if (!(t.amountKrw > 0)) { err.textContent = '금액을 입력하세요.'; return; }
+      if (!(t.amountKrw > 0)) { err.textContent = '금액을 입력하십시오.'; return; }
       action = 'trade'; payload = { trade: t };
     } else {
       const t = base();
       const krw = String($('#fKrw').value).replace(/,/g, '');
       if (krw !== '') t.amountKrw = Number(krw);
       t.qty = Number($('#fQty').value); t.price = Number($('#fPrice').value);
-      if (!(t.qty > 0)) { err.textContent = '수량을 입력하세요.'; return; }
-      if (!(t.price > 0)) { err.textContent = '단가를 입력하세요.'; return; }
+      if (!(t.qty > 0)) { err.textContent = '수량을 입력하십시오.'; return; }
+      if (!(t.price > 0)) { err.textContent = '단가를 입력하십시오.'; return; }
       if (F.key === '__new') {
         t.sub = $('#fNewName').value.trim(); t.ticker = $('#fNewTicker').value.trim().toUpperCase(); t.currency = $('#fNewCur').value; t.kind = F.kind;
-        if (!t.sub) { err.textContent = '새 종목 이름을 입력하세요.'; return; }
+        if (!t.sub) { err.textContent = '새 종목 이름을 입력하십시오.'; return; }
         // 그 구성에 자산이 하나뿐이면(예: ISA) 그 자산 안에, 여러 개면(예: 메인투자) 새 자산으로
         const assets = [...new Set(D.rows.filter(r => r.kind === F.kind && isTradable(r)).map(r => r.asset))];
         t.asset = assets.length === 1 && assets[0] !== D.rows.find(r => r.asset === assets[0]).sub ? assets[0] : t.sub;
       } else {
         const row = findRow(F.key);
-        if (!row) { err.textContent = '종목을 고르세요.'; return; }
+        if (!row) { err.textContent = '종목을 선택하십시오.'; return; }
         t.asset = row.asset; t.sub = row.sub;
-        if (F.type === '매도' && t.qty > row.qty + 1e-9) { err.textContent = `보유 수량(${row.qty})보다 많이 팔 수 없어요.`; return; }
+        if (F.type === '매도' && t.qty > row.qty + 1e-9) { err.textContent = `보유 수량(${row.qty})보다 많이 매도할 수 없습니다.`; return; }
       }
       action = 'trade'; payload = { trade: t };
     }
@@ -1765,7 +1773,7 @@
       await load({ quiet: true });
       toast(msg);
     } catch (e) {
-      if (e.code === 'auth') { logout('비밀번호를 다시 입력해 주세요.'); return; }
+      if (e.code === 'auth') { logout('비밀번호를 다시 입력하십시오.'); return; }
       err.textContent = e.message;
       btn.disabled = false; btn.textContent = F.type === '금액 수정' ? '금액 저장하기' : `${F.type} 기록하기`;
     }
@@ -1816,7 +1824,7 @@
       <p class="kind">${name ? `${esc(name)} 님으로 사용 중` : ''}</p>
       <button class="menu-item" id="mName">이름 바꾸기</button>
       <button class="menu-item" id="mLogout">로그아웃 (이 기기에서 비밀번호 지우기)</button>
-      <p class="note">숫자는 구글 시트에서 직접 고쳐도 됩니다. 고친 뒤 새로고침을 누르면 반영돼요.</p>`);
+      <p class="note">숫자는 구글 시트에서 직접 고쳐도 됩니다. 수정 후 새로고침을 누르면 반영됩니다.</p>`);
     $('#mName').onclick = () => { closeSheet(); showLogin('', true); };
     $('#mLogout').onclick = () => { closeSheet(); logout(); };
   }
@@ -1856,8 +1864,8 @@
       e.preventDefault();
       const pw = $('#pwInput').value.trim();
       const chosen = $('#nameChips .chip.on');
-      if (!chosen) { $('#loginError').textContent = '누가 보는지 골라 주세요.'; return; }
-      if (!pw) { $('#loginError').textContent = '비밀번호를 입력하세요.'; return; }
+      if (!chosen) { $('#loginError').textContent = '사용자를 선택하십시오.'; return; }
+      if (!pw) { $('#loginError').textContent = '비밀번호를 입력하십시오.'; return; }
       const btn = $('#loginBtn');
       btn.disabled = true; btn.textContent = '확인 중…';
       store.set(LS.pw, pw); store.set(LS.name, chosen.dataset.name);
