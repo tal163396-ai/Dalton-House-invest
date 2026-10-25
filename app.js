@@ -379,37 +379,62 @@
           <button data-sort="ret" class="${state.sort === 'ret' ? 'on' : ''}" aria-label="수익률 ${state.sort === 'ret' && state.sortDir === 'asc' ? '낮은' : '높은'} 순">수익률${arrow('ret')}</button>
         </div>
       </div>
-      <div class="kind-grid">
+      <div class="card kind-list">
         ${kinds.map((g, i) => {
           const main = state.sort === 'cost' ? g.c : g.v;
           const share = main / ((state.sort === 'cost' ? D.total.cost : D.total.value) || 1);
-          const cells = i === 0 ? 20 : 10;
-          const filled = share * cells;
+          const col = kindColor(g.k);
+          const names = g.list.flatMap(a => a.rows.filter(r => !/예수금/.test(r.sub)).map(r => r.sub));
+          const subLine = names.length > 1 ? `${names[0]} 외 ${names.length - 1}개` : (names[0] || g.list.map(a => a.name).join(', '));
           return `
-          <button class="kind-tile ${i === 0 ? 'wide' : ''}" data-kind="${esc(g.k)}" style="--i:${i}" aria-label="${esc(g.k)} ${state.sort === 'cost' ? '원금' : '평가금'} ${compact(main)}원, 전체의 ${(share * 100).toFixed(1)}%">
-            <span class="kt-name">${esc(g.k)}</span>
-            <span class="kt-label">${state.sort === 'cost' ? '원금' : '평가금'}</span>
-            <span class="kt-value num">${compact(main)}원</span>
-            <span class="waffle" style="--n:${cells}" aria-hidden="true">${Array.from({ length: cells }, (_, j) => `<i style="--f:${Math.max(0, Math.min(1, filled - j))}"></i>`).join('')}</span>
-            <span class="kt-share num">전체 ${state.sort === 'cost' ? '원금' : '평가금'}의 <b>${(share * 100).toFixed(1)}%</b></span>
+          <button class="kl-row" data-kind="${esc(g.k)}" style="--i:${i};--c:${col.fg};--bg:${col.bg};--p:${(share * 100).toFixed(1)}"
+            aria-label="${esc(g.k)} ${state.sort === 'cost' ? '원금' : '평가금'} ${compact(main)}원, 전체의 ${(share * 100).toFixed(1)}%">
+            <span class="kl-ring" aria-hidden="true"><span class="kl-icon">${esc(kindShort(g.k))}</span></span>
+            <span class="kl-main">
+              <span class="kl-name">${esc(g.k)}</span>
+              <span class="kl-sub">${esc(subLine)}</span>
+            </span>
+            <span class="kl-right num">
+              <span class="kl-amt">${compact(main)}원</span>
+              <span class="kl-share">전체의 <b>${(share * 100).toFixed(1)}%</b></span>
+            </span>
           </button>`;
         }).join('')}
-      </div>`;
+      </div>
+      <p class="note" style="padding:0 6px">링은 전체 ${state.sort === 'cost' ? '원금' : '평가금'} 중 비중이에요. 누르면 수익률과 종목이 나와요.</p>`;
     $$('#view-assets .seg button').forEach(b => b.onclick = () => {
       if (state.sort === b.dataset.sort) state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
       else { state.sort = b.dataset.sort; state.sortDir = 'desc'; }
       store.set(LS.sort, state.sort); store.set('dh_sortdir', state.sortDir);
       renderAssets();
     });
-    $$('#view-assets .kind-tile').forEach(b => b.onclick = () => openKind(b.dataset.kind));
+    $$('#view-assets .kl-row').forEach(b => b.onclick = () => openKind(b.dataset.kind));
     state.barFn = bar;
+  }
+
+  // 종류마다 고정 색 (원금 큰 순서로 배정 → 정렬을 바꿔도 색이 그대로)
+  const KIND_COLORS = [
+    { fg: '#3182F6', bg: 'rgba(49,130,246,.14)' }, { fg: '#12A15A', bg: 'rgba(18,161,90,.14)' },
+    { fg: '#F5A524', bg: 'rgba(245,165,36,.16)' }, { fg: '#F04452', bg: 'rgba(240,68,82,.14)' },
+    { fg: '#8B5CF6', bg: 'rgba(139,92,246,.15)' }, { fg: '#14B8A6', bg: 'rgba(20,184,166,.15)' },
+    { fg: '#8B95A1', bg: 'rgba(139,149,161,.18)' }, { fg: '#EC4899', bg: 'rgba(236,72,153,.14)' },
+  ];
+  function kindColor(k) {
+    const order = [...groupBy(state.data.assets, a => a.kind)].map(([n, l]) => [n, l.reduce((t, a) => t + a.cost, 0)]).sort((a, b) => b[1] - a[1]).map(x => x[0]);
+    const i = order.indexOf(k);
+    return KIND_COLORS[(i < 0 ? 0 : i) % KIND_COLORS.length];
+  }
+  function kindShort(k) {
+    const m = k.match(/\(([^)]+)\)/);
+    if (m) return m[1].length > 4 ? m[1].slice(0, 4) : m[1];
+    return k.replace(/\s/g, '').slice(0, 2);
   }
 
   // 종류 타일을 누르면 가운데로 튀어나오는 팝업
   function openKind(k) {
     const D = state.data, g = (state.assetGroups || []).find(x => x.k === k);
     if (!g) return;
-    const w = g.v / (D.total.value || 1);
+    const w = state.sort === 'cost' ? g.c / (D.total.cost || 1) : g.v / (D.total.value || 1);
     const bar = state.barFn;
     openSheet(`
       <div class="pop-hero ${(g.ret ?? 0) >= 0 ? 'gain' : 'loss'}">
