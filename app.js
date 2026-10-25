@@ -22,6 +22,9 @@
     year: null,
     openKinds: new Set(),
     openMonths: new Set(),
+    kindsOpen: false,
+    cmpMode: store.get('dh_cmpmode') === 'sub' ? 'sub' : 'kind',
+    cmpSel: (() => { try { return JSON.parse(store.get('dh_cmpsel')) || { kind: null, sub: null }; } catch { return { kind: null, sub: null }; } })(),
     form: { type: '매수', kind: '', key: '', cashAsset: '' },
   };
 
@@ -293,6 +296,9 @@
     const arrow = key => state.sort === key ? `<span class="arrow" aria-hidden="true">${state.sortDir === 'asc' ? '↑' : '↓'}</span>` : '';
     const maxAbs = Math.max(0.05, ...D.assets.map(a => Math.abs(a.ret ?? 0)));
 
+    const tot = D.total.value || 1;
+    const bar = r => `<span class="bar" aria-hidden="true"><i style="width:${Math.min(100, Math.abs(r ?? 0) / maxAbs * 100)}%;background:${(r ?? 0) >= 0 ? 'var(--bar-up)' : 'var(--down)'}"></i></span>`;
+    state.assetGroups = kinds;
     $('#view-assets').innerHTML = `
       <div class="sort">
         <div class="seg" role="group" aria-label="정렬">
@@ -301,32 +307,62 @@
           <button data-sort="ret" class="${state.sort === 'ret' ? 'on' : ''}" aria-label="수익률 ${state.sort === 'ret' && state.sortDir === 'asc' ? '낮은' : '높은'} 순">수익률${arrow('ret')}</button>
         </div>
       </div>
-      ${kinds.map(g => `
-        <div class="card">
-          <div class="group-head">
-            <span class="group-name">${esc(g.k)}</span>
-            <span class="group-meta num">${compact(g.v)}원 · <span class="${cls(g.ret)}">${pct(g.ret)}</span></span>
-          </div>
-          ${g.list.map(a => `
-            <button class="row" data-asset="${esc(a.name)}">
-              <span>
-                <span class="row-name">${esc(a.name)}</span><br>
-                <span class="row-sub num">${compact(a.value)}원 · 원금 ${compact(a.cost)}원</span>
-              </span>
-              <span class="row-right">
-                <span class="row-value num ${cls(a.ret)}">${pct(a.ret)}</span><br>
-                <span class="row-sub num ${cls(a.pl)}">${signWon(a.pl)}</span>
-              </span>
-              <span class="bar" aria-hidden="true"><i style="width:${Math.min(100, Math.abs(a.ret ?? 0) / maxAbs * 100)}%;background:${(a.ret ?? 0) >= 0 ? 'var(--up)' : 'var(--down)'}"></i></span>
-            </button>`).join('')}
-        </div>`).join('')}`;
+      <div class="kind-grid">
+        ${kinds.map((g, i) => {
+          const w = g.v / tot;
+          const main = state.sort === 'cost' ? g.c : g.v;
+          return `
+          <button class="kind-tile ${i === 0 ? 'wide' : ''}" data-kind="${esc(g.k)}" style="--i:${i}">
+            <span class="kt-donut" style="--p:${(w * 100).toFixed(1)}" aria-hidden="true"><b>${(w * 100).toFixed(0)}%</b></span>
+            <span class="kt-name">${esc(g.k)}</span>
+            <span class="kt-value num">${compact(main)}원</span>
+            <span class="kt-sub num">${state.sort === 'cost' ? `평가 ${compact(g.v)}원` : `원금 ${compact(g.c)}원`} · ${g.list.length}개</span>
+            <span class="kt-ret num ${cls(g.ret)}">${pct(g.ret)}</span>
+            ${bar(g.ret)}
+          </button>`;
+        }).join('')}
+      </div>`;
     $$('#view-assets .seg button').forEach(b => b.onclick = () => {
       if (state.sort === b.dataset.sort) state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
       else { state.sort = b.dataset.sort; state.sortDir = 'desc'; }
       store.set(LS.sort, state.sort); store.set('dh_sortdir', state.sortDir);
       renderAssets();
     });
-    $$('#view-assets .row').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
+    $$('#view-assets .kind-tile').forEach(b => b.onclick = () => openKind(b.dataset.kind));
+    state.barFn = bar;
+  }
+
+  // 종류 타일을 누르면 가운데로 튀어나오는 팝업
+  function openKind(k) {
+    const D = state.data, g = (state.assetGroups || []).find(x => x.k === k);
+    if (!g) return;
+    const w = g.v / (D.total.value || 1);
+    const bar = state.barFn;
+    openSheet(`
+      <div class="pop-hero ${(g.ret ?? 0) >= 0 ? 'gain' : 'loss'}">
+        <div>
+          <div class="pop-kind">${esc(g.k)}</div>
+          <h2 id="sheetTitle" class="num">${won(g.v)}</h2>
+          <div class="pop-sub num">원금 ${won(g.c)} · <b>${signWon(g.v - g.c)} (${pct(g.ret)})</b></div>
+        </div>
+        <span class="kt-donut big" style="--p:${(w * 100).toFixed(1)}" aria-hidden="true"><b>${(w * 100).toFixed(1)}%</b></span>
+      </div>
+      <div class="pop-list">
+        ${g.list.map(a => `
+          <button class="row" data-asset="${esc(a.name)}">
+            <span>
+              <span class="row-name">${esc(a.name)}</span><br>
+              <span class="row-sub num">${compact(a.value)}원 · 원금 ${compact(a.cost)}원</span>
+            </span>
+            <span class="row-right">
+              <span class="row-value num ${cls(a.ret)}">${pct(a.ret)}</span><br>
+              <span class="row-sub num ${cls(a.pl)}">${signWon(a.pl)}</span>
+            </span>
+            ${bar(a.ret)}
+          </button>`).join('')}
+      </div>
+      <button class="btn pop-close" data-close>닫기</button>`, 'pop');
+    $$('#sheetBody .row').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
   }
 
   function openAsset(name) {
@@ -393,10 +429,12 @@
     const el = $('#view-years');
     el.innerHTML = `
       ${cumulativeCard()}
+      ${compareCard()}
       <div class="year-chips" role="group" aria-label="연도 선택">
         ${chips.map(([y, l]) => `<button class="chip ${state.year === y ? 'on' : ''}" data-year="${y}">${l}</button>`).join('')}
       </div>
       <div id="yearBody"></div>`;
+    bindCompare(el);
     $$('#fxSeg button', el).forEach(b => b.onclick = () => { state.fx = b.dataset.fx === '1'; store.set(LS.fx, state.fx ? '1' : '0'); renderYears(); });
     $$('.year-chips .chip', el).forEach(b => b.onclick = () => {
       state.year = b.dataset.year === 'all' ? 'all' : Number(b.dataset.year);
@@ -477,8 +515,9 @@
       </div>`;
   }
 
-  function lineChart(pts, series) {
-    const W = 340, H = 210, L = 38, R = 8, T = 10, B = 22;
+  function lineChart(pts, series, opt = {}) {
+    const W = 340, H = 210, L = opt.L || 38, R = 8, T = 10, B = 22;
+    const fmt = opt.fmt || (v => `${Math.round(v * 100)}%`);
     const vals = pts.flatMap(p => series.map(s => p[s.key]).filter(v => Number.isFinite(v)));
     let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
     const padV = (hi - lo) * 0.08 || 0.05; lo -= padV; hi += padV;
@@ -486,20 +525,120 @@
     const Y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
     const ticks = [0, 1, 2, 3].map(i => lo + (hi - lo) * i / 3);
     const grid = ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-dasharray="3 4"/>
-      <text x="${L - 6}" y="${Y(v) + 3}" text-anchor="end">${Math.round(v * 100)}%</text>`).join('');
+      <text x="${L - 6}" y="${Y(v) + 3}" text-anchor="end">${fmt(v)}</text>`).join('');
     const zero = `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--ink-4)" stroke-width="1"/>`;
     const step = Math.max(1, Math.ceil(pts.length / 6));
     const xl = pts.map((p, i) => (i % step === 0 || i === pts.length - 1) && !(i !== pts.length - 1 && pts.length - 1 - i < step / 2)
       ? `<text x="${X(i)}" y="${H - 4}" text-anchor="middle">${p.label}</text>` : '').join('');
     const lines = series.slice().reverse().map(s => {
       const d = pts.map((p, i) => Number.isFinite(p[s.key]) ? `${X(i).toFixed(1)},${Y(p[s.key]).toFixed(1)}` : null).filter(Boolean).join(' ');
-      return s.key === 'mine'
+      return (s.key === 'mine' || s.solid)
         ? `<polyline points="${d}" fill="none" stroke="${s.color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`
         : `<polyline points="${d}" fill="none" stroke="${s.color}" stroke-width="1.7" stroke-dasharray="5 4" stroke-linejoin="round"/>`;
     }).join('');
     const lastMine = pts.at(-1);
-    const dot = Number.isFinite(lastMine.mine) ? `<circle cx="${X(pts.length - 1)}" cy="${Y(lastMine.mine)}" r="3.5" fill="var(--up)" stroke="#fff" stroke-width="1.5"/>` : '';
+    const dot = opt.noDot ? series.map(s => Number.isFinite(lastMine[s.key]) ? `<circle cx="${X(pts.length - 1)}" cy="${Y(lastMine[s.key])}" r="3" fill="${s.color}" stroke="var(--card)" stroke-width="1.5"/>` : '').join('') : Number.isFinite(lastMine.mine) ? `<circle cx="${X(pts.length - 1)}" cy="${Y(lastMine.mine)}" r="3.5" fill="var(--up)" stroke="#fff" stroke-width="1.5"/>` : '';
     return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="누적 수익률 비교 그래프">${grid}${zero}${lines}${dot}${xl}</svg>`;
+  }
+
+  /* 골라서 비교: 자산 구성(종류) 또는 종목 */
+  const CMP_COLORS = ['#3182F6', '#12A15A', '#F5A524', '#F04452', '#8B5CF6'];
+  const CMP_MAX = 5;
+
+  function compareOptions() {
+    const D = state.data;
+    if (state.cmpMode === 'kind') {
+      const names = [...new Set([...D.assets.map(a => a.kind), ...D.realized.map(r => r.kind)])];
+      return names.filter(n => D.realized.some(r => r.kind === n) || D.assets.some(a => a.kind === n && a.cost > 0));
+    }
+    const subs = [...new Set([...D.realized.map(r => String(r.sub || '')), ...D.rows.filter(isTradable).map(r => r.sub)])];
+    return subs.filter(x => x && !x.startsWith('('));
+  }
+
+  function compareSelection() {
+    const opts = compareOptions();
+    let sel = state.cmpSel[state.cmpMode];
+    if (!Array.isArray(sel)) {
+      const D = state.data;
+      const score = n => state.cmpMode === 'kind'
+        ? (D.assets.filter(a => a.kind === n).reduce((t, a) => t + a.cost, 0) + Math.abs(D.realized.filter(r => r.kind === n).reduce((t, r) => t + r.amount, 0)))
+        : (D.rows.filter(r => r.sub === n).reduce((t, r) => t + r.cost, 0) + Math.abs(D.realized.filter(r => String(r.sub) === n).reduce((t, r) => t + r.amount, 0)));
+      sel = opts.slice().sort((a, b) => score(b) - score(a)).slice(0, 3);
+    }
+    return sel.filter(x => opts.includes(x));
+  }
+
+  function compareMetrics(name) {
+    const D = state.data, y = new Date().getFullYear();
+    const isKind = state.cmpMode === 'kind';
+    const rz = D.realized.filter(r => isKind ? r.kind === name : String(r.sub) === name);
+    const rows = isKind ? D.rows.filter(r => r.kind === name) : D.rows.filter(r => r.sub === name && isTradable(r));
+    const cost = rows.reduce((t, r) => t + r.cost, 0), value = rows.reduce((t, r) => t + r.value, 0);
+    const avgRow = !isKind && rows.length === 1 && rows[0].avg > 0 && rows[0].price > 0 ? rows[0] : null;
+    return {
+      all: rz.reduce((t, r) => t + r.amount, 0),
+      year: rz.filter(r => r.year === y).reduce((t, r) => t + r.amount, 0),
+      n: rz.length, value,
+      ret: avgRow ? (avgRow.price - avgRow.avg) / avgRow.avg : (cost > 0 ? (value - cost) / cost : null),
+      rz,
+    };
+  }
+
+  function compareCard() {
+    const D = state.data;
+    if (!D.realized.length) return '';
+    const opts = compareOptions(), sel = compareSelection();
+    const color = n => CMP_COLORS[sel.indexOf(n)] || 'var(--ink-4)';
+    const M = Object.fromEntries(sel.map(n => [n, compareMetrics(n)]));
+    // 월별 누적 실현손익 선
+    const first = D.realized.reduce((m, r) => (r.date < m ? r.date : m), D.realized[0].date);
+    const now = new Date(); const pts = [];
+    let yy = first.getFullYear(), mm = first.getMonth();
+    pts.push({ date: new Date(yy, mm, 0), label: `${String(new Date(yy, mm, 0).getFullYear()).slice(2)}.${new Date(yy, mm, 0).getMonth() + 1}` });
+    while (new Date(yy, mm, 1) <= now) { const end = new Date(yy, mm + 1, 0, 23, 59, 59); pts.push({ date: end > now ? now : end, label: `${String(yy).slice(2)}.${mm + 1}` }); mm++; if (mm > 11) { mm = 0; yy++; } }
+    const series = sel.map((n, i) => ({ key: `c${i}`, label: n, color: CMP_COLORS[i], solid: true }));
+    pts.forEach(p => sel.forEach((n, i) => { p[`c${i}`] = M[n].rz.filter(r => r.date <= p.date).reduce((t, r) => t + r.amount, 0); }));
+    const y = new Date().getFullYear();
+    return `
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">골라서 비교</h2>
+          <div class="seg" id="cmpMode" role="group" aria-label="비교 단위">
+            <button data-mode="kind" class="${state.cmpMode === 'kind' ? 'on' : ''}">자산 구성</button>
+            <button data-mode="sub" class="${state.cmpMode === 'sub' ? 'on' : ''}">종목</button>
+          </div>
+        </div>
+        <div class="pick" role="group" aria-label="비교할 항목">
+          ${opts.map(n => `<button class="pick-chip ${sel.includes(n) ? 'on' : ''}" data-name="${esc(n)}" style="--c:${color(n)}" aria-pressed="${sel.includes(n)}">${sel.includes(n) ? '<i></i>' : ''}${esc(n)}</button>`).join('')}
+        </div>
+        ${sel.length ? `
+          <div class="cmp-label">누적 실현손익</div>
+          ${lineChart(pts, series, { L: 46, fmt: v => compactSigned(v), noDot: true })}
+          <div class="table-wrap">
+            <table class="grid num cmp">
+              <thead><tr><th>${state.cmpMode === 'kind' ? '자산 구성' : '종목'}</th><th>누적 실현</th><th>${y}년</th><th>지금 수익률</th></tr></thead>
+              <tbody>${sel.map(n => `<tr>
+                <td><i class="dot" style="background:${color(n)}"></i>${esc(n)}</td>
+                <td class="${cls(M[n].all)}">${compactSigned(M[n].all)}</td>
+                <td class="${cls(M[n].year)}">${M[n].year ? compactSigned(M[n].year) : '—'}</td>
+                <td class="${cls(M[n].ret)}">${M[n].value > 0 ? pct(M[n].ret, 1) : '보유 없음'}</td></tr>`).join('')}</tbody>
+            </table>
+          </div>
+          <p class="note">누적 실현 = 기록된 익절·손절 합계. 지금 수익률 = 보유 중인 평가금 기준${state.cmpMode === 'sub' ? '(종목은 평단 대비)' : ''}.</p>`
+        : `<p class="empty">비교할 항목을 위에서 골라 주세요. 최대 ${CMP_MAX}개까지 비교할 수 있어요.</p>`}
+      </div>`;
+  }
+
+  function bindCompare(el) {
+    $$('#cmpMode button', el).forEach(b => b.onclick = () => { state.cmpMode = b.dataset.mode; store.set('dh_cmpmode', state.cmpMode); renderYears(); });
+    $$('.pick-chip', el).forEach(b => b.onclick = () => {
+      const sel = compareSelection(), n = b.dataset.name;
+      if (sel.includes(n)) sel.splice(sel.indexOf(n), 1);
+      else if (sel.length >= CMP_MAX) { toast(`최대 ${CMP_MAX}개까지 비교할 수 있어요`); return; }
+      else sel.push(n);
+      state.cmpSel[state.cmpMode] = sel;
+      store.set('dh_cmpsel', JSON.stringify(state.cmpSel));
+      const y = window.scrollY; renderYears(); window.scrollTo({ top: y });
+    });
   }
 
   function renderOneYear(y) {
@@ -546,7 +685,11 @@
       </div>
 
       <div class="card">
-        <div class="card-head"><h2 class="card-title">종류별</h2><span class="card-aside">누르면 자산별로</span></div>
+        <button class="card-head fold" id="kindsFold" aria-expanded="${state.kindsOpen}">
+          <h2 class="card-title">종류별</h2>
+          <span class="fold-right num">${state.kindsOpen ? '' : `<span class="${cls(sum)}">${compactSigned(sum)}원</span>`}<span class="chev ${state.kindsOpen ? 'up' : ''}" aria-hidden="true"></span></span>
+        </button>
+        ${state.kindsOpen ? `<p class="note" style="margin:-6px 0 8px">종류를 누르면 자산·종목별로 펼쳐져요</p>
         <div class="table-wrap">
           <table class="grid num kinds">
             <thead><tr><th>종류</th><th>수익금</th><th>수익률</th></tr></thead>
@@ -562,7 +705,9 @@
             </tbody>
           </table>
         </div>
-        <p class="note">수익률 = 실현손익 ÷ 기준원금(시트의 연도별구성 탭). 기준원금이 없는 자산은 수익금만 보여요.</p>
+        <p class="note">수익률 = 실현손익 ÷ 기준원금(시트의 연도별구성 탭). 기준원금이 없는 자산은 수익금만 보여요.</p>` : `
+        <div class="fold-preview num">${kinds.filter(k => k.amt !== 0).sort((p, q) => Math.abs(q.amt) - Math.abs(p.amt)).slice(0, 3)
+          .map(k => `<span>${esc(k.k)} <b class="${cls(k.amt)}">${compactSigned(k.amt)}</b></span>`).join('')}</div>`}
       </div>
 
       <div class="card">
@@ -590,6 +735,7 @@
       </div>
       ${monthlyEvalCard(y)}`;
 
+    $('#kindsFold').onclick = () => { state.kindsOpen = !state.kindsOpen; renderOneYear(y); };
     $$('#yearBody .month').forEach(el => el.onclick = () => {
       const key = `${y}-${el.dataset.month}`;
       state.openMonths.has(key) ? state.openMonths.delete(key) : state.openMonths.add(key);
@@ -868,9 +1014,12 @@
     if (view === 'home') drawPlan();
   }
 
-  function openSheet(html) {
+  function openSheet(html, mode = '') {
     const s = $('#sheet');
+    const wasOpen = !s.hidden && s.classList.contains('open');
     $('#sheetBody').innerHTML = html;
+    if (wasOpen && s.classList.contains('pop') !== (mode === 'pop')) s.classList.remove('open');
+    s.classList.toggle('pop', mode === 'pop');
     s.hidden = false;
     requestAnimationFrame(() => s.classList.add('open'));
   }
