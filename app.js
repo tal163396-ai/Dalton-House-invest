@@ -817,8 +817,13 @@
         <div class="legend">${series.map(s => `<span><i class="${s.dash ? 'dash' : ''}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
         ${lineChart(pts, series, { L: 42, fmt: v => `${Math.round(v * 100)}%`, tagFmt: v => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`, noDot: true, interactive: true, valFmt: v => pct(v, 1), meta })}
         <div class="sim-list num">
-          ${rows.map(({ s, v }) => `<div class="sim-row ${s.key === 'mine' ? 'me' : ''}"><span><i style="background:${s.color}"></i>${s.key === 'mine' ? '내 투자' : s.label}</span>
-            <b>${s.key === 'mine' ? `<small class="sim-sub">${compact(last.val)}원 / 넣은 돈 ${compact(last.inv)}원</small>` : ''}<em class="${cls(v)}">${pct(v, 1)}</em></b></div>`).join('')}
+          ${rows.map(({ s, v }) => s.key === 'mine'
+            ? `<div class="sim-row me mine-row">
+                <div class="mine-top"><span><i style="background:${s.color}"></i>내 투자 <b class="num">${compact(last.val)}원</b></span><em class="${cls(v)}">${pct(v, 1)}</em></div>
+                <div class="mine-sub num"><span>넣은 돈 ${compact(last.inv)}원 대비</span><b class="${cls(v)}">${pct(v, 1)}</b></div>
+                <div class="mine-sub num"><span>원금 ${compact(D.total.cost)}원 대비</span><b class="${cls(D.total.ret)}">${pct(D.total.ret, 1)}</b></div>
+              </div>`
+            : `<div class="sim-row"><span><i style="background:${s.color}"></i>${s.label}</span><b><em class="${cls(v)}">${pct(v, 1)}</em></b></div>`).join('')}
         </div>
         <p class="note">지수 = 대표 ETF(KODEX 200·SPY·QQQ) 가격이 ${pts[0].label}부터 얼마나 오르내렸는지.<br>내 투자 = 그때그때 넣은 돈 대비 손익률. 지난달까지는 장부 기준(원금+실현손익), 마지막 점은 지금 평가금이에요. 월말 기록이 쌓이면 그 달부터 실제 평가금으로 바뀌어요.
         ${IDX.length ? '' : '<br>지수 선은 Apps Script를 새 버전으로 바꾸면 나타나요.'}</p>

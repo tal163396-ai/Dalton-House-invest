@@ -696,3 +696,12 @@ button.nw-card { display: block; width: 100%; text-align: left; border: 0; color
 .row-subline small { color: var(--ink-3); font-size: 11px; margin-left: 4px; }
 .row-subs .row-subhead:not(:first-child) { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
 .rz-cols { display: inline-flex; gap: 12px; } .rz-cols em { min-width: 52px; text-align: right; }
+.sim-row.mine-row { display: block; }
+.mine-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.mine-top span { display: flex; align-items: center; gap: 8px; color: var(--ink-2); }
+.mine-top span b { color: var(--ink); font-weight: 800; }
+.mine-top em { font-style: normal; font-size: 15px; font-weight: 800; }
+.mine-sub { margin-top: 6px; padding-left: 18px; font-size: 12.5px; color: var(--ink-3); line-height: 1.5; }
+.mine-sub b { font-weight: 800; }
+.mine-sub { display: flex; justify-content: space-between; margin-top: 4px; }
+.mine-top + .mine-sub { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
