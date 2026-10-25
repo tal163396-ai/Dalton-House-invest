@@ -777,7 +777,7 @@ body { word-break: keep-all; overflow-wrap: anywhere; }
 .kl-share b.up { color: var(--up); } .kl-share b.down { color: var(--down); } .kl-share b.flat, .kl-amt.flat { color: var(--ink-3); }
 #sortTabs button[data-p="0"] { --tc: #3182F6; }
 #sortTabs button[data-p="1"] { --tc: #12A15A; }
-#sortTabs button[data-p="2"] { --tc: #8B5CF6; }
+#sortTabs button[data-p="2"] { --tc: #E8457C; }
 #sortTabs button { transition: background .2s ease, color .2s ease; }
 #sortTabs button.on { background: var(--tc); color: #fff; box-shadow: 0 2px 8px color-mix(in srgb, var(--tc) 40%, transparent); }
 .pager { transition: none; }
