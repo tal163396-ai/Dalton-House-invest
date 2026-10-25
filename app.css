@@ -818,3 +818,4 @@ body.masked .tile-val { visibility: hidden; }
 #toast { white-space: pre-line; }
 .topbar .icon-btn { width: 36px; }
 .topbar { gap: 2px; }
+.mc-auto { display: none; }
