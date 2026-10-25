@@ -819,3 +819,4 @@ body.masked .tile-val { visibility: hidden; }
 .topbar .icon-btn { width: 36px; }
 .topbar { gap: 2px; }
 .mc-auto { display: none; }
+.tile-name.vert { writing-mode: vertical-rl; text-orientation: mixed; white-space: nowrap; letter-spacing: .02em; }
