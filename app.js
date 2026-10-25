@@ -225,6 +225,7 @@
     let last = -1;
     const fit = () => {
       if (!pager.clientWidth) return; // 숨겨진 화면에서는 계산하지 않음
+      if (pager.scrollTop) pager.scrollTop = 0;
       const i = idx();
       tabs.forEach((d, j) => { d.classList.toggle('on', j === i); d.setAttribute('aria-selected', String(j === i)); });
       pager.style.height = `${pages[i].offsetHeight}px`;
@@ -617,8 +618,8 @@
     const el = $('#view-years');
     el.innerHTML = `
       <div class="pager-dots" id="yTabs" role="tablist" aria-label="수익률 화면">
-        <button role="tab" data-p="0"><i></i>연도·월별</button>
-        <button role="tab" data-p="1"><i></i>자산별</button>
+        <button role="tab" data-p="0"><i></i>자산별</button>
+        <button role="tab" data-p="1"><i></i>연도·월별</button>
         <button role="tab" data-p="2"><i></i>자산 성장</button>
       </div>
       <div class="year-chips" id="yChips" role="group" aria-label="연도 선택">
@@ -636,6 +637,8 @@
   function renderYearBody() {
     if (state.year === 'all') renderAllYears(); else renderOneYear(state.year);
     const body = $('#yearBody');
+    // 화면 순서: 자산별 → 연도·월별 → 자산 성장
+    const yp = $('#yPager'); if (yp) { const pg = [...yp.children]; yp.insertBefore(pg[1], pg[0]); }
     yPagerApi = setupPager($('#yPager'), $$('#yTabs button'), {
       start: state.yPage || 0,
       onChange: (i, first) => {
