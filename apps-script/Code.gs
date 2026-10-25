@@ -456,7 +456,7 @@ function saveSnapshot_(month) {
 
 /* ───────────────────────── 월 마감 (가계부월별) ───────────────────────── */
 
-const HH_HEADERS = ['연도', '월', '순자산', '수입(근로·기타)', '생활 지출', '투자손익(실현)', '투자 순투입', '투자 장부잔액', '기타 보정'];
+const HH_HEADERS = ['연도', '월', '순자산', '수입(근로·기타)', '생활 지출', '투자손익(실현)', '투자 순투입', '투자 장부잔액', '기타 보정', '전세보증금', '대출'];
 
 /** month = { y, m, nw, inc, exp, pnl, flow, book } → 같은 달이 있으면 덮어쓰고, 없으면 아래에 추가 */
 function saveMonth_(mo) {
@@ -473,6 +473,9 @@ function saveMonth_(mo) {
     '연도': y, '월': m, '순자산': Math.round(num_(mo.nw)), '수입(근로·기타)': Math.round(num_(mo.inc)), '생활 지출': Math.round(num_(mo.exp)),
     '투자손익(실현)': Math.round(num_(mo.pnl)), '투자 순투입': Math.round(num_(mo.flow)), '투자 장부잔액': Math.round(num_(mo.book)),
   };
+  if (mo.jeonse !== '' && mo.jeonse !== undefined && mo.jeonse !== null) obj['전세보증금'] = Math.round(num_(mo.jeonse));
+  if (mo.loan !== '' && mo.loan !== undefined && mo.loan !== null) obj['대출'] = Math.round(num_(mo.loan));
+  ensureHeaders_('가계부월별', ['전세보증금', '대출']);
   const t = table_('가계부월별');
   for (let r = 1; r < t.values.length; r++) {
     if (num_(t.values[r][t.col['연도']]) === y && num_(t.values[r][t.col['월']]) === m) {
@@ -482,6 +485,20 @@ function saveMonth_(mo) {
   }
   appendByHeader_('가계부월별', obj);
   return { ok: true, message: `${y}년 ${m}월 마감을 저장했습니다` };
+}
+
+/** 탭에 없는 머리글을 오른쪽 끝(설명 칸 앞)에 추가 */
+function ensureHeaders_(name, headers) {
+  const sh = sheet_(name);
+  const head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(h => String(h).trim());
+  // 첫 빈 칸 = 데이터 표의 끝
+  let end = head.indexOf(''); if (end < 0) end = head.length;
+  headers.forEach(h => {
+    if (head.indexOf(h) >= 0) return;
+    sh.insertColumnBefore(end + 1);
+    sh.getRange(1, end + 1).setValue(h).setFontWeight('bold');
+    head.splice(end, 0, h); end++;
+  });
 }
 
 /* ───────────────────────── 공통 도우미 ───────────────────────── */

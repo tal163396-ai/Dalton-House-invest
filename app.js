@@ -132,6 +132,7 @@
       household: (d.household || []).map(h => ({
         y: num(h['연도']), m: num(h['월']), nw: num(h['순자산']), inc: num(h['수입(근로·기타)']), exp: num(h['생활 지출']),
         pnl: num(h['투자손익(실현)']), flow: num(h['투자 순투입']), book: num(h['투자 장부잔액']),
+        jeonse: isNum(h['전세보증금']) ? num(h['전세보증금']) : null, loan: isNum(h['대출']) ? num(h['대출']) : null,
       })).filter(h => h.y && h.m).sort((a, b) => a.y - b.y || a.m - b.m),
     };
   }
@@ -164,7 +165,7 @@
     $('#view-home').innerHTML = `
       <div class="pager-dots" role="tablist" aria-label="포트폴리오 화면">
         <button role="tab" data-p="0" class="on"><i></i>자산 구성</button>
-        <button role="tab" data-p="1"><i></i>총 자산 ${compact(T.value)}원</button>
+        <button role="tab" data-p="1"><i></i>투자자산 ${compact(T.value)}원</button>
       </div>
       <div class="pager" id="pager">
       <div class="page">
@@ -193,7 +194,7 @@
       </div>
       <div class="page">
       <div class="card sum-card">
-        <div class="total-label">총 자산</div>
+        <div class="total-label">투자자산</div>
         <div class="total-value num">${won(T.value)}</div>
         <div class="sum-chips num">
           <button class="mini sum-chip" data-stat="pl"><span>평가손익</span><b class="${cls(T.pl)}">${compactSigned(T.pl)} (${pct(T.ret, 1)})</b></button>
@@ -264,6 +265,7 @@
         <div class="nw-top"><span class="total-label">우리 집 순자산</span><span class="nw-more">성장 보기 ›</span></div>
         <div class="nw-value num">${won(last.nw)}</div>
         <div class="nw-sub num"><span class="${cls(ch)}">${ymLabel(first)}부터 ${compactSigned(ch)}</span><span>평가손익 반영 시 약 ${compact(last.nw + D.total.pl)}원</span></div>
+        ${nwComposition(last)}
         <svg class="nw-spark" viewBox="0 0 ${W} ${Ht}" preserveAspectRatio="none" aria-hidden="true">
           <defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--up);stop-opacity:.3"/><stop offset="1" style="stop-color:var(--up);stop-opacity:0"/></linearGradient></defs>
           <path d="${d}L${P.at(-1)[0]},${Ht}L${P[0][0]},${Ht}Z" fill="url(#nwg)"/>
@@ -271,6 +273,28 @@
         </svg>
         <div class="nw-axis num"><span>${ymLabel(first)}</span><span>편한가계부 기준</span><span>${ymLabel(last)}</span></div>
       </button>`;
+  }
+
+  // 순자산 구성: 전세보증금 + 투자(장부) + 예금·현금 − 대출 (예금·현금은 나머지로 계산)
+  function nwComposition(last) {
+    const D = state.data;
+    const ref = D.household.slice().reverse().find(h => h.jeonse !== null && h.loan !== null);
+    if (!ref) return `<div class="nwc-empty">기록 탭 → 월 마감에서 전세보증금·대출을 입력하면 구성이 표시됩니다.</div>`;
+    const jeonse = ref.jeonse, loan = ref.loan, inv = last.book;
+    const cash = last.nw - inv - jeonse + loan;
+    const parts = [
+      { k: '전세보증금', v: jeonse, c: '#3182F6' },
+      { k: '투자자산', v: inv, c: '#12A15A', sub: `시세 ${compact(D.total.value)}원` },
+      { k: '예금·현금', v: cash, c: '#14B8A6' },
+    ];
+    const pos = parts.reduce((t, p) => t + Math.max(0, p.v), 0) || 1;
+    return `<div class="nwc">
+      <div class="nwc-bar" aria-hidden="true">${parts.map(p => `<i style="flex:${Math.max(0, p.v) / pos};background:${p.c}"></i>`).join('')}</div>
+      <div class="nwc-rows num">
+        ${parts.map(p => `<span class="nwc-row"><span><i style="background:${p.c}"></i>${p.k}${p.sub ? ` <small>${p.sub}</small>` : ''}</span><b>${compact(p.v)}원</b></span>`).join('')}
+        <span class="nwc-row loan"><span><i></i>대출·갚을 돈</span><b class="down">−${compact(loan)}원</b></span>
+      </div>
+    </div>`;
   }
 
   // 홈 요약 칸을 누르면 상세 팝업
@@ -1721,6 +1745,10 @@
     if (!y) { y = now.getFullYear(); m = now.getMonth() + 1; if (now.getDate() <= 10) { m -= 1; if (!m) { m = 12; y -= 1; } } }
     const C = monthCloseCalc(y, m);
     const v = k => (C.saved ? ({ nw: C.saved.nw, inc: C.saved.inc + C.gains, exp: C.saved.exp })[k] : '');
+    // 전세·대출은 자주 안 바뀌므로 그 달 값이 없으면 가장 최근 값을 미리 채움
+    const lastRef = D.household.slice().reverse().find(h => h.jeonse !== null && h.loan !== null && (h.y * 100 + h.m) <= y * 100 + m);
+    const jv = C.saved && C.saved.jeonse !== null ? C.saved.jeonse : (lastRef ? lastRef.jeonse : '');
+    const lv = C.saved && C.saved.loan !== null ? C.saved.loan : (lastRef ? lastRef.loan : '');
     return `
       <div class="card mc-card">
         <div class="card-head"><h2 class="card-title">월 마감</h2><span class="card-aside">마지막 저장 ${String(last.y).slice(2)}.${last.m}</span></div>
@@ -1732,11 +1760,15 @@
             <label class="field"><span>수입 (파란 숫자)</span><input id="mcInc" class="money" type="text" inputmode="numeric" autocomplete="off" value="${fmtComma(v('inc'))}"></label>
             <label class="field"><span>지출 (빨간 숫자)</span><input id="mcExp" class="money" type="text" inputmode="numeric" autocomplete="off" value="${fmtComma(v('exp'))}"></label>
           </div>
+          <div class="two">
+            <label class="field"><span>전세보증금 합계</span><input id="mcJeonse" class="money" type="text" inputmode="numeric" autocomplete="off" value="${fmtComma(jv)}"></label>
+            <label class="field"><span>대출·갚을 돈 합계</span><input id="mcLoan" class="money" type="text" inputmode="numeric" autocomplete="off" value="${fmtComma(lv)}"></label>
+          </div>
           <div class="mc-auto num">
             <div><small>실현손익 ${C.kept ? '(저장된 값)' : '(앱 기록)'}</small><b class="${cls(C.pnl)}">${signWon(C.pnl)}</b></div>
             <div><small>순입금 ${C.kept ? '(저장된 값)' : '(앱 입금−출금)'}</small><b>${signWon(C.flow)}</b></div>
           </div>
-          <p class="note" style="margin:0">수입에서 그 달 익절(${compact(C.gains)}원)은 빼고 저장합니다.${C.saved ? '<br><b>이미 저장된 달입니다. 누적잔액·수입·지출만 수정합니다.</b>' : ''}</p>
+          <p class="note" style="margin:0">수입에서 그 달 익절(${compact(C.gains)}원)은 빼고 저장합니다.${C.saved ? '<br><b>이미 저장된 달입니다. 투자 숫자는 그대로 두고 나머지만 수정합니다.</b>' : ''}</p>
           <p id="mcErr" class="form-error" role="alert"></p>
           <button class="btn primary" id="mcSave">${y}년 ${m}월 마감 저장</button>
         </div>
@@ -1751,13 +1783,15 @@
       const [y, m] = mi.value.split('-').map(Number);
       const val = id => Number(String($(id).value).replace(/[^\d.-]/g, ''));
       const nw = val('#mcNw'), inc = val('#mcInc'), exp = val('#mcExp');
+      const rawJ = String($('#mcJeonse').value).trim(), rawL = String($('#mcLoan').value).trim();
       if (!y || !m) { err.textContent = '마감할 달을 선택하십시오.'; return; }
       if (!(nw > 0)) { err.textContent = '누적잔액을 입력하십시오.'; return; }
       if (!Number.isFinite(inc) || !Number.isFinite(exp)) { err.textContent = '수입과 지출을 입력하십시오.'; return; }
       const C = monthCloseCalc(y, m);
       const btn = $('#mcSave'); btn.disabled = true; btn.textContent = '저장 중…';
       try {
-        const r = await api('month', { month: { y, m, nw, inc: Math.max(0, inc - C.gains), exp, pnl: C.pnl, flow: C.flow, book: C.book } });
+        const r = await api('month', { month: { y, m, nw, inc: Math.max(0, inc - C.gains), exp, pnl: C.pnl, flow: C.flow, book: C.book,
+          jeonse: rawJ === '' ? '' : val('#mcJeonse'), loan: rawL === '' ? '' : Math.abs(val('#mcLoan')) } });
         state.mc = null;
         await load({ quiet: true });
         toast(`${y}년 ${m}월 마감을 저장했습니다`);
