@@ -816,3 +816,5 @@ body.masked #maskBtn { color: var(--accent); }
 body.masked input.money, body.masked #fValue { filter: blur(6px); }
 body.masked .tile-val { visibility: hidden; }
 #toast { white-space: pre-line; }
+.topbar .icon-btn { width: 36px; }
+.topbar { gap: 2px; }

@@ -172,7 +172,7 @@
     $('#view-home').innerHTML = `
       <div class="pager-dots" role="tablist" aria-label="포트폴리오 화면">
         <button role="tab" data-p="0" class="on"><i></i>자산 구성</button>
-        <button role="tab" data-p="1"><i></i>투자 자산 ${compact(T.value)}원</button>
+        <button role="tab" data-p="1"><i></i>투자 자산</button>
       </div>
       <div class="pager" id="pager">
       <div class="page">
