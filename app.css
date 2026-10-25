@@ -530,3 +530,25 @@ button.stat-row:active { opacity: .7; }
 @media (prefers-reduced-motion: no-preference) {
   .kl-row { animation: tileIn .35s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i) * 35ms); }
 }
+
+/* ── 홈: 간결한 총 자산 + 큰 트리맵 ── */
+.sum-card { padding: 18px 20px 16px; }
+.sum-card .total-value { margin: 2px 0 12px; }
+.sum-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -20px; padding: 0 20px; }
+.sum-chips::-webkit-scrollbar { display: none; }
+button.sum-chip { flex: none; width: auto; display: grid; gap: 1px; background: var(--fill); border-radius: 12px; padding: 8px 26px 8px 12px; }
+button.sum-chip::after { top: 50%; right: 11px; margin-top: -3px; }
+.sum-chip span { font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+.sum-chip b { font-size: 14px; font-weight: 800; white-space: nowrap; }
+.plan-card { padding: 18px 12px 14px; }
+.plan-card .card-head { padding: 0 8px; }
+.plan-card .plan-legend { padding: 0 8px; }
+.plan-card .card-title { font-size: 20px; }
+.room-label { font-size: 12.5px; }
+
+/* ── 막대: 두 번 누르기 안내 ── */
+.br-hint { margin-left: auto; font-size: 11.5px; color: var(--ink-4); font-weight: 600; }
+.bar-wrap[data-mode=""] .br-hint { display: none; }
+.line-readout { margin-top: 6px; }
+.sum-chips { display: grid; grid-template-columns: 1fr 1fr; overflow: visible; margin: 0; padding: 0; }
+button.sum-chip { width: 100%; }

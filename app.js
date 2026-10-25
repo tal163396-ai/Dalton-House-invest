@@ -154,7 +154,17 @@
     const thisYear = new Date().getFullYear();
     const rzYear = D.realized.filter(r => r.year === thisYear).reduce((s, r) => s + r.amount, 0);
     $('#view-home').innerHTML = `
-      <div class="card">
+      <div class="card sum-card">
+        <div class="total-label">총 자산</div>
+        <div class="total-value num">${won(T.value)}</div>
+        <div class="sum-chips num">
+          <button class="mini sum-chip" data-stat="pl"><span>평가손익</span><b class="${cls(T.pl)}">${compactSigned(T.pl)} (${pct(T.ret, 1)})</b></button>
+          <button class="mini sum-chip" data-stat="rz"><span>${thisYear}년 실현</span><b class="${cls(rzYear)}">${compactSigned(rzYear)}</b></button>
+          <button class="mini sum-chip" data-stat="cost"><span>원금</span><b>${compact(T.cost)}</b></button>
+          <button class="mini sum-chip" data-stat="count"><span>자산</span><b>${D.assets.length}개</b></button>
+        </div>
+      </div>
+      <div class="card plan-card">
         <div class="card-head">
           <h2 class="card-title">자산 구성</h2>
           <div class="seg" role="group" aria-label="표시 방식">
@@ -168,16 +178,6 @@
           ${state.mode === 'return'
             ? `<span class="scale" aria-hidden="true">−30%<i style="background:${retColor(-0.3)}"></i><i style="background:${retColor(-0.1)}"></i><i style="background:${retColor(0)}"></i><i style="background:${retColor(0.1)}"></i><i style="background:${retColor(0.3)}"></i>+30%</span>`
             : ''}
-        </div>
-      </div>
-      <div class="card">
-        <div class="total-label">총 자산</div>
-        <div class="total-value num">${won(T.value)}</div>
-        <div class="total-grid num">
-          <button class="mini" data-stat="pl"><div class="mini-label">평가손익</div><div class="mini-value ${cls(T.pl)}">${compactSigned(T.pl)} <small>(${pct(T.ret, 1)})</small></div></button>
-          <button class="mini" data-stat="rz"><div class="mini-label">${thisYear}년 실현손익</div><div class="mini-value ${cls(rzYear)}">${compactSigned(rzYear)}</div></button>
-          <button class="mini" data-stat="cost"><div class="mini-label">투자원금</div><div class="mini-value">${compact(T.cost)}</div></button>
-          <button class="mini" data-stat="count"><div class="mini-label">자산 수</div><div class="mini-value">${D.assets.length}개</div></button>
         </div>
       </div>`;
     $$('#view-home .mini').forEach(b => b.onclick = () => openStat(b.dataset.stat));
@@ -261,7 +261,7 @@
     if (!el || !el.clientWidth) return;
     const D = state.data;
     const W = el.clientWidth;
-    const H = Math.round(Math.min(W * 1.08, 560));
+    const H = Math.round(Math.min(W * 1.32, 640));
     el.style.height = `${H}px`;
     const kindItems = [...groupBy(D.assets.filter(a => a.value > 0), a => a.kind)]
       .map(([k, list]) => ({ k, list, v: list.reduce((s, a) => s + a.value, 0) }))
@@ -282,7 +282,7 @@
         const a = t.a;
         const w = Math.max(t.w - GAP, 0), h = Math.max(t.h - GAP, 0);
         const bg = state.mode === 'weight' ? weightColor(a.weight / (maxW || 1)) : retColor(a.ret ?? 0);
-        const fs = Math.max(10, Math.min(22, Math.sqrt(w * h) / 6.4));
+        const fs = Math.max(10, Math.min(26, Math.sqrt(w * h) / 5.8));
         const label = state.mode === 'weight' ? `${(a.weight * 100).toFixed(1)}%` : pct(a.ret, 1);
         html += `<button class="tile" data-asset="${esc(a.name)}" aria-label="${esc(a.name)} ${label}"
           style="left:${t.x + GAP / 2}px;top:${t.y + GAP / 2}px;width:${w}px;height:${h}px;background:${bg}">
@@ -652,9 +652,9 @@
     };
     const hits = series.map(s => `<polyline class="hit" data-k="${s.key}" points="${ptsOf(s)}" fill="none" stroke="transparent" stroke-width="20" stroke-linejoin="round"/>`).join('');
     return `<div class="line-wrap" data-info='${esc(JSON.stringify(info))}'>
-      <div class="line-readout num">선을 누르면 자세한 내용이 나와요</div>
       <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="비교 그래프. 선을 누르면 이름과 금액이 나와요">${grid}${zero}${lines}${dot}${xl}${hits}
         <circle class="pick-dot" r="5" stroke="var(--card)" stroke-width="2" style="display:none" cx="0" cy="0"/></svg>
+      <div class="line-readout num">선을 누르면 자세한 내용이 나와요</div>
     </div>`;
   }
 
@@ -891,7 +891,7 @@
           <span>손절 ${losses.length}건 <span class="down">${compactSigned(losses.reduce((s, r) => s + r.amount, 0))}</span></span>
           ${totalRet !== null ? `<span>기준원금 대비 <span class="${cls(totalRet)}">${pct(totalRet)}</span></span>` : ''}
         </div>
-        ${barChart(byMonth.map((v, i) => [`${i + 1}월`, v]))}
+        ${barChart(byMonth.map((v, i) => [`${i + 1}월`, v]), { mode: 'month', year: y })}
       </div>
 
       <div class="card">
@@ -1020,7 +1020,7 @@
         <div class="kpi-label">전체 기간 실현손익</div>
         <div class="kpi-value num ${cls(total)}">${signWon(total)}</div>
         <div class="kpi-sub"><span>${D.realized.length}건 기록</span></div>
-        ${barChart(rows.map(r => [`${r.y}`, r.amt]))}
+        ${barChart(rows.map(r => [`${r.y}`, r.amt]), { mode: 'year' })}
         <div class="table-wrap" style="margin-top:8px"><table class="grid num">
           <thead><tr><th>연도</th><th>수익금</th><th>누적</th></tr></thead>
           <tbody>${rows.map(r => `<tr><td>${r.y}년</td><td class="${cls(r.amt)}">${signWon(r.amt)}</td><td class="${cls(r.cum)}">${signWon(r.cum)}</td></tr>`).join('')}</tbody>
@@ -1030,7 +1030,7 @@
       ${cumulativeCard()}`;
   }
 
-  function barChart(pairs) {
+  function barChart(pairs, ctx = {}) {
     const W = 340, H = 168, padB = 22, padT = 12;
     const posMax = Math.max(0, ...pairs.map(([, v]) => v)), negMax = Math.max(0, ...pairs.map(([, v]) => -v));
     const span = H - padT - padB;
@@ -1052,8 +1052,8 @@
       </g>`;
     }).join('');
     const [ll, lv] = pairs[last] || ['', 0];
-    return `<div class="bar-wrap">
-      <div class="bar-readout num"><span class="br-label">${esc(ll)}</span><b class="br-value ${cls(lv)}">${signWon(lv)}</b></div>
+    return `<div class="bar-wrap" data-mode="${ctx.mode || ''}" data-year="${ctx.year || ''}">
+      <div class="bar-readout num"><span class="br-label">${esc(ll)}</span><b class="br-value ${cls(lv)}">${signWon(lv)}</b><span class="br-hint">한 번 더 누르면 자세히</span></div>
       <svg class="chart bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="실현손익 막대 그래프. 막대를 누르면 금액이 나와요">
         <line x1="0" x2="${W}" y1="${zy}" y2="${zy}" stroke="var(--line)" stroke-width="1"/>${bars}</svg>
     </div>`;
@@ -1062,12 +1062,39 @@
   function bindBars(root) {
     $$('.bar-wrap', root).forEach(wrap => {
       $$('.bar-g', wrap).forEach(g => g.onclick = () => {
+        if (g.classList.contains('sel') && wrap.dataset.mode) { openBarDetail(wrap.dataset.mode, Number(wrap.dataset.year), g.dataset.label); return; }
         $$('.bar-g', wrap).forEach(x => x.classList.toggle('sel', x === g));
         const v = Number(g.dataset.v);
         $('.br-label', wrap).textContent = g.dataset.label;
         const b = $('.br-value', wrap); b.textContent = signWon(v); b.className = `br-value ${cls(v)}`;
       });
     });
+  }
+
+  // 막대를 두 번 누르면: 그 달(또는 그 해)의 종류별 손익과 거래
+  function openBarDetail(mode, year, label) {
+    const D = state.data;
+    const m = parseInt(label, 10);
+    const list = (mode === 'month' ? D.realized.filter(r => r.year === year && r.month === m) : D.realized.filter(r => r.year === m))
+      .sort((a, b) => b.date - a.date);
+    const title = mode === 'month' ? `${year}년 ${m}월` : `${m}년`;
+    const sum = list.reduce((t, r) => t + r.amount, 0);
+    const g = list.filter(r => r.amount > 0), l = list.filter(r => r.amount < 0);
+    const ks = [...groupBy(list, r => r.kind)].map(([k, x]) => ({ k, amt: x.reduce((t, r) => t + r.amount, 0), n: x.length })).sort((a, b) => b.amt - a.amt);
+    const mx = Math.max(...ks.map(k => Math.abs(k.amt)), 1);
+    openSheet(`
+      <div class="pop-hero ${sum >= 0 ? 'gain' : 'loss'}">
+        <div><div class="pop-kind">${title} 실현손익</div><h2 id="sheetTitle" class="num">${signWon(sum)}</h2>
+          <div class="pop-sub num">익절 ${g.length}건 ${compactSigned(g.reduce((t, r) => t + r.amount, 0))} · 손절 ${l.length}건 ${compactSigned(l.reduce((t, r) => t + r.amount, 0))}</div></div>
+      </div>
+      <div class="pop-list">
+        ${ks.map(k => `<div class="stat-row"><div class="stat-row-top"><span class="stat-row-name">${esc(k.k)}</span><b class="num ${cls(k.amt)}">${signWon(k.amt)}</b></div>
+          <div class="stat-row-sub num">${k.n}건</div>
+          <div class="stat-meter" aria-hidden="true"><i style="width:${Math.max(1.5, Math.abs(k.amt) / mx * 100)}%;background:${k.amt >= 0 ? 'var(--bar-up)' : 'var(--down)'}"></i></div></div>`).join('')}
+        ${list.length ? `<h3 class="section-title">거래 ${list.length}건</h3>` : '<p class="empty">이 기간에는 기록이 없어요.</p>'}
+        ${list.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}
+      </div>
+      <button class="btn pop-close" data-close>닫기</button>`, 'pop');
   }
 
   /* ── 기록 ── */
