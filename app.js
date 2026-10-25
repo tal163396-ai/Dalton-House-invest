@@ -1963,6 +1963,41 @@
     load({ quiet: true });
   }
 
+  /* ── 숫자 가리기 (다른 사람에게 화면을 보여줄 때) ── */
+  const MASK_RES = [
+    /[+\-−]?\$\d[\d,.]*/g,                                   // 달러 금액
+    /[+\-−]?\d[\d,.]*(?=\s*(?:억|만|원|%|%p|주))/g,            // 단위가 붙은 숫자
+    /[+\-−]?\d{1,3}(?:,\d{3})+(?:\.\d+)?/g,                   // 콤마 숫자
+  ];
+  function maskText(t) { let out = t; MASK_RES.forEach(re => { out = out.replace(re, '•••'); }); return out; }
+  function maskNode(root) {
+    if (!document.body.classList.contains('masked') || !root) return;
+    const walk = document.createTreeWalker(root.nodeType === 3 ? root.parentNode : root, NodeFilter.SHOW_TEXT);
+    let n; const todo = [];
+    while ((n = walk.nextNode())) { if (/\d/.test(n.nodeValue)) todo.push(n); }
+    todo.forEach(t => { const v = maskText(t.nodeValue); if (v !== t.nodeValue) t.nodeValue = v; });
+  }
+  let maskObs = null;
+  function setMask(on, silent = false) {
+    document.body.classList.toggle('masked', on);
+    store.set('dh_mask', on ? '1' : '0');
+    const b = $('#maskBtn'); if (b) { b.setAttribute('aria-pressed', String(on)); b.setAttribute('aria-label', on ? '숫자 보이기' : '숫자 가리기'); }
+    if (on) {
+      maskNode(document.body);
+      if (!maskObs) {
+        maskObs = new MutationObserver(ms => ms.forEach(m => {
+          if (m.type === 'characterData') maskNode(m.target);
+          m.addedNodes.forEach(x => maskNode(x));
+        }));
+        maskObs.observe(document.body, { childList: true, subtree: true, characterData: true });
+      }
+      if (!silent) toast('숫자를 가렸습니다. 눈 아이콘을 다시 누르면 보입니다.');
+    } else {
+      if (maskObs) { maskObs.disconnect(); maskObs = null; }
+      if (!silent) { closeSheet(); const y = window.scrollY; render(); window.scrollTo({ top: y }); }
+    }
+  }
+
   function bind() {
     $$('#nameChips .chip').forEach(c => c.onclick = () => {
       $$('#nameChips .chip').forEach(x => x.classList.toggle('on', x === c));
@@ -1991,6 +2026,8 @@
     });
     $$('.tab').forEach(t => t.onclick = () => go(t.dataset.view));
     $('#refreshBtn').onclick = () => load();
+    $('#maskBtn').onclick = () => setMask(!document.body.classList.contains('masked'));
+    setMask(store.get('dh_mask') === '1', true);
     $('#menuBtn').onclick = openMenu;
     $('#sheet').addEventListener('click', e => { if (e.target.closest('[data-close]')) closeSheet(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });

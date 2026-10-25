@@ -807,3 +807,11 @@ body { word-break: keep-all; overflow-wrap: anywhere; }
 .nwc-row.net b, .nwc-row.net span { color: var(--up); }
 .nwc-row.net b { font-size: 16px; }
 .nwc-row { padding-left: 10px; padding-right: 10px; }
+
+/* 숫자 가리기 */
+#maskBtn .eye-off { display: none; }
+body.masked #maskBtn .eye-on { display: none; }
+body.masked #maskBtn .eye-off { display: block; }
+body.masked #maskBtn { color: var(--accent); }
+body.masked input.money, body.masked #fValue { filter: blur(6px); }
+body.masked .tile-val { visibility: hidden; }
