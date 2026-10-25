@@ -16,7 +16,8 @@
     data: null,
     view: 'home',
     mode: store.get(LS.mode) || 'weight',
-    sort: store.get(LS.sort) || 'value',
+    sort: store.get(LS.sort) || 'cost',
+    sortDir: store.get('dh_sortdir') === 'asc' ? 'asc' : 'desc',
     fx: store.get(LS.fx) === '1',
     year: null,
     openKinds: new Set(),
@@ -108,7 +109,7 @@
       const asset = String(r['자산']).trim();
       const c = comp.get(`${year}|${asset}`);
       return {
-        date, year, month: num(r['월']) || date.getMonth() + 1, asset, sub: r['세부종목'], text: r['내용'],
+        date, year, month: num(r['월']) || date.getMonth() + 1, asset, sub: r['세부종목'], text: withSubName(r['세부종목'], r['내용']),
         amount: num(r['손익(원)']), kind: c ? c.kind : (byAsset.get(asset)?.kind || '기타'),
       };
     }).filter(r => !Number.isNaN(r.date.getTime()));
@@ -120,6 +121,15 @@
       total: { ...total, pl: total.value - total.cost, ret: total.cost > 0 ? (total.value - total.cost) / total.cost : null },
       monthly: d.monthly || [], trades: (d.trades || []).slice().reverse(), index: d.index || null, updatedAt: d.updatedAt,
     };
+  }
+
+  const SUB_ALIASES = { 'NAVER': ['네이버'], 'TQQQ': ['나예 무매'], 'LG에너지솔루션': ['LG엔솔'], '미래에셋증권': ['미래에셋'],
+    'KODEX 2차전지산업레버리지': ['2차전지'], 'TIGER 미국나스닥100레버리지(합성)': ['TIGER'] };
+  function withSubName(sub, text) {
+    const t = String(text || '').trim(), s = String(sub || '').trim();
+    if (!s || s.startsWith('(')) return t;
+    const names = [s, ...(SUB_ALIASES[s] || [])];
+    return names.some(n => t.includes(n)) ? t : `${s} ${t}`;
   }
 
   /* ───────────── 렌더 ───────────── */
@@ -274,19 +284,21 @@
     const D = state.data;
     const sorters = { value: (a, b) => b.value - a.value, cost: (a, b) => b.cost - a.cost, ret: (a, b) => (b.ret ?? -9) - (a.ret ?? -9) };
     const groupSort = { value: (a, b) => b.v - a.v, cost: (a, b) => b.c - a.c, ret: (a, b) => (b.ret ?? -9) - (a.ret ?? -9) };
-    if (!sorters[state.sort]) state.sort = 'value';
+    if (!sorters[state.sort]) state.sort = 'cost';
+    const dir = state.sortDir === 'asc' ? -1 : 1;
     const kinds = [...groupBy(D.assets, a => a.kind)].map(([k, list]) => {
       const c = list.reduce((s, a) => s + a.cost, 0), v = list.reduce((s, a) => s + a.value, 0);
-      return { k, list: list.sort(sorters[state.sort]), c, v, ret: c > 0 ? (v - c) / c : null };
-    }).sort(groupSort[state.sort]);
+      return { k, list: list.sort((a, b) => dir * sorters[state.sort](a, b)), c, v, ret: c > 0 ? (v - c) / c : null };
+    }).sort((a, b) => dir * groupSort[state.sort](a, b));
+    const arrow = key => state.sort === key ? `<span class="arrow" aria-hidden="true">${state.sortDir === 'asc' ? '↑' : '↓'}</span>` : '';
     const maxAbs = Math.max(0.05, ...D.assets.map(a => Math.abs(a.ret ?? 0)));
 
     $('#view-assets').innerHTML = `
       <div class="sort">
         <div class="seg" role="group" aria-label="정렬">
-          <button data-sort="value" class="${state.sort === 'value' ? 'on' : ''}">평가금순</button>
-          <button data-sort="cost" class="${state.sort === 'cost' ? 'on' : ''}">원금순</button>
-          <button data-sort="ret" class="${state.sort === 'ret' ? 'on' : ''}">수익률순</button>
+          <button data-sort="cost" class="${state.sort === 'cost' ? 'on' : ''}" aria-label="원금 ${state.sort === 'cost' && state.sortDir === 'asc' ? '작은' : '큰'} 순">원금${arrow('cost')}</button>
+          <button data-sort="value" class="${state.sort === 'value' ? 'on' : ''}" aria-label="평가금 ${state.sort === 'value' && state.sortDir === 'asc' ? '작은' : '큰'} 순">평가금${arrow('value')}</button>
+          <button data-sort="ret" class="${state.sort === 'ret' ? 'on' : ''}" aria-label="수익률 ${state.sort === 'ret' && state.sortDir === 'asc' ? '낮은' : '높은'} 순">수익률${arrow('ret')}</button>
         </div>
       </div>
       ${kinds.map(g => `
@@ -308,7 +320,12 @@
               <span class="bar" aria-hidden="true"><i style="width:${Math.min(100, Math.abs(a.ret ?? 0) / maxAbs * 100)}%;background:${(a.ret ?? 0) >= 0 ? 'var(--up)' : 'var(--down)'}"></i></span>
             </button>`).join('')}
         </div>`).join('')}`;
-    $$('#view-assets .seg button').forEach(b => b.onclick = () => { state.sort = b.dataset.sort; store.set(LS.sort, state.sort); renderAssets(); });
+    $$('#view-assets .seg button').forEach(b => b.onclick = () => {
+      if (state.sort === b.dataset.sort) state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
+      else { state.sort = b.dataset.sort; state.sortDir = 'desc'; }
+      store.set(LS.sort, state.sort); store.set('dh_sortdir', state.sortDir);
+      renderAssets();
+    });
     $$('#view-assets .row').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
   }
 

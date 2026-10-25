@@ -313,3 +313,4 @@ table.grid tr.subsub td:first-child::before { content: "└ "; color: var(--ink-
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.error { background: var(--down); }
+.seg .arrow { display: inline-block; margin-left: 3px; font-weight: 700; }
