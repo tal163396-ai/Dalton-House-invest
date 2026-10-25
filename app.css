@@ -581,7 +581,8 @@ button.sum-chip { width: 100%; }
 .pager { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; align-items: flex-start; transition: height .25s ease; overscroll-behavior-x: contain; }
 .pager::-webkit-scrollbar { display: none; }
 .page { flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; }
-.page > .card { margin-bottom: 0; }
+.page > .card { margin-bottom: 12px; }
+.page > .card:last-child { margin-bottom: 0; }
 .sd-month-wrap { border-top: 1px solid var(--fill); }
 .sd-month-wrap:first-of-type { border-top: 0; }
 button.sd-month { width: 100%; border: 0; background: none; color: inherit; text-align: left; border-top: 0; cursor: pointer; }
@@ -628,3 +629,15 @@ button.sd-month { width: 100%; border: 0; background: none; color: inherit; text
 .chart .pick-dot { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .chart .ln.draw { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; } .chart .end { animation: none; } }
 .legend i { border-top-width: 2.5px; border-radius: 2px; }
+
+/* v16: 순자산 미니 카드 + 수익률 탭 넘기기 */
+button.nw-card { display: block; width: 100%; text-align: left; border: 0; color: inherit; font: inherit; cursor: pointer; padding: 18px 20px 14px; }
+.nw-top { display: flex; justify-content: space-between; align-items: center; }
+.nw-more { font-size: 12.5px; font-weight: 700; color: var(--accent); }
+.nw-value { font-size: 26px; font-weight: 800; letter-spacing: -.02em; margin: 4px 0 2px; }
+.nw-sub { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--ink-3); font-weight: 600; }
+.nw-spark { display: block; width: 100%; height: 76px; margin-top: 10px; }
+.nw-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-4); margin-top: 2px; }
+#yTabs { margin-bottom: 4px; }
+#yTabs + .year-chips { margin-bottom: 10px; }
+.year-chips[hidden] { display: none; }

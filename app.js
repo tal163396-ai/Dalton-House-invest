@@ -21,6 +21,7 @@
     sortDir: store.get('dh_sortdir') === 'asc' ? 'asc' : 'desc',
     fx: store.get(LS.fx) === '1',
     year: null,
+    yPage: 0,
     openKinds: new Set(),
     openMonths: new Set(),
     openTrades: new Set(),
@@ -200,9 +201,11 @@
           <button class="mini sum-chip" data-stat="count"><span>자산</span><b>${D.assets.length}개</b></button>
         </div>
       </div>
+      ${netWorthMini()}
       </div>
       </div>`;
     $$('#view-home .mini').forEach(b => b.onclick = () => openStat(b.dataset.stat));
+    const nw = $('#nwCard'); if (nw) nw.onclick = () => { state.yPage = 2; go('years'); };
     $$('#modeSeg button').forEach(b => b.onclick = () => {
       state.mode = b.dataset.mode; store.set(LS.mode, state.mode); renderHome();
     });
@@ -213,23 +216,56 @@
     bindPager();
   }
 
-  // 홈: 자산 구성(트리맵) ↔ 총 자산 좌우로 넘기기
-  let fitPager = () => {};
-  function bindPager() {
-    const pager = $('#pager'), dots = $$('.pager-dots button');
-    if (!pager) return;
-    const pages = $$('.page', pager);
-    const idx = () => Math.round(pager.scrollLeft / (pager.clientWidth || 1));
+  // 좌우로 넘기는 화면 (홈, 수익률 탭 공용)
+  function setupPager(pager, tabs, { start = 0, onChange } = {}) {
+    if (!pager) return { fit: () => {}, align: () => {} };
+    const pages = [...pager.children].filter(x => x.classList.contains('page'));
+    const idx = () => Math.max(0, Math.min(pages.length - 1, Math.round(pager.scrollLeft / (pager.clientWidth || 1))));
+    let last = -1;
     const fit = () => {
+      if (!pager.clientWidth) return; // 숨겨진 화면에서는 계산하지 않음
       const i = idx();
-      dots.forEach((d, j) => { d.classList.toggle('on', j === i); d.setAttribute('aria-selected', String(j === i)); });
+      tabs.forEach((d, j) => { d.classList.toggle('on', j === i); d.setAttribute('aria-selected', String(j === i)); });
       pager.style.height = `${pages[i].offsetHeight}px`;
+      if (i !== last) { const first = last < 0; last = i; if (onChange) onChange(i, first); }
     };
     let t;
     pager.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(fit, 60); }, { passive: true });
-    dots.forEach(d => d.onclick = () => pager.scrollTo({ left: Number(d.dataset.p) * pager.clientWidth, behavior: 'smooth' }));
-    fitPager = fit;
-    requestAnimationFrame(fit);
+    tabs.forEach(d => d.onclick = () => pager.scrollTo({ left: Number(d.dataset.p) * pager.clientWidth, behavior: 'smooth' }));
+    if ('ResizeObserver' in window) { const ro = new ResizeObserver(() => fit()); pages.forEach(pg => ro.observe(pg)); }
+    const align = (i = start) => { if (!pager.clientWidth) return; pager.scrollLeft = i * pager.clientWidth; fit(); };
+    requestAnimationFrame(() => align(start));
+    return { fit, align };
+  }
+  let yPagerApi = { fit: () => {}, align: () => {} };
+
+  let fitPager = () => {};
+  function bindPager() {
+    fitPager = setupPager($('#pager'), $$('#view-home .pager-dots button')).fit;
+  }
+
+  // 홈 '총 자산' 화면: 가계부 기준 순자산 미니 그래프
+  function netWorthMini() {
+    const D = state.data, H = D.household;
+    if (!H || H.length < 2) return '';
+    const W = 300, Ht = 70, xs = i => 4 + (W - 8) * i / (H.length - 1);
+    const lo = Math.min(...H.map(h => h.nw)), hi = Math.max(...H.map(h => h.nw));
+    const ys = v => 6 + (Ht - 12) * (1 - (v - lo) / ((hi - lo) || 1));
+    const P = H.map((h, i) => [xs(i), ys(h.nw)]);
+    const d = smoothPath(P), last = H.at(-1), first = H[0];
+    const ch = last.nw - first.nw;
+    return `
+      <button class="card nw-card" id="nwCard" aria-label="우리 집 순자산, 수익률 탭에서 자세히">
+        <div class="nw-top"><span class="total-label">우리 집 순자산</span><span class="nw-more">자산 성장 보기 ›</span></div>
+        <div class="nw-value num">${won(last.nw)}</div>
+        <div class="nw-sub num"><span class="${cls(ch)}">${ymLabel(first)}부터 ${compactSigned(ch)}</span><span>평가손익 반영 시 약 ${compact(last.nw + D.total.pl)}원</span></div>
+        <svg class="nw-spark" viewBox="0 0 ${W} ${Ht}" preserveAspectRatio="none" aria-hidden="true">
+          <defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--up);stop-opacity:.3"/><stop offset="1" style="stop-color:var(--up);stop-opacity:0"/></linearGradient></defs>
+          <path d="${d}L${P.at(-1)[0]},${Ht}L${P[0][0]},${Ht}Z" fill="url(#nwg)"/>
+          <path d="${d}" fill="none" stroke="var(--up)" stroke-width="2.2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <div class="nw-axis num"><span>${ymLabel(first)}</span><span>편한가계부 기준</span><span>${ymLabel(last)}</span></div>
+      </button>`;
   }
 
   // 홈 요약 칸을 누르면 상세 팝업
@@ -579,7 +615,12 @@
     const chips = [...D.years.map(y => [y, `${y}년`]), ['all', '전체']];
     const el = $('#view-years');
     el.innerHTML = `
-      <div class="year-chips" role="group" aria-label="연도 선택">
+      <div class="pager-dots" id="yTabs" role="tablist" aria-label="수익률 화면">
+        <button role="tab" data-p="0"><i></i>연도·월별</button>
+        <button role="tab" data-p="1"><i></i>자산별</button>
+        <button role="tab" data-p="2"><i></i>자산 성장</button>
+      </div>
+      <div class="year-chips" id="yChips" role="group" aria-label="연도 선택">
         ${chips.map(([y, l]) => `<button class="chip ${state.year === y ? 'on' : ''}" data-year="${y}">${l}</button>`).join('')}
       </div>
       <div id="yearBody"></div>`;
@@ -594,6 +635,14 @@
   function renderYearBody() {
     if (state.year === 'all') renderAllYears(); else renderOneYear(state.year);
     const body = $('#yearBody');
+    yPagerApi = setupPager($('#yPager'), $$('#yTabs button'), {
+      start: state.yPage || 0,
+      onChange: (i, first) => {
+        state.yPage = i;
+        const chips = $('#yChips'); if (chips) chips.hidden = i === 2;
+        if (!first) { const tabs = $('#yTabs'); const top = tabs.getBoundingClientRect().top + window.scrollY - 70; if (window.scrollY > top) window.scrollTo({ top, behavior: 'smooth' }); }
+      },
+    });
     bindCompare(body);
     bindBars(body);
     bindLines(body);
@@ -1144,6 +1193,7 @@
     const best = activeMonths.slice().sort((a, b) => b[1] - a[1])[0], worst = activeMonths.slice().sort((a, b) => a[1] - b[1])[0];
 
     $('#yearBody').innerHTML = `
+      <div class="pager" id="yPager"><div class="page">
       <div class="card">
         <div class="kpi-label">${y}년 실현손익</div>
         <div class="kpi-value num ${cls(sum)}">${signWon(sum)}</div>
@@ -1190,6 +1240,7 @@
         })()}
       </div>
 
+      </div><div class="page">
       ${compareCard(y)}
 
       <div class="card">
@@ -1218,8 +1269,10 @@
           .map(k => `<span>${esc(k.k)} <b class="${cls(k.amt)}">${compactSigned(k.amt)}</b></span>`).join('')}</div>`}
       </div>
 
+      </div><div class="page">
       ${cumulativeCard()}
-      ${monthlyEvalCard(y)}`;
+      ${monthlyEvalCard(y)}
+      </div></div>`;
 
     $('#monthsFold').onclick = () => { state.monthsOpen = !state.monthsOpen; keepScroll(renderYearBody); };
     $('#kindsFold').onclick = () => { state.kindsOpen = !state.kindsOpen; keepScroll(renderYearBody); };
@@ -1277,6 +1330,7 @@
     });
     const total = rows.reduce((s, r) => s + r.amt, 0);
     $('#yearBody').innerHTML = `
+      <div class="pager" id="yPager"><div class="page">
       <div class="card">
         <div class="kpi-label">전체 기간 실현손익</div>
         <div class="kpi-value num ${cls(total)}">${signWon(total)}</div>
@@ -1287,8 +1341,11 @@
           <tbody>${rows.map(r => `<tr><td>${r.y}년</td><td class="${cls(r.amt)}">${signWon(r.amt)}</td><td class="${cls(r.cum)}">${signWon(r.cum)}</td></tr>`).join('')}</tbody>
         </table></div>
       </div>
+      </div><div class="page">
       ${compareCard('all')}
-      ${cumulativeCard()}`;
+      </div><div class="page">
+      ${cumulativeCard()}
+      </div></div>`;
   }
 
   function barChart(pairs, ctx = {}) {
@@ -1550,6 +1607,7 @@
     $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
     window.scrollTo({ top: 0 });
     if (view === 'home') drawPlan();
+    if (view === 'years') yPagerApi.align(state.yPage || 0);
   }
 
   function openSheet(html, mode = '') {
