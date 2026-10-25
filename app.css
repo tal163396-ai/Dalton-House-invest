@@ -431,3 +431,54 @@ table.grid.cmp td:first-child { white-space: normal; word-break: keep-all; max-w
 .bars .bar-g .track { opacity: .55; }
 .bars .bar-g.sel text { fill: var(--ink); font-weight: 700; }
 .bars text { font-size: 10.5px; }
+
+/* ── 홈 요약 칸: 누르면 상세 ── */
+button.mini { border: 0; text-align: left; width: 100%; color: inherit; cursor: pointer; position: relative; transition: transform .12s; }
+button.mini:active { transform: scale(.97); }
+button.mini::after { content: ""; position: absolute; right: 12px; top: 14px; width: 6px; height: 6px; border-right: 1.6px solid var(--ink-4); border-top: 1.6px solid var(--ink-4); transform: rotate(45deg); }
+.pop-hero.neutral { background: linear-gradient(135deg, #4E5968, #333D4B); }
+.stat-row { padding: 12px 0; border-top: 1px solid var(--fill); }
+.stat-row:first-child { border-top: 0; }
+.stat-row-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.stat-row-name { font-weight: 650; font-size: 15px; word-break: keep-all; }
+.stat-row-top b { font-size: 15px; font-weight: 750; white-space: nowrap; }
+.stat-row-top small { font-size: 12px; color: var(--ink-3); font-weight: 600; margin-left: 4px; }
+.stat-row-sub { font-size: 12.5px; color: var(--ink-3); margin-top: 1px; }
+.stat-meter { height: 6px; background: var(--fill); border-radius: 3px; overflow: hidden; margin-top: 7px; }
+.stat-meter i { display: block; height: 100%; border-radius: 3px; }
+.stack { display: flex; height: 14px; border-radius: 7px; overflow: hidden; gap: 2px; margin: 14px 0 6px; }
+.stack i { display: block; }
+.stat-group { padding: 12px 0; border-top: 1px solid var(--fill); }
+.stat-group:first-child { border-top: 0; }
+.stat-group-name { font-size: 13px; font-weight: 700; color: var(--ink-3); margin-bottom: 8px; }
+.stat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.stat-chip { border: 0; background: var(--fill); border-radius: 10px; padding: 8px 12px; font-size: 14px; font-weight: 650; }
+
+/* ── 자산별 타일: 비중 와플 ── */
+.waffle { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: auto; padding-top: 12px; }
+.waffle i { display: block; aspect-ratio: 1; border-radius: 4px; background: linear-gradient(90deg, var(--accent) calc(var(--f) * 100%), var(--fill) 0); }
+.kind-tile.wide .waffle { grid-template-columns: repeat(20, 1fr); gap: 3px; }
+.kind-tile.wide .waffle i { border-radius: 3px; }
+.kt-share { font-size: 12.5px; color: var(--ink-3); margin-top: 8px; }
+.kt-share b { color: var(--accent); font-weight: 800; }
+.kind-tile { min-height: 150px; }
+.kind-tile.wide { min-height: 140px; }
+
+/* ── 선 그래프 누르기 ── */
+.line-readout { display: flex; align-items: center; gap: 8px; min-height: 26px; font-size: 13px; color: var(--ink-3); flex-wrap: wrap; }
+.line-readout.on { color: var(--ink-2); }
+.line-readout i { width: 10px; height: 10px; border-radius: 50%; }
+.line-readout b { font-weight: 800; color: var(--ink); }
+.line-readout b.up { color: var(--up); } .line-readout b.down { color: var(--down); }
+.chart .ln { transition: opacity .15s; }
+.chart .ln.dim { opacity: .18; }
+.chart .hit { cursor: pointer; }
+.cmp-label .hint { font-weight: 500; color: var(--ink-4); }
+.fold-hint { font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.cmp-list { display: grid; gap: 8px; margin-top: 12px; }
+.cmp-row { border-radius: 14px; background: var(--fill); padding: 12px 14px; border-left: 4px solid var(--c); }
+.cmp-name { font-weight: 700; font-size: 15px; margin-bottom: 8px; }
+.cmp-name .dot { display: none; }
+.cmp-cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.cmp-cells small { display: block; font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+.cmp-cells b { font-size: 15px; font-weight: 750; }

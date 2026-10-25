@@ -24,6 +24,7 @@
     openMonths: new Set(),
     openTrades: new Set(),
     kindsOpen: false,
+    monthsOpen: false,
     cmpMode: store.get('dh_cmpmode') === 'sub' ? 'sub' : 'kind',
     cmpSel: (() => { try { return JSON.parse(store.get('dh_cmpsel')) || { kind: null, sub: null }; } catch { return { kind: null, sub: null }; } })(),
     form: { type: '매수', kind: '', key: '', cashAsset: '' },
@@ -157,10 +158,10 @@
         <div class="total-label">총 자산</div>
         <div class="total-value num">${won(T.value)}</div>
         <div class="total-grid num">
-          <div class="mini"><div class="mini-label">평가손익</div><div class="mini-value ${cls(T.pl)}">${compactSigned(T.pl)} <small>(${pct(T.ret, 1)})</small></div></div>
-          <div class="mini"><div class="mini-label">${thisYear}년 실현손익</div><div class="mini-value ${cls(rzYear)}">${compactSigned(rzYear)}</div></div>
-          <div class="mini"><div class="mini-label">투자원금</div><div class="mini-value">${compact(T.cost)}</div></div>
-          <div class="mini"><div class="mini-label">자산 수</div><div class="mini-value">${D.assets.length}개</div></div>
+          <button class="mini" data-stat="pl"><div class="mini-label">평가손익</div><div class="mini-value ${cls(T.pl)}">${compactSigned(T.pl)} <small>(${pct(T.ret, 1)})</small></div></button>
+          <button class="mini" data-stat="rz"><div class="mini-label">${thisYear}년 실현손익</div><div class="mini-value ${cls(rzYear)}">${compactSigned(rzYear)}</div></button>
+          <button class="mini" data-stat="cost"><div class="mini-label">투자원금</div><div class="mini-value">${compact(T.cost)}</div></button>
+          <button class="mini" data-stat="count"><div class="mini-label">자산 수</div><div class="mini-value">${D.assets.length}개</div></button>
         </div>
       </div>
       <div class="card">
@@ -179,10 +180,56 @@
             : ''}
         </div>
       </div>`;
+    $$('#view-home .mini').forEach(b => b.onclick = () => openStat(b.dataset.stat));
     $$('#view-home .seg button').forEach(b => b.onclick = () => {
       state.mode = b.dataset.mode; store.set(LS.mode, state.mode); renderHome();
     });
     drawPlan();
+  }
+
+  // 홈 요약 칸을 누르면 상세 팝업
+  function openStat(type) {
+    const D = state.data, T = D.total, y = new Date().getFullYear();
+    const row = (name, sub, right, cl = '', w = null, col = 'var(--accent)') => `
+      <div class="stat-row">
+        <div class="stat-row-top"><span class="stat-row-name">${esc(name)}</span><b class="num ${cl}">${right}</b></div>
+        ${sub ? `<div class="stat-row-sub num">${sub}</div>` : ''}
+        ${w !== null ? `<div class="stat-meter" aria-hidden="true"><i style="width:${Math.max(1.5, Math.min(100, w * 100))}%;background:${col}"></i></div>` : ''}
+      </div>`;
+    let hero, list;
+    if (type === 'pl') {
+      const arr = D.assets.filter(a => a.cost > 0 && Math.abs(a.pl) >= 1).sort((a, b) => a.pl - b.pl);
+      const mx = Math.max(...arr.map(a => Math.abs(a.pl)), 1);
+      hero = { t: '평가손익', v: signWon(T.pl), s: `원금 ${won(T.cost)} 대비 ${pct(T.ret)}`, c: T.pl >= 0 ? 'gain' : 'loss' };
+      list = arr.map(a => row(a.name, `${esc(a.kind)} · ${pct(a.ret, 1)}`, signWon(a.pl), cls(a.pl), Math.abs(a.pl) / mx, a.pl >= 0 ? 'var(--bar-up)' : 'var(--down)')).join('')
+        || '<p class="empty">손익이 있는 자산이 없어요.</p>';
+    } else if (type === 'rz') {
+      const rz = D.realized.filter(r => r.year === y);
+      const sum = rz.reduce((t, r) => t + r.amount, 0);
+      const ks = [...groupBy(rz, r => r.kind)].map(([k, l]) => ({ k, amt: l.reduce((t, r) => t + r.amount, 0), n: l.length })).sort((a, b) => b.amt - a.amt);
+      const mx = Math.max(...ks.map(k => Math.abs(k.amt)), 1);
+      hero = { t: `${y}년 실현손익`, v: signWon(sum), s: `익절 ${rz.filter(r => r.amount > 0).length}건 · 손절 ${rz.filter(r => r.amount < 0).length}건`, c: sum >= 0 ? 'gain' : 'loss' };
+      list = ks.map(k => row(k.k, `${k.n}건`, signWon(k.amt), cls(k.amt), Math.abs(k.amt) / mx, k.amt >= 0 ? 'var(--bar-up)' : 'var(--down)')).join('')
+        + `<button class="link-btn" id="goYears">수익률 탭에서 자세히 보기</button>`;
+    } else if (type === 'cost') {
+      const ks = [...groupBy(D.assets, a => a.kind)].map(([k, l]) => ({ k, c: l.reduce((t, a) => t + a.cost, 0), v: l.reduce((t, a) => t + a.value, 0) })).sort((a, b) => b.c - a.c);
+      hero = { t: '투자원금', v: won(T.cost), s: `지금 평가금 ${won(T.value)}`, c: 'neutral' };
+      list = `<div class="stack" aria-hidden="true">${ks.map((k, i) => `<i style="flex:${k.c};background:${CMP_COLORS[i % CMP_COLORS.length]};opacity:${1 - Math.floor(i / CMP_COLORS.length) * 0.45}"></i>`).join('')}</div>`
+        + ks.map((k, i) => row(k.k, `평가 ${compact(k.v)}원`, `${compact(k.c)}원 <small>${(k.c / T.cost * 100).toFixed(1)}%</small>`, '', k.c / T.cost, CMP_COLORS[i % CMP_COLORS.length])).join('');
+    } else {
+      const ks = [...groupBy(D.assets, a => a.kind)];
+      hero = { t: '자산 수', v: `${D.assets.length}개`, s: `${ks.length}개 종류`, c: 'neutral' };
+      list = ks.map(([k, l]) => `<div class="stat-group"><div class="stat-group-name">${esc(k)}</div>
+        <div class="stat-chips">${l.map(a => `<button class="stat-chip" data-asset="${esc(a.name)}">${esc(a.name)}</button>`).join('')}</div></div>`).join('');
+    }
+    openSheet(`
+      <div class="pop-hero ${hero.c}">
+        <div><div class="pop-kind">${hero.t}</div><h2 id="sheetTitle" class="num">${hero.v}</h2><div class="pop-sub num">${hero.s}</div></div>
+      </div>
+      <div class="pop-list">${list}</div>
+      <button class="btn pop-close" data-close>닫기</button>`, 'pop');
+    const g = $('#goYears'); if (g) g.onclick = () => { closeSheet(); state.year = y; renderYears(); go('years'); };
+    $$('#sheetBody .stat-chip').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
   }
 
   function drawPlan() {
@@ -310,15 +357,17 @@
       </div>
       <div class="kind-grid">
         ${kinds.map((g, i) => {
-          const w = g.v / tot;
           const main = state.sort === 'cost' ? g.c : g.v;
+          const share = main / ((state.sort === 'cost' ? D.total.cost : D.total.value) || 1);
+          const cells = i === 0 ? 20 : 10;
+          const filled = share * cells;
           return `
-          <button class="kind-tile ${i === 0 ? 'wide' : ''}" data-kind="${esc(g.k)}" style="--i:${i}" aria-label="${esc(g.k)} ${state.sort === 'cost' ? '원금' : '평가금'} ${compact(main)}원 수익률 ${pct(g.ret)}">
+          <button class="kind-tile ${i === 0 ? 'wide' : ''}" data-kind="${esc(g.k)}" style="--i:${i}" aria-label="${esc(g.k)} ${state.sort === 'cost' ? '원금' : '평가금'} ${compact(main)}원, 전체의 ${(share * 100).toFixed(1)}%">
             <span class="kt-name">${esc(g.k)}</span>
             <span class="kt-label">${state.sort === 'cost' ? '원금' : '평가금'}</span>
             <span class="kt-value num">${compact(main)}원</span>
-            <span class="kt-ret num ${cls(g.ret)}">${pct(g.ret)}</span>
-            ${bar(g.ret)}
+            <span class="waffle" style="--n:${cells}" aria-hidden="true">${Array.from({ length: cells }, (_, j) => `<i style="--f:${Math.max(0, Math.min(1, filled - j))}"></i>`).join('')}</span>
+            <span class="kt-share num">전체 ${state.sort === 'cost' ? '원금' : '평가금'}의 <b>${(share * 100).toFixed(1)}%</b></span>
           </button>`;
         }).join('')}
       </div>`;
@@ -428,21 +477,28 @@
     const chips = [...D.years.map(y => [y, `${y}년`]), ['all', '전체']];
     const el = $('#view-years');
     el.innerHTML = `
-      ${cumulativeCard()}
-      ${compareCard()}
       <div class="year-chips" role="group" aria-label="연도 선택">
         ${chips.map(([y, l]) => `<button class="chip ${state.year === y ? 'on' : ''}" data-year="${y}">${l}</button>`).join('')}
       </div>
       <div id="yearBody"></div>`;
-    bindCompare(el);
-    $$('#fxSeg button', el).forEach(b => b.onclick = () => { state.fx = b.dataset.fx === '1'; store.set(LS.fx, state.fx ? '1' : '0'); renderYears(); });
     $$('.year-chips .chip', el).forEach(b => b.onclick = () => {
       state.year = b.dataset.year === 'all' ? 'all' : Number(b.dataset.year);
       state.openKinds.clear();
       renderYears();
     });
-    if (state.year === 'all') renderAllYears(); else renderOneYear(state.year);
+    renderYearBody();
   }
+
+  function renderYearBody() {
+    if (state.year === 'all') renderAllYears(); else renderOneYear(state.year);
+    const body = $('#yearBody');
+    bindCompare(body);
+    bindBars(body);
+    bindLines(body);
+    $$('#fxSeg button', body).forEach(b => b.onclick = () => { state.fx = b.dataset.fx === '1'; store.set(LS.fx, state.fx ? '1' : '0'); keepScroll(renderYearBody); });
+  }
+
+  const keepScroll = fn => { const y = window.scrollY; fn(); window.scrollTo({ top: y }); };
 
   /* 누적 수익률 vs 주요 지수 */
   const SERIES = [
@@ -501,7 +557,7 @@
     const last = C.pts.at(-1);
     return `
       <div class="card">
-        <div class="card-head"><h2 class="card-title">누적 수익률</h2>
+        <div class="card-head"><h2 class="card-title">지수별 비교</h2>
           ${C.avail.size > 1 ? `<div class="seg" id="fxSeg" role="group" aria-label="환율 반영">
             <button data-fx="0" class="${state.fx ? '' : 'on'}">기본</button><button data-fx="1" class="${state.fx ? 'on' : ''}">환율</button></div>` : '<span class="card-aside">vs 주요 지수</span>'}
         </div>
@@ -530,75 +586,120 @@
     const step = Math.max(1, Math.ceil(pts.length / 6));
     const xl = pts.map((p, i) => (i % step === 0 || i === pts.length - 1) && !(i !== pts.length - 1 && pts.length - 1 - i < step / 2)
       ? `<text x="${X(i)}" y="${H - 4}" text-anchor="middle">${p.label}</text>` : '').join('');
+    const ptsOf = s => pts.map((p, i) => Number.isFinite(p[s.key]) ? `${X(i).toFixed(1)},${Y(p[s.key]).toFixed(1)}` : null).filter(Boolean).join(' ');
     const lines = series.slice().reverse().map(s => {
-      const d = pts.map((p, i) => Number.isFinite(p[s.key]) ? `${X(i).toFixed(1)},${Y(p[s.key]).toFixed(1)}` : null).filter(Boolean).join(' ');
+      const d = ptsOf(s);
       return (s.key === 'mine' || s.solid)
-        ? `<polyline points="${d}" fill="none" stroke="${s.color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`
-        : `<polyline points="${d}" fill="none" stroke="${s.color}" stroke-width="1.7" stroke-dasharray="5 4" stroke-linejoin="round"/>`;
+        ? `<polyline class="ln" data-k="${s.key}" points="${d}" fill="none" stroke="${s.color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`
+        : `<polyline class="ln" data-k="${s.key}" points="${d}" fill="none" stroke="${s.color}" stroke-width="1.7" stroke-dasharray="5 4" stroke-linejoin="round"/>`;
     }).join('');
     const lastMine = pts.at(-1);
     const dot = opt.noDot ? series.map(s => Number.isFinite(lastMine[s.key]) ? `<circle cx="${X(pts.length - 1)}" cy="${Y(lastMine[s.key])}" r="3" fill="${s.color}" stroke="var(--card)" stroke-width="1.5"/>` : '').join('') : Number.isFinite(lastMine.mine) ? `<circle cx="${X(pts.length - 1)}" cy="${Y(lastMine.mine)}" r="3.5" fill="var(--up)" stroke="#fff" stroke-width="1.5"/>` : '';
-    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="누적 수익률 비교 그래프">${grid}${zero}${lines}${dot}${xl}</svg>`;
+    if (!opt.interactive) return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="수익률 비교 그래프">${grid}${zero}${lines}${dot}${xl}</svg>`;
+    const valFmt = opt.valFmt || fmt;
+    const info = {
+      W, L, R, n: pts.length, xs: pts.map((_, i) => +X(i).toFixed(1)), labels: pts.map(p => p.label),
+      series: series.map(s => ({ key: s.key, label: s.label, color: s.color, vals: pts.map(p => p[s.key]), ys: pts.map(p => Number.isFinite(p[s.key]) ? +Y(p[s.key]).toFixed(1) : null), fmt: pts.map(p => Number.isFinite(p[s.key]) ? valFmt(p[s.key]) : '—') })),
+    };
+    const hits = series.map(s => `<polyline class="hit" data-k="${s.key}" points="${ptsOf(s)}" fill="none" stroke="transparent" stroke-width="20" stroke-linejoin="round"/>`).join('');
+    return `<div class="line-wrap" data-info='${esc(JSON.stringify(info))}'>
+      <div class="line-readout num">선을 누르면 이름과 금액이 나와요</div>
+      <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="비교 그래프. 선을 누르면 이름과 금액이 나와요">${grid}${zero}${lines}${dot}${xl}${hits}
+        <circle class="pick-dot" r="5" stroke="var(--card)" stroke-width="2" style="display:none" cx="0" cy="0"/></svg>
+    </div>`;
   }
 
   /* 골라서 비교: 자산 구성(종류) 또는 종목 */
   const CMP_COLORS = ['#3182F6', '#12A15A', '#F5A524', '#F04452', '#8B5CF6'];
   const CMP_MAX = 5;
 
-  function compareOptions() {
-    const D = state.data;
+  // y: 숫자(그 해만) 또는 'all'(전체 기간)
+  const inYear = (r, y) => y === 'all' || r.year === y;
+
+  function compareOptions(y = state.year) {
+    const D = state.data, now = new Date().getFullYear();
+    const rz = D.realized.filter(r => inYear(r, y));
+    const holdingsCount = y === 'all' || y === now;
     if (state.cmpMode === 'kind') {
-      const names = [...new Set([...D.assets.map(a => a.kind), ...D.realized.map(r => r.kind)])];
-      return names.filter(n => D.realized.some(r => r.kind === n) || D.assets.some(a => a.kind === n && a.cost > 0));
+      const compKinds = y === 'all' ? [] : [...D.comp].filter(([k]) => k.startsWith(`${y}|`)).map(([, v]) => v.kind);
+      const names = [...new Set([...(holdingsCount ? D.assets.map(a => a.kind) : []), ...compKinds, ...rz.map(r => r.kind)])];
+      return names.filter(n => rz.some(r => r.kind === n) || (holdingsCount && D.assets.some(a => a.kind === n && a.cost > 0 && !/현금|기타/.test(n))));
     }
-    const subs = [...new Set([...D.realized.map(r => String(r.sub || '')), ...D.rows.filter(isTradable).map(r => r.sub)])];
+    const subs = [...new Set([...rz.map(r => String(r.sub || '')), ...(holdingsCount ? D.rows.filter(isTradable).map(r => r.sub) : [])])];
     return subs.filter(x => x && !x.startsWith('('));
   }
 
-  function compareSelection() {
-    const opts = compareOptions();
-    let sel = state.cmpSel[state.cmpMode];
-    if (!Array.isArray(sel)) {
-      const D = state.data;
-      const score = n => state.cmpMode === 'kind'
-        ? (D.assets.filter(a => a.kind === n).reduce((t, a) => t + a.cost, 0) + Math.abs(D.realized.filter(r => r.kind === n).reduce((t, r) => t + r.amount, 0)))
-        : (D.rows.filter(r => r.sub === n).reduce((t, r) => t + r.cost, 0) + Math.abs(D.realized.filter(r => String(r.sub) === n).reduce((t, r) => t + r.amount, 0)));
-      sel = opts.slice().sort((a, b) => score(b) - score(a)).slice(0, 3);
-    }
-    return sel.filter(x => opts.includes(x));
+  function compareScore(n, y) {
+    const D = state.data;
+    const rz = D.realized.filter(r => inYear(r, y) && (state.cmpMode === 'kind' ? r.kind === n : String(r.sub) === n));
+    const hold = state.cmpMode === 'kind' ? D.assets.filter(a => a.kind === n).reduce((t, a) => t + a.cost, 0) : D.rows.filter(r => r.sub === n).reduce((t, r) => t + r.cost, 0);
+    return Math.abs(rz.reduce((t, r) => t + r.amount, 0)) + (y === 'all' || y === new Date().getFullYear() ? hold * 0.01 : 0);
   }
 
-  function compareMetrics(name) {
-    const D = state.data, y = new Date().getFullYear();
+  function compareSelection(y = state.year) {
+    const opts = compareOptions(y);
+    const saved = state.cmpSel[state.cmpMode];
+    const sel = Array.isArray(saved) ? saved.filter(x => opts.includes(x)) : [];
+    if (sel.length) return sel;
+    // 고른 게 이 연도에 없으면 손익이 큰 3개를 보여줌 (저장은 안 함)
+    return opts.slice().sort((a, b) => compareScore(b, y) - compareScore(a, y)).slice(0, 3);
+  }
+
+  function compareMetrics(name, y) {
+    const D = state.data;
     const isKind = state.cmpMode === 'kind';
-    const rz = D.realized.filter(r => isKind ? r.kind === name : String(r.sub) === name);
+    const rz = D.realized.filter(r => inYear(r, y) && (isKind ? r.kind === name : String(r.sub) === name));
     const rows = isKind ? D.rows.filter(r => r.kind === name) : D.rows.filter(r => r.sub === name && isTradable(r));
     const cost = rows.reduce((t, r) => t + r.cost, 0), value = rows.reduce((t, r) => t + r.value, 0);
     const avgRow = !isKind && rows.length === 1 && rows[0].avg > 0 && rows[0].price > 0 ? rows[0] : null;
+    let base = null;
+    if (isKind && y !== 'all') {
+      const b = [...D.comp].filter(([k, v]) => k.startsWith(`${y}|`) && v.kind === name && v.base).reduce((t, [, v]) => t + v.base, 0);
+      base = b || null;
+    }
+    const amt = rz.reduce((t, r) => t + r.amount, 0);
     return {
-      all: rz.reduce((t, r) => t + r.amount, 0),
-      year: rz.filter(r => r.year === y).reduce((t, r) => t + r.amount, 0),
-      n: rz.length, value,
-      ret: avgRow ? (avgRow.price - avgRow.avg) / avgRow.avg : (cost > 0 ? (value - cost) / cost : null),
+      amt, base, baseRet: base ? amt / base : null,
+      thisYear: D.realized.filter(r => r.year === new Date().getFullYear() && (isKind ? r.kind === name : String(r.sub) === name)).reduce((t, r) => t + r.amount, 0),
+      value, ret: avgRow ? (avgRow.price - avgRow.avg) / avgRow.avg : (cost > 0 ? (value - cost) / cost : null),
       rz,
     };
   }
 
-  function compareCard() {
+  function monthPoints(y) {
+    const D = state.data, now = new Date(), pts = [];
+    if (y !== 'all') {
+      pts.push({ date: new Date(y, 0, 0, 23, 59, 59), label: '시작' });
+      for (let m = 0; m < 12; m++) {
+        if (new Date(y, m, 1) > now) break;
+        const end = new Date(y, m + 1, 0, 23, 59, 59);
+        pts.push({ date: end > now ? now : end, label: `${m + 1}월` });
+      }
+      return pts;
+    }
+    const first = D.realized.reduce((m, r) => (r.date < m ? r.date : m), D.realized[0].date);
+    let yy = first.getFullYear(), mm = first.getMonth();
+    const start = new Date(yy, mm, 0);
+    pts.push({ date: start, label: `${String(start.getFullYear()).slice(2)}.${start.getMonth() + 1}` });
+    while (new Date(yy, mm, 1) <= now) {
+      const end = new Date(yy, mm + 1, 0, 23, 59, 59);
+      pts.push({ date: end > now ? now : end, label: `${String(yy).slice(2)}.${mm + 1}` });
+      mm++; if (mm > 11) { mm = 0; yy++; }
+    }
+    return pts;
+  }
+
+  function compareCard(y = state.year) {
     const D = state.data;
     if (!D.realized.length) return '';
-    const opts = compareOptions(), sel = compareSelection();
+    const sel = compareSelection(y);
     const color = n => CMP_COLORS[sel.indexOf(n)] || 'var(--ink-4)';
-    const M = Object.fromEntries(sel.map(n => [n, compareMetrics(n)]));
-    // 월별 누적 실현손익 선
-    const first = D.realized.reduce((m, r) => (r.date < m ? r.date : m), D.realized[0].date);
-    const now = new Date(); const pts = [];
-    let yy = first.getFullYear(), mm = first.getMonth();
-    pts.push({ date: new Date(yy, mm, 0), label: `${String(new Date(yy, mm, 0).getFullYear()).slice(2)}.${new Date(yy, mm, 0).getMonth() + 1}` });
-    while (new Date(yy, mm, 1) <= now) { const end = new Date(yy, mm + 1, 0, 23, 59, 59); pts.push({ date: end > now ? now : end, label: `${String(yy).slice(2)}.${mm + 1}` }); mm++; if (mm > 11) { mm = 0; yy++; } }
+    const M = Object.fromEntries(sel.map(n => [n, compareMetrics(n, y)]));
+    const pts = monthPoints(y);
     const series = sel.map((n, i) => ({ key: `c${i}`, label: n, color: CMP_COLORS[i], solid: true }));
     pts.forEach(p => sel.forEach((n, i) => { p[`c${i}`] = M[n].rz.filter(r => r.date <= p.date).reduce((t, r) => t + r.amount, 0); }));
-    const y = new Date().getFullYear();
+    const ty = new Date().getFullYear();
+    const yearLabel = y === 'all' ? '전체 기간' : `${y}년`;
     return `
       <div class="card">
         <div class="card-head"><h2 class="card-title">자산별 비교</h2>
@@ -612,43 +713,46 @@
           <button class="pick-add" id="cmpPick">${sel.length ? '변경' : '+ 비교할 자산 고르기'}</button>
         </div>
         ${sel.length ? `
-          <div class="cmp-label">누적 실현손익</div>
-          ${lineChart(pts, series, { L: 46, fmt: v => compactSigned(v), noDot: true })}
-          <div class="table-wrap">
-            <table class="grid num cmp">
-              <thead><tr><th>${state.cmpMode === 'kind' ? '자산 구성' : '종목'}</th><th>누적 실현</th><th>${y}년</th><th>지금 수익률</th></tr></thead>
-              <tbody>${sel.map(n => `<tr>
-                <td><i class="dot" style="background:${color(n)}"></i>${esc(n)}</td>
-                <td class="${cls(M[n].all)}">${compactSigned(M[n].all)}</td>
-                <td class="${cls(M[n].year)}">${M[n].year ? compactSigned(M[n].year) : '—'}</td>
-                <td class="${cls(M[n].ret)}">${M[n].value > 0 ? pct(M[n].ret, 1) : '보유 없음'}</td></tr>`).join('')}</tbody>
-            </table>
+          <div class="cmp-label">${yearLabel} 누적 실현손익</div>
+          ${lineChart(pts, series, { L: 46, fmt: v => compactSigned(v), noDot: true, interactive: true, valFmt: v => `${compactSigned(v)}원` })}
+          <div class="cmp-list num">
+            ${sel.map(n => {
+              const m = M[n];
+              const cells = y === 'all'
+                ? [['누적 실현', m.amt, compactSigned(m.amt)], [`${ty}년`, m.thisYear, m.thisYear ? compactSigned(m.thisYear) : '—'], ['지금 수익률', m.ret, m.value > 0 ? pct(m.ret, 1) : '보유 없음']]
+                : [[`${y}년 실현`, m.amt, m.amt ? compactSigned(m.amt) : '—'], ['기준원금 대비', m.baseRet, pct(m.baseRet, 1)], ['지금 수익률', m.ret, m.value > 0 ? pct(m.ret, 1) : '보유 없음']];
+              return `<div class="cmp-row" style="--c:${color(n)}">
+                <div class="cmp-name"><i class="dot" style="background:${color(n)}"></i>${esc(n)}</div>
+                <div class="cmp-cells">${cells.map(([l, v, t]) => `<div><small>${l}</small><b class="${cls(v)}">${t}</b></div>`).join('')}</div>
+              </div>`;
+            }).join('')}
           </div>
-          <p class="note">누적 실현 = 기록된 익절·손절 합계. 지금 수익률 = 보유 중인 평가금 기준${state.cmpMode === 'sub' ? '(종목은 평단 대비)' : ''}.</p>`
-        : `<p class="empty">위 버튼을 눌러 비교할 ${state.cmpMode === 'kind' ? '자산 구성' : '종목'}을 골라 주세요. 최대 ${CMP_MAX}개까지 비교할 수 있어요.</p>`}
+          <p class="note">위의 연도를 바꾸면 그 해 기준으로 비교해요. 지금 수익률 = 보유 중인 평가금 기준${state.cmpMode === 'sub' ? '(종목은 평단 대비)' : ''}.</p>`
+        : `<p class="empty">${yearLabel}에 비교할 기록이 없어요.</p>`}
       </div>`;
   }
 
   function bindCompare(el) {
-    $$('#cmpMode button', el).forEach(b => b.onclick = () => { state.cmpMode = b.dataset.mode; store.set('dh_cmpmode', state.cmpMode); renderYears(); });
+    $$('#cmpMode button', el).forEach(b => b.onclick = () => { state.cmpMode = b.dataset.mode; store.set('dh_cmpmode', state.cmpMode); keepScroll(renderYearBody); });
     const btn = $('#cmpPick', el);
     if (btn) btn.onclick = openComparePicker;
   }
 
   // 비교할 항목 고르는 팝업
   function openComparePicker() {
-    const opts = compareOptions();
-    let sel = compareSelection().slice();
+    const y = state.year;
+    const opts = compareOptions(y);
+    let sel = compareSelection(y).slice();
     const D = state.data;
     const draw = () => {
       openSheet(`
         <div class="picker">
           <h2 id="sheetTitle">비교할 ${state.cmpMode === 'kind' ? '자산 구성' : '종목'} 고르기</h2>
-          <p class="kind">최대 ${CMP_MAX}개 · ${sel.length}개 선택</p>
+          <p class="kind">${y === 'all' ? '전체 기간' : `${y}년`} · 최대 ${CMP_MAX}개 · ${sel.length}개 선택</p>
           <div class="picker-list">
             ${opts.map(n => {
               const i = sel.indexOf(n);
-              const amt = D.realized.filter(r => state.cmpMode === 'kind' ? r.kind === n : String(r.sub) === n).reduce((t, r) => t + r.amount, 0);
+              const amt = D.realized.filter(r => inYear(r, y) && (state.cmpMode === 'kind' ? r.kind === n : String(r.sub) === n)).reduce((t, r) => t + r.amount, 0);
               return `<button class="picker-item ${i >= 0 ? 'on' : ''}" data-name="${esc(n)}" style="--c:${CMP_COLORS[i] || 'var(--line)'}" aria-pressed="${i >= 0}">
                 <span class="check" aria-hidden="true">${i >= 0 ? '✓' : ''}</span>
                 <span class="picker-name">${esc(n)}</span>
@@ -663,16 +767,43 @@
         if (sel.includes(n)) sel.splice(sel.indexOf(n), 1);
         else if (sel.length >= CMP_MAX) { toast(`최대 ${CMP_MAX}개까지 비교할 수 있어요`); return; }
         else sel.push(n);
-        const sc = $('.sheet-panel').scrollTop; draw(); $('.sheet-panel').scrollTop = sc;
+        const sc = $('.picker-list').scrollTop; draw(); $('.picker-list').scrollTop = sc;
       });
       $('#pickDone').onclick = () => {
         state.cmpSel[state.cmpMode] = sel;
         store.set('dh_cmpsel', JSON.stringify(state.cmpSel));
         closeSheet();
-        const y = window.scrollY; renderYears(); window.scrollTo({ top: y });
+        keepScroll(renderYearBody);
       };
     };
     draw();
+  }
+
+  // 선 그래프: 선을 누르면 그 자산 이름과 그 시점 금액 표시
+  function bindLines(root) {
+    $$('.line-wrap', root).forEach(wrap => {
+      const svg = $('svg', wrap), ro = $('.line-readout', wrap);
+      const info = JSON.parse(wrap.dataset.info || '{}');
+      $$('.hit', svg).forEach(h => h.onclick = e => {
+        const k = h.dataset.k, s = info.series.find(x => x.key === k);
+        const r = svg.getBoundingClientRect();
+        const vx = (e.clientX - r.left) / r.width * info.W;
+        let i = Math.round((vx - info.L) / ((info.W - info.L - info.R) / Math.max(1, info.n - 1)));
+        i = Math.max(0, Math.min(info.n - 1, i));
+        const v = s.vals[i];
+        $$('.ln', svg).forEach(l => l.classList.toggle('dim', l.dataset.k !== k));
+        const dot = $('.pick-dot', svg);
+        dot.setAttribute('cx', info.xs[i]); dot.setAttribute('cy', s.ys[i]); dot.setAttribute('fill', s.color); dot.style.display = '';
+        ro.innerHTML = `<i style="background:${s.color}"></i><b>${esc(s.label)}</b><span>${esc(info.labels[i])}</span><b class="${cls(v)}">${esc(s.fmt[i])}</b>`;
+        ro.classList.add('on');
+      });
+      svg.addEventListener('click', e => {
+        if (e.target.classList.contains('hit')) return;
+        $$('.ln', svg).forEach(l => l.classList.remove('dim'));
+        $('.pick-dot', svg).style.display = 'none';
+        ro.classList.remove('on'); ro.innerHTML = '선을 누르면 이름과 금액이 나와요';
+      });
+    });
   }
 
   function renderOneYear(y) {
@@ -705,6 +836,7 @@
     const totalRet = totalBase ? sum / totalBase : null;
     const activeMonths = byMonth.map((v, i) => [i + 1, v]).filter(([, v], i) => v !== 0 || kinds.some(k => k.months[i] !== 0));
     const shownKinds = kinds.filter(k => k.months.some(v => v !== 0));
+    const best = activeMonths.slice().sort((a, b) => b[1] - a[1])[0], worst = activeMonths.slice().sort((a, b) => a[1] - b[1])[0];
 
     $('#yearBody').innerHTML = `
       <div class="card">
@@ -719,34 +851,15 @@
       </div>
 
       <div class="card">
-        <button class="card-head fold" id="kindsFold" aria-expanded="${state.kindsOpen}">
-          <h2 class="card-title">종류별</h2>
-          <span class="fold-right num">${state.kindsOpen ? '' : `<span class="${cls(sum)}">${compactSigned(sum)}원</span>`}<span class="chev ${state.kindsOpen ? 'up' : ''}" aria-hidden="true"></span></span>
+        <button class="card-head fold" id="monthsFold" aria-expanded="${state.monthsOpen}">
+          <h2 class="card-title">월별 상세</h2>
+          <span class="fold-right num"><span class="fold-hint">${state.monthsOpen ? '접기' : `${activeMonths.length}개월`}</span><span class="chev ${state.monthsOpen ? 'up' : ''}" aria-hidden="true"></span></span>
         </button>
-        ${state.kindsOpen ? `<p class="note" style="margin:-6px 0 8px">종류를 누르면 자산·종목별로 펼쳐져요</p>
-        <div class="table-wrap">
-          <table class="grid num kinds">
-            <thead><tr><th>종류</th><th>수익금</th><th>수익률</th></tr></thead>
-            <tbody>
-              ${kinds.map(k => `
-                <tr class="kind-row" data-kind="${esc(k.k)}">
-                  <td><span class="caret">${state.openKinds.has(k.k) ? '▼' : '▶'}</span>${esc(k.k)}</td>
-                  <td class="${cls(k.amt)}">${signWon(k.amt)}</td>
-                  <td class="${cls(k.ret)}">${pct(k.ret)}</td>
-                </tr>
-                ${state.openKinds.has(k.k) ? kindDetailRows(k) : ''}`).join('')}
-              <tr class="total"><td>합계</td><td class="${cls(sum)}">${signWon(sum)}</td><td class="${cls(totalRet)}">${pct(totalRet)}</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="note">수익률 = 실현손익 ÷ 기준원금(시트의 연도별구성 탭). 기준원금이 없는 자산은 수익금만 보여요.</p>` : `
-        <div class="fold-preview num">${kinds.filter(k => k.amt !== 0).sort((p, q) => Math.abs(q.amt) - Math.abs(p.amt)).slice(0, 3)
-          .map(k => `<span>${esc(k.k)} <b class="${cls(k.amt)}">${compactSigned(k.amt)}</b></span>`).join('')}</div>`}
-      </div>
-
-      <div class="card">
-        <div class="card-head"><h2 class="card-title">월별 상세</h2><span class="card-aside">달을 누르면 자세히</span></div>
-        ${activeMonths.length ? (() => {
+        ${!activeMonths.length ? `<p class="empty">${y}년 실현손익 기록이 아직 없어요.</p>` : !state.monthsOpen ? `
+        <div class="fold-preview num">
+          ${best && best[1] > 0 ? `<span>가장 좋았던 달 ${best[0]}월 <b class="up">${compactSigned(best[1])}</b></span>` : ''}
+          ${worst && worst[1] < 0 ? `<span>가장 아쉬운 달 ${worst[0]}월 <b class="down">${compactSigned(worst[1])}</b></span>` : ''}
+        </div>` : (() => {
           const maxM = Math.max(...activeMonths.map(([, v]) => Math.abs(v)), 1);
           return activeMonths.slice().reverse().map(([m, v]) => {
             const open = state.openMonths.has(`${y}-${m}`);
@@ -769,33 +882,62 @@
               ${showTrades ? `<div class="month-items">${items.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}</div>` : ''}` : ''}
             </div>`;
           }).join('');
-        })() : `<p class="empty">${y}년 실현손익 기록이 아직 없어요.</p>`}
+        })()}
       </div>
+
+      ${compareCard(y)}
+
+      <div class="card">
+        <button class="card-head fold" id="kindsFold" aria-expanded="${state.kindsOpen}">
+          <h2 class="card-title">종류별 비교</h2>
+          <span class="fold-right num">${state.kindsOpen ? '<span class="fold-hint">접기</span>' : `<span class="${cls(sum)}">${compactSigned(sum)}원</span>`}<span class="chev ${state.kindsOpen ? 'up' : ''}" aria-hidden="true"></span></span>
+        </button>
+        ${state.kindsOpen ? `<p class="note" style="margin:-6px 0 8px">종류를 누르면 자산·종목별로 펼쳐져요</p>
+        <div class="table-wrap">
+          <table class="grid num kinds">
+            <thead><tr><th>종류</th><th>수익금</th><th>수익률</th></tr></thead>
+            <tbody>
+              ${kinds.map(k => `
+                <tr class="kind-row" data-kind="${esc(k.k)}">
+                  <td><span class="caret">${state.openKinds.has(k.k) ? '▼' : '▶'}</span>${esc(k.k)}</td>
+                  <td class="${cls(k.amt)}">${signWon(k.amt)}</td>
+                  <td class="${cls(k.ret)}">${pct(k.ret)}</td>
+                </tr>
+                ${state.openKinds.has(k.k) ? kindDetailRows(k) : ''}`).join('')}
+              <tr class="total"><td>합계</td><td class="${cls(sum)}">${signWon(sum)}</td><td class="${cls(totalRet)}">${pct(totalRet)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">수익률 = 실현손익 ÷ 기준원금(시트의 연도별구성 탭). 기준원금이 없는 자산은 수익금만 보여요.</p>` : `
+        <div class="fold-preview num">${kinds.filter(k => k.amt !== 0).sort((p, q) => Math.abs(q.amt) - Math.abs(p.amt)).slice(0, 3)
+          .map(k => `<span>${esc(k.k)} <b class="${cls(k.amt)}">${compactSigned(k.amt)}</b></span>`).join('')}</div>`}
+      </div>
+
+      ${cumulativeCard()}
       ${monthlyEvalCard(y)}`;
 
-    $('#kindsFold').onclick = () => { state.kindsOpen = !state.kindsOpen; renderOneYear(y); };
+    $('#monthsFold').onclick = () => { state.monthsOpen = !state.monthsOpen; keepScroll(renderYearBody); };
+    $('#kindsFold').onclick = () => { state.kindsOpen = !state.kindsOpen; keepScroll(renderYearBody); };
     $$('#yearBody .month-head').forEach(el => el.onclick = () => {
       const key = `${y}-${el.dataset.month}`;
       state.openMonths.has(key) ? state.openMonths.delete(key) : state.openMonths.add(key);
-      renderOneYear(y);
+      keepScroll(renderYearBody);
     });
     $$('#yearBody [data-trades]').forEach(el => el.onclick = () => {
       const key = `${y}-${el.dataset.trades}`;
       state.openTrades.has(key) ? state.openTrades.delete(key) : state.openTrades.add(key);
-      renderOneYear(y);
+      keepScroll(renderYearBody);
     });
-    bindBars($('#yearBody'));
     $$('#yearBody .kind-row').forEach(tr => tr.onclick = () => {
       const k = tr.dataset.kind;
       state.openKinds.has(k) ? state.openKinds.delete(k) : state.openKinds.add(k);
-      renderOneYear(y);
+      keepScroll(renderYearBody);
     });
   }
 
   // 종류를 펼치면: 자산 → 그 안의 종목별 손익까지
   function kindDetailRows(k) {
     const subRow = (s, indent) => `<tr class="sub ${indent ? 'subsub' : ''}"><td>${esc(s.s)}<small class="cnt"> ${s.n}건</small></td><td class="${cls(s.amt)}">${signWon(s.amt)}</td><td></td></tr>`;
-    // 종류 이름과 자산 이름이 같으면(예: 미국 개별주) 바로 종목을 보여줌
     if (k.rows.length === 1 && k.rows[0].a === k.k) return k.rows[0].subs.map(s => subRow(s, false)).join('');
     return k.rows.map(r => {
       const showSubs = r.subs.length > 1 || (r.subs.length === 1 && r.subs[0].s !== r.a);
@@ -835,16 +977,13 @@
         <div class="kpi-value num ${cls(total)}">${signWon(total)}</div>
         <div class="kpi-sub"><span>${D.realized.length}건 기록</span></div>
         ${barChart(rows.map(r => [`${r.y}`, r.amt]))}
-      </div>
-      <div class="card">
-        <div class="card-head"><h2 class="card-title">연도별</h2></div>
-        <div class="table-wrap"><table class="grid num">
+        <div class="table-wrap" style="margin-top:8px"><table class="grid num">
           <thead><tr><th>연도</th><th>수익금</th><th>누적</th></tr></thead>
           <tbody>${rows.map(r => `<tr><td>${r.y}년</td><td class="${cls(r.amt)}">${signWon(r.amt)}</td><td class="${cls(r.cum)}">${signWon(r.cum)}</td></tr>`).join('')}</tbody>
         </table></div>
-        <p class="note">연도를 누르면 그 해의 자산 구성과 월별 수익이 나와요.</p>
-      </div>`;
-    bindBars($('#yearBody'));
+      </div>
+      ${compareCard('all')}
+      ${cumulativeCard()}`;
   }
 
   function barChart(pairs) {
@@ -1085,10 +1224,12 @@
     const s = $('#sheet');
     const wasOpen = !s.hidden && s.classList.contains('open');
     $('#sheetBody').innerHTML = html;
+    $('.sheet-panel').scrollTop = 0;
     if (wasOpen && s.classList.contains('pop') !== (mode === 'pop')) s.classList.remove('open');
     s.classList.toggle('pop', mode === 'pop');
     s.hidden = false;
-    requestAnimationFrame(() => s.classList.add('open'));
+    $('.sheet-panel').scrollTop = 0;
+    requestAnimationFrame(() => { $('.sheet-panel').scrollTop = 0; s.classList.add('open'); });
   }
   function closeSheet() {
     const s = $('#sheet');
