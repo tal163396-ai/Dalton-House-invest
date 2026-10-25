@@ -406,7 +406,7 @@
       html += `<div class="room" style="left:${room.x}px;top:${room.y}px;width:${room.w}px;height:${room.h}px">`;
       if (showLabel) html += `<div class="room-label">${esc(room.k)}<span>${kindTip}</span></div>`;
       const inner = { x: 0, y: top, w: room.w, h: room.h - top };
-      squarify(room.list.filter(a => sz(a) > 0).map(a => ({ a, v: Math.pow(sz(a), 0.6) })).sort((p, q) => q.v - p.v), inner).forEach(t => {
+      squarify(room.list.filter(a => sz(a) > 0).map(a => ({ a, v: sz(a) })).sort((p, q) => q.v - p.v), inner).forEach(t => {
         const a = t.a;
         const w = Math.max(t.w - GAP, 0), h = Math.max(t.h - GAP, 0);
         const bg = state.mode === 'weight' ? weightColor(wt(a) / (maxW || 1)) : retColor(a.ret ?? 0);
@@ -414,7 +414,7 @@
         const label = state.mode === 'weight' ? `${(wt(a) * 100).toFixed(1)}%` : pct(a.ret, 1);
         html += `<button class="tile" data-asset="${esc(a.name)}" aria-label="${esc(a.name)} ${label}"
           style="left:${t.x + GAP / 2}px;top:${t.y + GAP / 2}px;width:${w}px;height:${h}px;background:${bg}">
-          ${w < 44 && h > 70 ? `<span class="tile-name vert" style="font-size:${Math.min(13, Math.max(10, w * 0.42))}px">${esc(a.name.split(/[\s(]/)[0])}</span>`
+          ${w < 44 && h > 50 ? `<span class="tile-name vert" style="font-size:${Math.min(13, Math.max(9, w * 0.5))}px">${esc(a.name.split(/[\s(]/)[0])}</span>${h > 110 ? `<span class="tile-val vert num" style="font-size:${Math.min(11, Math.max(8.5, w * 0.36))}px">${label}</span>` : ''}`
             : `${w > 30 && h > 20 ? `<span class="tile-name" style="font-size:${fs}px">${esc(shortName(a.name, w, fs))}</span>` : ''}
           ${w > 40 && h > 38 ? `<span class="tile-val num" style="font-size:${Math.max(10, fs * 0.7)}px">${label}</span>` : ''}`}
         </button>`;

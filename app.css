@@ -820,3 +820,4 @@ body.masked .tile-val { visibility: hidden; }
 .topbar { gap: 2px; }
 .mc-auto { display: none; }
 .tile-name.vert { writing-mode: vertical-rl; text-orientation: mixed; white-space: nowrap; letter-spacing: .02em; }
+.tile-val.vert { writing-mode: vertical-rl; white-space: nowrap; margin-top: 4px; }
