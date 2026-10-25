@@ -546,6 +546,10 @@
               <span class="row-sub num ${cls(a.pl)}">${signWon(a.pl)}</span>
             </span>
             ${bar(a.ret)}
+            ${a.rows.length > 1 || (a.rows[0] && a.rows[0].sub !== a.name) ? `<span class="row-subs">${a.rows.filter(r => r.value || r.cost).map(r => {
+              const pl = r.value - r.cost, cash = isCashRow(r) || r.method.startsWith('수동');
+              return `<span class="row-subline num"><span>${esc(r.sub)}</span><span>${cash ? `${compact(r.value)}원` : `${compact(r.value)}원 · <b class="${cls(pl)}">${compactSigned(pl)} (${pct(r.cost > 0 ? pl / r.cost : null, 1)})</b>`}</span></span>`;
+            }).join('')}</span>` : ''}
           </button>`).join('')}
       </div>
       <button class="btn pop-close" data-close>닫기</button>`, 'pop');
@@ -576,7 +580,10 @@
           <div class="holding-sub num">
             <span>${r.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${r.avg ? ` · 평단 ${money(r.avg)}` : ''} · 현재 ${money(r.price)}</span>
             <span class="${cls(unitRet)}">${unitRet === null ? '' : pct(unitRet, 1)}</span>
-          </div>`}
+          </div>
+          ${r.cost > 0 ? `<div class="holding-pl num"><span>원금 ${compact(r.cost)}원</span><span>평가손익 <b class="${cls(r.value - r.cost)}">${signWon(r.value - r.cost)}</b> <b class="${cls(r.value - r.cost)}">(${pct((r.value - r.cost) / r.cost, 1)})</b></span></div>` : ''}
+          ${(() => { const rz = state.data.realized.filter(x => x.asset === r.asset && String(x.sub || '') === r.sub); const t = rz.reduce((q, x) => q + x.amount, 0);
+            return rz.length ? `<div class="holding-pl num"><span>실현 ${rz.length}건</span><span>실현손익 <b class="${cls(t)}">${signWon(t)}</b></span></div>` : ''; })()}`}
         </div>`;
     }).join('');
 
@@ -750,62 +757,59 @@
       </div>`;
   }
 
-  // ② 같은 돈을 지수에 넣었다면: 매달 투자 계좌에 넣은 돈(순투입)으로 지수 ETF를 샀다고 가정
+  // ② 지수별 비교: 내 투자 수익률(넣은 돈 대비)과 지수 등락률을 같은 기간으로 나란히
   function indexSimCard() {
     const D = state.data, H = D.household, idx = D.index || {};
-    const fx = idx.usdkrw || [];
     const at = (arr, ds) => { let v = null; for (const [d, x] of arr) { if (d <= ds) v = x; else break; } return v ?? (arr[0] ? arr[0][1] : null); };
     const ds = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const IDX = SERIES.filter(s => s.key !== 'mine' && (idx[s.key] || []).length > 1);
-    // 월말 평가금 기록이 있는 달은 실제 평가금 사용
     const snap = {};
     (D.monthly || []).forEach(r => {
       const k = String(r['월']).slice(0, 7); if (String(r['종류']) === '기타') return;
       snap[k] = (snap[k] || 0) + num(r['평가금(원)']);
     });
     const myNow = D.assets.filter(a => a.kind !== '기타').reduce((t, a) => t + a.value, 0);
-    const units = Object.fromEntries(IDX.map(s => [s.key, 0]));
-    let inv = 0;
     const now = new Date();
+    let inv = 0;
+    const base = {};
     const pts = H.map((h, i) => {
       const end = monthEnd(h), d = ds(end > now ? now : end);
       inv += h.flow;
       const p = { label: ymLabel(h), inv };
       IDX.forEach(s => {
-        const px = at(idx[s.key], d) * (s.usd ? at(fx, d) || 0 : 1);
-        if (px > 0) { units[s.key] += h.flow / px; p[s.key] = units[s.key] * px; }
+        const px = at(idx[s.key], d);
+        if (i === 0) base[s.key] = px;
+        p[s.key] = base[s.key] > 0 && px > 0 ? px / base[s.key] - 1 : null;
       });
       const key = `${h.y}-${String(h.m).padStart(2, '0')}`;
       const isLast = i === H.length - 1 && end >= new Date(now.getFullYear(), now.getMonth(), 1);
-      p.mine = isLast ? myNow : (snap[key] ?? h.book);
+      const val = isLast ? myNow : (snap[key] ?? h.book);
+      p.val = val;
+      p.mine = inv > 0 ? val / inv - 1 : 0;
       return p;
     });
     const last = pts.at(-1);
     const series = [
       { key: 'mine', label: '내 투자', color: 'var(--up)', solid: true },
-      ...IDX.map(s => ({ key: s.key, label: s.label, color: s.color })),
-      { key: 'inv', label: '넣은 돈', color: 'var(--ink-4)' },
+      ...IDX.map(s => ({ key: s.key, label: s.label, color: s.color, solid: true })),
     ];
-    const r = v => (last.inv > 0 ? v / last.inv - 1 : null);
     const meta = {};
     series.forEach(s => {
-      const v = last[s.key];
-      meta[s.key] = s.key === 'inv'
-        ? [['넣은 돈', compact(v)], ['기간', `${pts[0].label}~`], ['', '']]
-        : [['지금', compact(v)], ['넣은 돈 대비', pct(r(v), 1), cls(r(v))], [s.key === 'mine' ? '손익' : '내 투자와 차이', won0(s.key === 'mine' ? v - last.inv : last.mine - v), cls(s.key === 'mine' ? v - last.inv : last.mine - v)]];
+      meta[s.key] = s.key === 'mine'
+        ? [['지금 평가금', compact(last.val)], ['넣은 돈', compact(last.inv)], ['손익', won0(last.val - last.inv), cls(last.val - last.inv)]]
+        : [[`${pts[0].label} 대비`, pct(last[s.key], 1), cls(last[s.key])], ['내 투자', pct(last.mine, 1), cls(last.mine)], ['차이', `${((last.mine - last[s.key]) * 100).toFixed(1)}%p`, cls(last.mine - last[s.key])]];
     });
-    const rows = series.filter(s => s.key !== 'inv').map(s => ({ s, v: last[s.key] })).sort((a, b) => b.v - a.v);
+    const rows = series.map(s => ({ s, v: last[s.key] })).filter(x => Number.isFinite(x.v)).sort((a, b) => b.v - a.v);
     return `
       <div class="card">
-        <div class="card-head"><h2 class="card-title">지수별 비교</h2></div>
-        <div class="legend">${series.map(s => `<span><i class="${s.key === 'inv' || s.key === 'save' ? 'dash' : ''}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
-        ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, valFmt: v => `${compact(v)}원`, meta })}
+        <div class="card-head"><h2 class="card-title">지수별 비교</h2><span class="card-aside">${pts[0].label} 이후 등락률</span></div>
+        <div class="legend">${series.map(s => `<span><i style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
+        ${lineChart(pts, series, { L: 42, fmt: v => `${Math.round(v * 100)}%`, noDot: true, interactive: true, valFmt: v => pct(v, 1), meta })}
         <div class="sim-list num">
-          <div class="sim-row head"><span>넣은 돈 (${pts[0].label}~)</span><b>${won(last.inv)}</b></div>
-          ${rows.map(({ s, v }) => `<div class="sim-row ${s.key === 'mine' ? 'me' : ''}"><span><i style="background:${s.color}"></i>${s.key === 'mine' ? '내 투자 (지금 평가금)' : s.label}</span>
-            <b>${compact(v)}원 <em class="${cls(r(v))}">${pct(r(v), 1)}</em></b></div>`).join('')}
+          ${rows.map(({ s, v }) => `<div class="sim-row ${s.key === 'mine' ? 'me' : ''}"><span><i style="background:${s.color}"></i>${s.key === 'mine' ? '내 투자' : s.label}</span>
+            <b>${s.key === 'mine' ? `<small class="sim-sub">${compact(last.val)}원 / 넣은 돈 ${compact(last.inv)}원</small>` : ''}<em class="${cls(v)}">${pct(v, 1)}</em></b></div>`).join('')}
         </div>
-        <p class="note">매달 투자 계좌로 옮긴 돈(순투입)으로 그 달 말 지수 ETF(KODEX 200·SPY·QQQ)를 샀다고 가정해 원화로 계산했어요(환율 포함). 내 투자 선은 지난달까지 장부 기준(원금+실현손익)이고 마지막 점만 지금 평가금이에요. 월말 기록이 쌓이면 그 달부터는 실제 평가금으로 바뀌어요.
+        <p class="note">지수 = 대표 ETF(KODEX 200·SPY·QQQ) 가격이 ${pts[0].label}부터 얼마나 오르내렸는지.<br>내 투자 = 그때그때 넣은 돈 대비 손익률. 지난달까지는 장부 기준(원금+실현손익), 마지막 점은 지금 평가금이에요. 월말 기록이 쌓이면 그 달부터 실제 평가금으로 바뀌어요.
         ${IDX.length ? '' : '<br>지수 선은 Apps Script를 새 버전으로 바꾸면 나타나요.'}</p>
       </div>`;
   }
@@ -877,7 +881,7 @@
     }).join('');
     const lines = series.slice().reverse().map(s => {
       const d = smoothPath(ptsArr(s));
-      const w = isMain(s) ? 2.6 : isRef(s) ? 1.5 : 2;
+      const w = s.key === 'mine' || s.key === 'nw' ? 2.8 : isRef(s) ? 1.5 : 2.1;
       return `<path class="ln ${isRef(s) ? 'ref' : 'draw'}" data-k="${s.key}" d="${d}" fill="none" stroke="${s.color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round" ${isRef(s) ? 'stroke-dasharray="4 5"' : 'pathLength="1"'}/>`;
     }).join('');
     const lastP = pts.at(-1);
@@ -1009,6 +1013,7 @@
               : [[`${y}년 실현`, m.amt ? compactSigned(m.amt) : '—', cls(m.amt)], ['기준원금 대비', pct(m.baseRet, 1), cls(m.baseRet)], ['지금 수익률', m.value > 0 ? pct(m.ret, 1) : '보유 없음', cls(m.ret)]]]; })) })}
           <div class="pick small">
             <button class="pick-edit" id="cmpPick" aria-label="비교할 항목 바꾸기"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>변경</button>
+            <span class="pick-break" aria-hidden="true"></span>
             ${sel.map(n => `<span class="pick-chip on" style="--c:${color(n)}"><i></i>${esc(n)}</span>`).join('')}
           </div>
           <p class="note">위의 연도를 바꾸면 그 해 기준으로 비교해요.<br>지금 수익률 = 보유 중인 평가금 기준${state.cmpMode === 'sub' ? '(종목은 평단 대비)' : ''}.</p>`
