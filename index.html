@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Dalton House</title>
 <meta name="description" content="준환·나예 가족 투자 자산 현황">
-<meta name="theme-color" content="#F2F4F6">
+<meta name="theme-color" content="#F2F4F6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101317" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -14,7 +16,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=3">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=3">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="app.css?v=3">
+<link rel="stylesheet" href="app.css?v=4">
 </head>
 <body>
 
@@ -61,7 +63,7 @@
   <main>
     <section id="view-home" class="view" aria-label="포트폴리오"></section>
     <section id="view-record" class="view" aria-label="기록" hidden></section>
-    <section id="view-years" class="view" aria-label="월별·연도별" hidden></section>
+    <section id="view-years" class="view" aria-label="수익률" hidden></section>
     <section id="view-assets" class="view" aria-label="자산별" hidden></section>
   </main>
 
@@ -76,7 +78,7 @@
     </button>
     <button class="tab" data-view="years">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 17.5l5-5 4 3.5 8-8.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 7.5h5.5V13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span>월별·연도별</span>
+      <span>수익률</span>
     </button>
     <button class="tab" data-view="assets">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="6.5" r="1.6" fill="currentColor"/><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="5" cy="17.5" r="1.6" fill="currentColor"/><path d="M9.5 6.5h10M9.5 12h10M9.5 17.5h10" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
@@ -96,6 +98,6 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script src="config.js?v=1"></script>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
