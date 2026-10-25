@@ -653,9 +653,9 @@
     const el = $('#view-years');
     el.innerHTML = `
       <div class="pager-dots" id="yTabs" role="tablist" aria-label="수익률 화면">
-        <button role="tab" data-p="0"><i></i>항목별</button>
-        <button role="tab" data-p="1"><i></i>월간·연간</button>
-        <button role="tab" data-p="2"><i></i>성장</button>
+        <button role="tab" data-p="0"><i></i><span class="yt"><b>항목별</b><small>자산 비교</small></span></button>
+        <button role="tab" data-p="1"><i></i><span class="yt"><b>월간·연간</b><small>손익 추이</small></span></button>
+        <button role="tab" data-p="2"><i></i><span class="yt"><b>성장</b><small>장기 성과</small></span></button>
       </div>
       <div class="year-chips" id="yChips" role="group" aria-label="연도 선택">
         ${chips.map(([y, l]) => `<button class="chip ${state.year === y ? 'on' : ''}" data-year="${y}">${l}</button>`).join('')}

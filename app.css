@@ -758,3 +758,13 @@ body { word-break: keep-all; overflow-wrap: anywhere; }
 .kasset .row-name { display: flex; align-items: center; gap: 8px; overflow: visible; }
 .kasset .rn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-go { flex: none; font-size: 11.5px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 999px; padding: 2px 8px; }
+#yTabs { justify-content: flex-start; overflow-x: auto; scrollbar-width: none; gap: 4px; padding: 0 2px; }
+#yTabs::-webkit-scrollbar { display: none; }
+#yTabs button { flex: none; white-space: nowrap; font-size: 12.5px; padding: 6px 9px; }
+#yTabs { justify-content: center; overflow: visible; gap: 6px; }
+#yTabs button { flex: 1 1 0; min-width: 0; justify-content: center; padding: 6px 8px; border-radius: 14px; }
+#yTabs button i { display: none; }
+.yt { display: grid; justify-items: center; line-height: 1.2; }
+.yt b { font-size: 13.5px; font-weight: 800; }
+.yt small { font-size: 11px; font-weight: 600; opacity: .75; }
+#yTabs button.on { background: var(--fill); color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
