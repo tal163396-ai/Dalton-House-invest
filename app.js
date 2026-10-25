@@ -240,6 +240,8 @@
     return { fit, align };
   }
   let yPagerApi = { fit: () => {}, align: () => {} };
+  let assetsPagerApi = { fit: () => {}, align: () => {} };
+  let recPagerApi = { fit: () => {}, align: () => {} };
 
   let fitPager = () => {};
   function bindPager() {
@@ -450,52 +452,73 @@
     const groupSort = { value: (a, b) => b.v - a.v, cost: (a, b) => b.c - a.c, ret: (a, b) => (b.ret ?? -9) - (a.ret ?? -9) };
     if (!sorters[state.sort]) state.sort = 'cost';
     const dir = state.sortDir === 'asc' ? -1 : 1;
-    const kinds = [...groupBy(D.assets, a => a.kind)].map(([k, list]) => {
+    const MODES = ['cost', 'value', 'ret'];
+    const groupsFor = mode => [...groupBy(D.assets, a => a.kind)].map(([k, list]) => {
       const c = list.reduce((s, a) => s + a.cost, 0), v = list.reduce((s, a) => s + a.value, 0);
-      return { k, list: list.sort((a, b) => dir * sorters[state.sort](a, b)), c, v, ret: c > 0 ? (v - c) / c : null };
-    }).sort((a, b) => dir * groupSort[state.sort](a, b));
+      return { k, list: list.slice().sort((a, b) => dir * sorters[mode](a, b)), c, v, ret: c > 0 ? (v - c) / c : null };
+    }).sort((a, b) => dir * groupSort[mode](a, b));
     const arrow = key => state.sort === key ? `<span class="arrow" aria-hidden="true">${state.sortDir === 'asc' ? '↑' : '↓'}</span>` : '';
     const maxAbs = Math.max(0.05, ...D.assets.map(a => Math.abs(a.ret ?? 0)));
-
-    const tot = D.total.value || 1;
     const bar = r => `<span class="bar" aria-hidden="true"><i style="width:${Math.min(100, Math.abs(r ?? 0) / maxAbs * 100)}%;background:${(r ?? 0) >= 0 ? 'var(--bar-up)' : 'var(--down)'}"></i></span>`;
-    state.assetGroups = kinds;
-    $('#view-assets').innerHTML = `
-      <div class="sort">
-        <div class="seg" role="group" aria-label="정렬">
-          <button data-sort="cost" class="${state.sort === 'cost' ? 'on' : ''}" aria-label="원금 ${state.sort === 'cost' && state.sortDir === 'asc' ? '작은' : '큰'} 순">원금${arrow('cost')}</button>
-          <button data-sort="value" class="${state.sort === 'value' ? 'on' : ''}" aria-label="평가금 ${state.sort === 'value' && state.sortDir === 'asc' ? '작은' : '큰'} 순">평가금${arrow('value')}</button>
-          <button data-sort="ret" class="${state.sort === 'ret' ? 'on' : ''}" aria-label="수익률 ${state.sort === 'ret' && state.sortDir === 'asc' ? '낮은' : '높은'} 순">수익률${arrow('ret')}</button>
-        </div>
-      </div>
+    const page = mode => {
+      const kinds = groupsFor(mode), byCost = mode === 'cost';
+      const base = (byCost ? D.total.cost : D.total.value) || 1;
+      return `<div class="page" data-mode="${mode}">
       <div class="card kind-list">
         ${kinds.map((g, i) => {
-          const main = state.sort === 'cost' ? g.c : g.v;
-          const share = main / ((state.sort === 'cost' ? D.total.cost : D.total.value) || 1);
+          const main = byCost ? g.c : g.v;
+          const share = main / base;
           const col = kindColor(g.k);
           const names = g.list.flatMap(a => a.rows.filter(r => !/예수금/.test(r.sub)).map(r => r.sub));
           const subLine = names.length > 1 ? `${names[0]} 외 ${names.length - 1}개` : (names[0] || g.list.map(a => a.name).join(', '));
+          const right = mode === 'ret'
+            ? `<span class="kl-amt ${cls(g.ret)}">${pct(g.ret, 1)}</span><span class="kl-share">평가손익 <b class="${cls(g.v - g.c)}">${compactSigned(g.v - g.c)}</b></span>`
+            : `<span class="kl-amt">${compact(main)}원</span><span class="kl-share">전체의 <b>${(share * 100).toFixed(1)}%</b></span>`;
           return `
           <button class="kl-row" data-kind="${esc(g.k)}" style="--i:${i};--c:${col.fg};--bg:${col.bg};--p:${(share * 100).toFixed(1)}"
-            aria-label="${esc(g.k)} ${state.sort === 'cost' ? '원금' : '평가금'} ${compact(main)}원, 전체의 ${(share * 100).toFixed(1)}%">
+            aria-label="${esc(g.k)}">
             <span class="kl-ring" aria-hidden="true"><span class="kl-icon">${esc(kindShort(g.k))}</span></span>
             <span class="kl-main">
               <span class="kl-name">${esc(g.k)}</span>
               <span class="kl-sub">${esc(subLine)}</span>
             </span>
-            <span class="kl-right num">
-              <span class="kl-amt">${compact(main)}원</span>
-              <span class="kl-share">전체의 <b>${(share * 100).toFixed(1)}%</b></span>
-            </span>
+            <span class="kl-right num">${right}</span>
           </button>`;
         }).join('')}
       </div>
-      <p class="note" style="padding:0 6px"><span class="nb">링은 전체 ${state.sort === 'cost' ? '원금' : '평가금'} 중 비중입니다.</span> <span class="nb">누르면 수익률과 종목이 나옵니다.</span></p>`;
-    $$('#view-assets .seg button').forEach(b => b.onclick = () => {
-      if (state.sort === b.dataset.sort) state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
-      else { state.sort = b.dataset.sort; state.sortDir = 'desc'; }
-      store.set(LS.sort, state.sort); store.set('dh_sortdir', state.sortDir);
-      renderAssets();
+      <p class="note" style="padding:0 6px"><span class="nb">링은 전체 ${byCost ? '원금' : '평가금'} 중 비중입니다.</span> <span class="nb">누르면 수익률과 종목이 나옵니다.</span></p>
+      </div>`;
+    };
+    state.assetGroups = groupsFor(state.sort);
+    $('#view-assets').innerHTML = `
+      <div class="sort">
+        <div class="seg" id="sortTabs" role="tablist" aria-label="정렬">
+          <button data-p="0" data-sort="cost">원금${arrow('cost')}</button>
+          <button data-p="1" data-sort="value">평가금${arrow('value')}</button>
+          <button data-p="2" data-sort="ret">수익률${arrow('ret')}</button>
+        </div>
+      </div>
+      <div class="pager" id="aPager">${MODES.map(page).join('')}</div>`;
+    const tabs = $$('#sortTabs button');
+    assetsPagerApi = setupPager($('#aPager'), tabs, {
+      start: MODES.indexOf(state.sort),
+      onChange: (i, first) => {
+        if (first) return;
+        state.sort = MODES[i]; store.set(LS.sort, state.sort);
+        state.assetGroups = groupsFor(state.sort);
+        tabs.forEach(b => { const ar = b.querySelector('.arrow'); if (ar) ar.remove(); });
+        tabs[i].insertAdjacentHTML('beforeend', `<span class="arrow" aria-hidden="true">${state.sortDir === 'asc' ? '↑' : '↓'}</span>`);
+      },
+    });
+    // 이미 고른 칸을 한 번 더 누르면 정렬 방향 전환
+    tabs.forEach(b => {
+      const go2 = b.onclick;
+      b.onclick = () => {
+        if (state.sort === b.dataset.sort) {
+          state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc'; store.set('dh_sortdir', state.sortDir);
+          const y = window.scrollY; renderAssets(); window.scrollTo({ top: y });
+        } else go2();
+      };
     });
     $$('#view-assets .kl-row').forEach(b => b.onclick = () => openKind(b.dataset.kind));
     state.barFn = bar;
@@ -1613,6 +1636,11 @@
     }
 
     el.innerHTML = `
+      <div class="pager-dots" id="rTabs" role="tablist" aria-label="기록 화면">
+        <button role="tab" data-p="0"><i></i>거래 입력</button>
+        <button role="tab" data-p="1"><i></i>월 마감</button>
+      </div>
+      <div class="pager" id="rPager"><div class="page">
       <div class="card">
         <div class="form">
           <div class="type-seg" role="group" aria-label="거래 종류">
@@ -1622,7 +1650,6 @@
           ${body}
         </div>
       </div>
-      ${monthCloseCard()}
       <div class="card">
         <div class="card-head"><h2 class="card-title">최근 기록</h2></div>
         ${D.trades.length ? D.trades.slice(0, 15).map(t => `
@@ -1631,7 +1658,9 @@
               <small>${fmtDate(new Date(t['날짜']))}${t['입력자'] ? ` · ${esc(t['입력자'])}` : ''}${t['메모'] ? ` · ${esc(t['메모'])}` : ''}</small></span>
             <span class="num" style="text-align:right">${won(num(t['금액(원)']))}${isNum(t['실현손익(원)']) && t['실현손익(원)'] !== '' ? `<br><small class="${cls(num(t['실현손익(원)']))}">${signWon(num(t['실현손익(원)']))}</small>` : ''}</span>
           </div>`).join('') : `<p class="empty">아직 앱에서 기록한 거래가 없습니다.<br>매수·매도를 기록하면 보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
-      </div>`;
+      </div>
+      </div><div class="page">${monthCloseCard() || '<div class="card"><p class="empty">가계부월별 탭이 없습니다.</p></div>'}</div></div>`;
+    recPagerApi = setupPager($('#rPager'), $$('#rTabs button'), { start: state.rPage || 0, onChange: i => { state.rPage = i; } });
 
     $$('.type-seg button', el).forEach(b => b.onclick = () => { F.type = b.dataset.type; renderRecord(); });
     const on = (id, ev, fn) => { const x = $(id, el); if (x) x.addEventListener(ev, fn); };
@@ -1798,6 +1827,8 @@
     window.scrollTo({ top: 0 });
     if (view === 'home') drawPlan();
     if (view === 'years') { fitOneLine($('#view-years')); yPagerApi.align(state.yPage || 0); }
+    if (view === 'assets') assetsPagerApi.align(['cost', 'value', 'ret'].indexOf(state.sort));
+    if (view === 'record') recPagerApi.align(state.rPage || 0);
   }
 
   function openSheet(html, mode = '') {
