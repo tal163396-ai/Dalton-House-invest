@@ -611,3 +611,20 @@ button.sd-month { width: 100%; border: 0; background: none; color: inherit; text
 .sim-row em { font-style: normal; font-size: 12.5px; margin-left: 4px; }
 .sim-row.head span { color: var(--ink-3); }
 .sim-row.me { background: var(--fill); border-radius: 10px; padding: 10px 10px; border-bottom: 0; margin: 4px 0; }
+
+/* v15: 세련된 선 그래프 */
+.chart .grid { stroke: var(--line); stroke-width: 1; opacity: .55; }
+.chart .zero { stroke: var(--ink-4); stroke-width: 1; opacity: .7; }
+.chart .area { opacity: 0; transition: opacity .25s ease; pointer-events: none; }
+.chart .area.on { opacity: 1; }
+.chart .ln, .chart .end { transition: opacity .2s ease; }
+.chart .ln.dim, .chart .end.dim { opacity: .14; }
+.chart .ln.draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: ln-draw 1s cubic-bezier(.3,.7,.2,1) forwards; }
+@keyframes ln-draw { to { stroke-dashoffset: 0; } }
+.chart .end { animation: end-in .4s ease .8s both; }
+@keyframes end-in { from { opacity: 0; } }
+.chart .guide { stroke: var(--ink-4); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
+.chart .pick-halo { opacity: .2; pointer-events: none; }
+.chart .pick-dot { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .chart .ln.draw { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; } .chart .end { animation: none; } }
+.legend i { border-top-width: 2.5px; border-radius: 2px; }

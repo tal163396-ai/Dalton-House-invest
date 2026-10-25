@@ -692,7 +692,7 @@
           <span><i style="background:${last.pnlCum >= 0 ? 'var(--up)' : 'var(--down)'}"></i>투자 손익 (실현) <b class="${cls(last.pnlCum)}">${won0(last.pnlCum)}</b></span>
         </div>
         <div class="legend">${series.map(s => `<span><i class="${s.solid ? '' : 'dash'}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
-        ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, valFmt: v => `${compact(v)}원`, meta })}
+        ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, areaKey: 'nw', valFmt: v => `${compact(v)}원`, meta })}
         <p class="note">편한가계부 장부 기준(산 가격). 아직 안 판 종목의 평가손익 <b class="${cls(unreal)}">${won0(unreal)}원</b>은 빠져 있어요 → 반영하면 순자산 약 ${compact(last.nw + unreal)}원.</p>
       </div>`;
   }
@@ -778,40 +778,73 @@
       </div>`;
   }
 
+  // 부드러운 곡선(단조 3차 보간: 값이 튀지 않음)
+  function smoothPath(P) {
+    if (!P.length) return '';
+    if (P.length < 3) return P.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join('');
+    const n = P.length, dx = [], m = [], t = [];
+    for (let i = 0; i < n - 1; i++) { dx[i] = P[i + 1][0] - P[i][0]; m[i] = (P[i + 1][1] - P[i][1]) / (dx[i] || 1); }
+    t[0] = m[0]; t[n - 1] = m[n - 2];
+    for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : 3 * (dx[i - 1] + dx[i]) / ((2 * dx[i] + dx[i - 1]) / m[i - 1] + (dx[i] + 2 * dx[i - 1]) / m[i]);
+    let d = `M${P[0][0].toFixed(1)},${P[0][1].toFixed(1)}`;
+    for (let i = 0; i < n - 1; i++) {
+      const h = dx[i] / 3;
+      d += `C${(P[i][0] + h).toFixed(1)},${(P[i][1] + t[i] * h).toFixed(1)} ${(P[i + 1][0] - h).toFixed(1)},${(P[i + 1][1] - t[i + 1] * h).toFixed(1)} ${P[i + 1][0].toFixed(1)},${P[i + 1][1].toFixed(1)}`;
+    }
+    return d;
+  }
+  let chartSeq = 0;
+
   function lineChart(pts, series, opt = {}) {
-    const W = 340, H = 210, L = opt.L || 38, R = 8, T = 10, B = 22;
+    const W = 340, H = 210, L = opt.L || 38, R = 10, T = 12, B = 24;
     const fmt = opt.fmt || (v => `${Math.round(v * 100)}%`);
     const vals = pts.flatMap(p => series.map(s => p[s.key]).filter(v => Number.isFinite(v)));
     let lo = opt.noZero ? Math.min(...vals) : Math.min(0, ...vals), hi = opt.noZero ? Math.max(...vals) : Math.max(0, ...vals);
-    const padV = (hi - lo) * 0.08 || 0.05; lo -= padV; hi += padV;
+    const padV = (hi - lo) * 0.1 || 0.05; lo -= padV; hi += padV;
     const X = i => L + (W - L - R) * (pts.length > 1 ? i / (pts.length - 1) : 0);
     const Y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
     const ticks = [0, 1, 2, 3].map(i => lo + (hi - lo) * i / 3);
-    const grid = ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-dasharray="3 4"/>
-      <text x="${L - 6}" y="${Y(v) + 3}" text-anchor="end">${fmt(v)}</text>`).join('');
-    const zero = opt.noZero ? '' : `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--ink-4)" stroke-width="1"/>`;
+    const grid = ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="grid"/>
+      <text x="${L - 8}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end">${fmt(v)}</text>`).join('');
+    const zero = opt.noZero || lo > 0 || hi < 0 ? '' : `<line x1="${L}" x2="${W - R}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" class="zero"/>`;
     const step = Math.max(1, Math.ceil(pts.length / 6));
     const xl = pts.map((p, i) => (i % step === 0 || i === pts.length - 1) && !(i !== pts.length - 1 && pts.length - 1 - i < step / 2)
-      ? `<text x="${X(i)}" y="${H - 4}" text-anchor="middle">${p.label}</text>` : '').join('');
-    const ptsOf = s => pts.map((p, i) => Number.isFinite(p[s.key]) ? `${X(i).toFixed(1)},${Y(p[s.key]).toFixed(1)}` : null).filter(Boolean).join(' ');
-    const lines = series.slice().reverse().map(s => {
-      const d = ptsOf(s);
-      return (s.key === 'mine' || s.solid)
-        ? `<polyline class="ln" data-k="${s.key}" points="${d}" fill="none" stroke="${s.color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`
-        : `<polyline class="ln" data-k="${s.key}" points="${d}" fill="none" stroke="${s.color}" stroke-width="1.7" stroke-dasharray="5 4" stroke-linejoin="round"/>`;
+      ? `<text x="${X(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${p.label}</text>` : '').join('');
+    const id = `lc${++chartSeq}`;
+    const ptsArr = s => pts.map((p, i) => (Number.isFinite(p[s.key]) ? [X(i), Y(p[s.key])] : null)).filter(Boolean);
+    const isMain = s => s.key === 'mine' || s.solid;
+    const isRef = s => !isMain(s) && (s.key === 'inv' || s.key === 'save');
+    const mainKey = opt.areaKey || (series.find(s => s.key === 'mine') || (opt.interactive ? null : series[0]) || {}).key;
+    const base = Math.min(H - B, Math.max(T, opt.noZero ? H - B : Y(Math.max(lo, Math.min(0, hi)))));
+    const defs = series.map(s => `<linearGradient id="${id}-${s.key}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" style="stop-color:${s.color};stop-opacity:.28"/><stop offset="1" style="stop-color:${s.color};stop-opacity:0"/></linearGradient>`).join('');
+    const areas = series.map(s => {
+      const P = ptsArr(s); if (P.length < 2) return '';
+      return `<path class="area ${s.key === mainKey ? 'on' : ''}" data-k="${s.key}" d="${smoothPath(P)}L${P.at(-1)[0].toFixed(1)},${base.toFixed(1)}L${P[0][0].toFixed(1)},${base.toFixed(1)}Z" fill="url(#${id}-${s.key})"/>`;
     }).join('');
-    const lastMine = pts.at(-1);
-    const dot = opt.noDot ? series.map(s => Number.isFinite(lastMine[s.key]) ? `<circle cx="${X(pts.length - 1)}" cy="${Y(lastMine[s.key])}" r="3" fill="${s.color}" stroke="var(--card)" stroke-width="1.5"/>` : '').join('') : Number.isFinite(lastMine.mine) ? `<circle cx="${X(pts.length - 1)}" cy="${Y(lastMine.mine)}" r="3.5" fill="var(--up)" stroke="#fff" stroke-width="1.5"/>` : '';
-    if (!opt.interactive) return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="수익률 비교 그래프">${grid}${zero}${lines}${dot}${xl}</svg>`;
+    const lines = series.slice().reverse().map(s => {
+      const d = smoothPath(ptsArr(s));
+      const w = isMain(s) ? 2.6 : isRef(s) ? 1.5 : 2;
+      return `<path class="ln ${isRef(s) ? 'ref' : 'draw'}" data-k="${s.key}" d="${d}" fill="none" stroke="${s.color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round" ${isRef(s) ? 'stroke-dasharray="4 5"' : 'pathLength="1"'}/>`;
+    }).join('');
+    const lastP = pts.at(-1);
+    const dots = series.filter(s => !isRef(s) && Number.isFinite(lastP[s.key])).map(s => {
+      const cx = X(pts.length - 1).toFixed(1), cy = Y(lastP[s.key]).toFixed(1);
+      return `<g class="end" data-k="${s.key}"><circle cx="${cx}" cy="${cy}" r="7" fill="${s.color}" opacity=".18"/><circle cx="${cx}" cy="${cy}" r="3.4" fill="${s.color}" stroke="var(--card)" stroke-width="1.6"/></g>`;
+    }).join('');
+    const svgInner = `<defs>${defs}</defs>${grid}${zero}${areas}${lines}${dots}${xl}`;
+    if (!opt.interactive) return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="수익률 비교 그래프">${svgInner}</svg>`;
     const valFmt = opt.valFmt || fmt;
     const info = {
-      W, L, R, n: pts.length, xs: pts.map((_, i) => +X(i).toFixed(1)), labels: pts.map(p => p.label),
+      areaKey: mainKey || null, W, L, R, n: pts.length, xs: pts.map((_, i) => +X(i).toFixed(1)), labels: pts.map(p => p.label),
       series: series.map(s => ({ key: s.key, label: s.label, color: s.color, meta: (opt.meta || {})[s.key] || null, vals: pts.map(p => p[s.key]), ys: pts.map(p => Number.isFinite(p[s.key]) ? +Y(p[s.key]).toFixed(1) : null), fmt: pts.map(p => Number.isFinite(p[s.key]) ? valFmt(p[s.key]) : '—') })),
     };
-    const hits = series.map(s => `<polyline class="hit" data-k="${s.key}" points="${ptsOf(s)}" fill="none" stroke="transparent" stroke-width="20" stroke-linejoin="round"/>`).join('');
+    const hits = series.map(s => `<path class="hit" data-k="${s.key}" d="${smoothPath(ptsArr(s))}" fill="none" stroke="transparent" stroke-width="22" stroke-linejoin="round"/>`).join('');
     return `<div class="line-wrap" ${opt.detail ? 'data-detail="1"' : ''} data-info='${esc(JSON.stringify(info))}'>
-      <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="비교 그래프. 선을 누르면 이름과 금액이 나와요">${grid}${zero}${lines}${dot}${xl}${hits}
-        <circle class="pick-dot" r="5" stroke="var(--card)" stroke-width="2" style="display:none" cx="0" cy="0"/></svg>
+      <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="비교 그래프. 선을 누르면 이름과 금액이 나와요">${svgInner}
+        <line class="guide" x1="0" x2="0" y1="${T}" y2="${H - B}" style="display:none"/>${hits}
+        <circle class="pick-halo" r="9" style="display:none" cx="0" cy="0"/>
+        <circle class="pick-dot" r="4.5" stroke="var(--card)" stroke-width="2" style="display:none" cx="0" cy="0"/></svg>
       <div class="line-readout num">선을 누르면 자세한 내용이 나와요</div>
     </div>`;
   }
@@ -991,9 +1024,12 @@
         let i = Math.round((vx - info.L) / ((info.W - info.L - info.R) / Math.max(1, info.n - 1)));
         i = Math.max(0, Math.min(info.n - 1, i));
         const v = s.vals[i];
-        $$('.ln', svg).forEach(l => l.classList.toggle('dim', l.dataset.k !== k));
-        const dot = $('.pick-dot', svg);
+        $$('.ln, .end', svg).forEach(l => l.classList.toggle('dim', l.dataset.k !== k));
+        $$('.area', svg).forEach(a => a.classList.toggle('on', a.dataset.k === k));
+        const dot = $('.pick-dot', svg), halo = $('.pick-halo', svg), guide = $('.guide', svg);
         dot.setAttribute('cx', info.xs[i]); dot.setAttribute('cy', s.ys[i]); dot.setAttribute('fill', s.color); dot.style.display = '';
+        halo.setAttribute('cx', info.xs[i]); halo.setAttribute('cy', s.ys[i]); halo.style.fill = s.color; halo.style.display = '';
+        guide.setAttribute('x1', info.xs[i]); guide.setAttribute('x2', info.xs[i]); guide.style.display = '';
         ro.innerHTML = `<div class="ro-top"><i style="background:${s.color}"></i><b>${esc(s.label)}</b><span>${esc(info.labels[i])}</span><b class="${cls(v)}">${esc(s.fmt[i])}</b></div>
           ${s.meta ? `<div class="ro-cells">${s.meta.map(([l, t, c]) => `<div><small>${esc(l)}</small><b class="${c}">${esc(t)}</b></div>`).join('')}</div>` : ''}
           ${wrap.dataset.detail ? `<div class="ro-more">눌러서 거래·월별·보유 자세히 보기 ›</div>` : ''}`;
@@ -1007,8 +1043,9 @@
       });
       svg.addEventListener('click', e => {
         if (e.target.classList.contains('hit')) return;
-        $$('.ln', svg).forEach(l => l.classList.remove('dim'));
-        $('.pick-dot', svg).style.display = 'none';
+        $$('.ln, .end', svg).forEach(l => l.classList.remove('dim'));
+        $$('.area', svg).forEach(a => a.classList.toggle('on', a.dataset.k === info.areaKey));
+        ['.pick-dot', '.pick-halo', '.guide'].forEach(q => { $(q, svg).style.display = 'none'; });
         ro.classList.remove('on', 'tap'); ro.onclick = null; ro.onkeydown = null; ro.removeAttribute('role'); ro.removeAttribute('tabindex');
         ro.innerHTML = '선을 누르면 자세한 내용이 나와요';
       });
