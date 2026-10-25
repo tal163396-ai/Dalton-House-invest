@@ -1991,7 +1991,7 @@
         }));
         maskObs.observe(document.body, { childList: true, subtree: true, characterData: true });
       }
-      if (!silent) toast('숫자를 가렸습니다. 눈 아이콘을 다시 누르면 보입니다.');
+      if (!silent) toast('숫자를 가렸습니다.\n눈 아이콘을 다시 누르면 보입니다.');
     } else {
       if (maskObs) { maskObs.disconnect(); maskObs = null; }
       if (!silent) { closeSheet(); const y = window.scrollY; render(); window.scrollTo({ top: y }); }
