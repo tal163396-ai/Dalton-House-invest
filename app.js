@@ -571,10 +571,11 @@
           </div>`).join('')}
       </div>
       <button class="btn pop-close" data-close>닫기</button>`, 'pop');
-    $$('#sheetBody .row').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
+    $$('#sheetBody .row').forEach(b => b.onclick = () => openAsset(b.dataset.asset, state.sort === 'cost' ? 'cost' : 'value'));
   }
 
-  function openAsset(name) {
+  // basis: 비중 기준(원금/평가금). 자산별 탭에서 열면 그 탭의 정렬 기준, 그 외에는 포트폴리오 맵 기준
+  function openAsset(name, basis = state.basis) {
     const D = state.data;
     const a = D.assets.find(x => x.name === name);
     if (!a) return;
@@ -583,7 +584,7 @@
     const rzYear = rz.filter(r => r.year === thisYear).reduce((s, r) => s + r.amount, 0);
     const rzAll = rz.reduce((s, r) => s + r.amount, 0);
     // 비중: 포트폴리오에서 고른 기준(원금/평가금)을 따름
-    const share = state.basis === 'cost' ? (D.total.cost > 0 ? a.cost / D.total.cost : 0) : a.weight;
+    const share = basis === 'cost' ? (D.total.cost > 0 ? a.cost / D.total.cost : 0) : a.weight;
 
     const holdings = a.rows.map(r => {
       const isCash = /예수금/.test(r.sub) || r.method.startsWith('수동');
@@ -612,7 +613,7 @@
         <div><div class="stat-label">원금</div><div class="stat-value">${won(a.cost)}</div></div>
         <div><div class="stat-label">평가손익</div><div class="stat-value ${cls(a.pl)}">${signWon(a.pl)}</div></div>
         <div><div class="stat-label">수익률</div><div class="stat-value ${cls(a.ret)}">${pct(a.ret)}</div></div>
-        <div><div class="stat-label">전체 중 비중 <em class="basis-tag">${state.basis === 'cost' ? '원금' : '평가금'} 기준</em></div><div class="stat-value">${(share * 100).toFixed(1)}%</div></div>
+        <div><div class="stat-label">전체 중 비중 <em class="basis-tag">${basis === 'cost' ? '원금' : '평가금'} 기준</em></div><div class="stat-value">${(share * 100).toFixed(1)}%</div></div>
         <div><div class="stat-label">${thisYear}년 실현손익</div><div class="stat-value ${cls(rzYear)}">${signWon(rzYear)}</div></div>
       </div>
       <h3 class="section-title">보유 내역</h3>
