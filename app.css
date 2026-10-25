@@ -773,3 +773,4 @@ body { word-break: keep-all; overflow-wrap: anywhere; }
 #yTabs button[data-p="2"] { --tc: #12A15A; }
 #yTabs button.on { background: color-mix(in srgb, var(--tc) 16%, transparent); box-shadow: inset 0 -2px 0 var(--tc); }
 #yTabs button.on .yt b { color: var(--tc); }
+.lg-sub { font-size: 11.5px; color: var(--ink-3); font-weight: 600; white-space: nowrap; }

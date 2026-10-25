@@ -776,7 +776,7 @@
     ];
     const meta = {
       nw: [['시작', compact(start)], ['늘어난 돈', won0(last.nw - start), cls(last.nw - start)], ['그중 투자', won0(last.pnlCum), cls(last.pnlCum)]],
-      save: [['시작', compact(start)], ['모은 돈', won0(last.saveCum), cls(last.saveCum)], ['월평균', won0(last.saveCum / (pts.length - 1)), '']],
+      save: [['시작', compact(start)], ['근로저축', won0(last.saveCum), cls(last.saveCum)], ['월평균', won0(last.saveCum / (pts.length - 1)), '']],
     };
     const tot = last.nw - start;
     const wS = Math.max(0, last.saveCum), wP = Math.abs(last.pnlCum);
@@ -786,7 +786,7 @@
         <div class="gw-hero num"><small>순자산</small><b>${compact(start)} → ${compact(last.nw)}</b><span class="${cls(tot)}">${won0(tot)}</span></div>
         <div class="gw-split" aria-hidden="true"><i style="flex:${wS};background:var(--accent)"></i><i style="flex:${wP};background:${last.pnlCum >= 0 ? 'var(--up)' : 'var(--down)'}"></i></div>
         <div class="gw-legend num">
-          <span><i style="background:var(--accent)"></i>모은 돈 (수입 − 지출) <b>${won0(last.saveCum)}</b></span>
+          <span><i style="background:var(--accent)"></i>근로저축 <small class="lg-sub">(수입 − 지출 ± 보정)</small> <b>${won0(last.saveCum)}</b></span>
           <span><i style="background:${last.pnlCum >= 0 ? 'var(--up)' : 'var(--down)'}"></i>투자 손익 (실현) <b class="${cls(last.pnlCum)}">${won0(last.pnlCum)}</b></span>
         </div>
         <div class="legend">${series.map(s => `<span><i class="${s.key === 'inv' || s.key === 'save' ? 'dash' : ''}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
@@ -834,7 +834,7 @@
     const meta = {};
     series.forEach(s => {
       meta[s.key] = s.key === 'mine'
-        ? [['지금 평가금', compact(last.val)], ['넣은 돈', compact(last.inv)], ['손익', won0(last.val - last.inv), cls(last.val - last.inv)]]
+        ? [['지금 평가금', compact(last.val)], ['순입금', compact(last.inv)], ['손익', won0(last.val - last.inv), cls(last.val - last.inv)]]
         : [[`${pts[0].label} 대비`, pct(last[s.key], 1), cls(last[s.key])], ['내 투자', pct(last.mine, 1), cls(last.mine)], ['차이', `${((last.mine - last[s.key]) * 100).toFixed(1)}%p`, cls(last.mine - last[s.key])]];
     });
     const rows = series.map(s => ({ s, v: last[s.key] })).filter(x => Number.isFinite(x.v)).sort((a, b) => b.v - a.v);
@@ -847,7 +847,7 @@
           ${rows.map(({ s, v }) => s.key === 'mine'
             ? `<div class="sim-row me mine-row">
                 <div class="mine-top"><span><i style="background:${s.color}"></i>내 투자 <b class="num">${compact(last.val)}원</b></span><em class="${cls(v)}">${pct(v, 1)}</em></div>
-                <div class="mine-sub num"><span>넣은 돈 ${compact(last.inv)}원 대비</span><b class="${cls(v)}">${pct(v, 1)}</b></div>
+                <div class="mine-sub num"><span>순입금 ${compact(last.inv)}원 대비</span><b class="${cls(v)}">${pct(v, 1)}</b></div>
                 <div class="mine-sub num"><span>원금 ${compact(D.total.cost)}원 대비</span><b class="${cls(D.total.ret)}">${pct(D.total.ret, 1)}</b></div>
               </div>`
             : `<div class="sim-row"><span><i style="background:${s.color}"></i>${s.label}</span><b><em class="${cls(v)}">${pct(v, 1)}</em></b></div>`).join('')}
@@ -1694,7 +1694,7 @@
     return `
       <div class="card mc-card">
         <div class="card-head"><h2 class="card-title">월 마감</h2><span class="card-aside">마지막 저장 ${String(last.y).slice(2)}.${last.m}</span></div>
-        <p class="help">매달 한 번, 편한가계부 <b>자산 → 전체통계</b><br>화면의 숫자 3개를 그대로 입력하십시오.<br>투자손익과 넣은 돈은 앱 기록으로 자동 계산됩니다.</p>
+        <p class="help">매달 한 번, 편한가계부 <b>자산 → 전체통계</b><br>화면의 숫자 3개를 그대로 입력하십시오.<br>투자손익과 순입금은 앱 기록으로 자동 계산됩니다.</p>
         <div class="form">
           <label class="field"><span>마감할 달</span><input type="month" id="mcMonth" value="${y}-${String(m).padStart(2, '0')}"></label>
           <label class="field"><span>누적잔액</span><input id="mcNw" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="예: 285,322,041" value="${fmtComma(v('nw'))}"></label>
@@ -1704,7 +1704,7 @@
           </div>
           <div class="mc-auto num">
             <div><small>실현손익 ${C.kept ? '(저장된 값)' : '(앱 기록)'}</small><b class="${cls(C.pnl)}">${signWon(C.pnl)}</b></div>
-            <div><small>넣은 돈 ${C.kept ? '(저장된 값)' : '(앱 입금−출금)'}</small><b>${signWon(C.flow)}</b></div>
+            <div><small>순입금 ${C.kept ? '(저장된 값)' : '(앱 입금−출금)'}</small><b>${signWon(C.flow)}</b></div>
           </div>
           <p class="note" style="margin:0">수입에서 그 달 익절(${compact(C.gains)}원)은 빼고 저장합니다.${C.saved ? '<br><b>이미 저장된 달입니다. 누적잔액·수입·지출만 수정합니다.</b>' : ''}</p>
           <p id="mcErr" class="form-error" role="alert"></p>
