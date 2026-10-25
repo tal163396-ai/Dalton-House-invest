@@ -750,3 +750,6 @@ body { word-break: keep-all; overflow-wrap: anywhere; }
 .rf-v small { font-size: 10.5px; color: var(--ink-3); font-weight: 600; }
 .rf-v b { font-size: 13.5px; font-weight: 800; }
 .rz-fold .rz-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px 14px; align-items: center; padding: 4px 12px 12px; border-top: 1px solid var(--line); padding-top: 10px; margin: 0 0; }
+.kasset .row > span:first-child { min-width: 0; }
+.kasset .row-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kasset .row-name + br { display: none; }
