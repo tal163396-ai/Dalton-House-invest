@@ -1926,7 +1926,7 @@
     openSheet(`
       <h2 id="sheetTitle">설정</h2>
       <p class="kind">${name ? `${esc(name)} 님으로 사용 중` : ''}</p>
-      <button class="menu-item" id="mName">이름 바꾸기</button>
+      <button class="menu-item" id="mName">사용자 바꾸기</button>
       <button class="menu-item" id="mLogout">로그아웃 (이 기기에서 비밀번호 지우기)</button>
       <p class="note">숫자는 구글 시트에서 직접 고쳐도 됩니다. 수정 후 새로고침을 누르면 반영됩니다.</p>`);
     $('#mName').onclick = () => { closeSheet(); showLogin('', true); };
