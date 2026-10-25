@@ -501,6 +501,20 @@
     const page = mode => {
       const kinds = groupsFor(mode), byCost = mode === 'cost';
       const base = (byCost ? D.total.cost : D.total.value) || 1;
+      // 링: 모든 종류가 한 바퀴를 나눠 갖고, 자기 칸만 진하게 (나머지는 연하게)
+      const shares = kinds.map(g => Math.max(0, (byCost ? g.c : g.v) / base));
+      const ringOf = i => {
+        let acc = 0; const segs = [];
+        kinds.forEach((g, j) => {
+          const a0 = acc * 100, a1 = (acc + shares[j]) * 100; acc += shares[j];
+          const col = kindColor(g.k).fg;
+          const c = j === i ? col : `color-mix(in srgb, ${col} 22%, var(--fill))`;
+          const gap = shares[j] > 0.02 ? 0.6 : 0;
+          segs.push(`${c} ${a0.toFixed(2)}% ${(a1 - gap).toFixed(2)}%`, `var(--card) ${(a1 - gap).toFixed(2)}% ${a1.toFixed(2)}%`);
+        });
+        if (acc < 1) segs.push(`var(--fill) ${(acc * 100).toFixed(2)}% 100%`);
+        return `conic-gradient(${segs.join(',')})`;
+      };
       return `<div class="page" data-mode="${mode}">
       <div class="card kind-list">
         ${kinds.map((g, i) => {
@@ -515,7 +529,7 @@
           return `
           <button class="kl-row" data-kind="${esc(g.k)}" style="--i:${i};--c:${col.fg};--bg:${col.bg};--p:${(share * 100).toFixed(1)}"
             aria-label="${esc(g.k)}">
-            <span class="kl-ring" aria-hidden="true"><span class="kl-icon">${esc(kindShort(g.k))}</span></span>
+            <span class="kl-ring" aria-hidden="true" style="background:${ringOf(i)}"><span class="kl-icon">${esc(kindShort(g.k))}</span></span>
             <span class="kl-main">
               <span class="kl-name">${esc(g.k)}</span>
               <span class="kl-sub">${esc(subLine)}</span>
