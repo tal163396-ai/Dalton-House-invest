@@ -11,17 +11,23 @@
     set(k, v) { try { localStorage.setItem(k, v); } catch { /* 저장 불가 환경 */ } },
     del(k) { try { localStorage.removeItem(k); } catch { /* 무시 */ } },
   };
+  // 앱을 완전히 닫기 전까지만 기억 (다른 앱 다녀오거나 새 버전으로 새로고침돼도 보던 화면 유지)
+  const sess = {
+    get(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch { /* 무시 */ } },
+  };
+  const sessNum = k => { const v = Number(sess.get(k)); return Number.isFinite(v) ? v : 0; };
 
   const state = {
     data: null,
-    view: 'home',
+    view: ['home', 'record', 'years', 'assets'].includes(sess.get('dh_view')) ? sess.get('dh_view') : 'home',
     mode: store.get(LS.mode) || 'weight',
     basis: store.get('dh_basis') === 'cost' ? 'cost' : 'value',
     sort: store.get(LS.sort) || 'cost',
     sortDir: store.get('dh_sortdir') === 'asc' ? 'asc' : 'desc',
     fx: store.get(LS.fx) === '1',
     year: null,
-    yPage: 0,
+    yPage: sessNum('dh_ypage'), rPage: sessNum('dh_rpage'), hPage: sessNum('dh_hpage'),
     kindSort: store.get('dh_kindsort') || null,
     openKinds: new Set(),
     openMonths: new Set(),
@@ -63,6 +69,7 @@
     return j;
   }
 
+  let pendingScroll = null;
   async function load({ quiet = false } = {}) {
     const btn = $('#refreshBtn');
     btn.classList.add('spin');
@@ -70,7 +77,7 @@
       const j = await api('data');
       state.data = prepare(j.data);
       store.set(LS.cache, JSON.stringify(j.data));
-      render();
+      const y = pendingScroll ?? window.scrollY; pendingScroll = null; render(); requestAnimationFrame(() => window.scrollTo({ top: y }));
       if (!quiet) toast('최신 데이터로 갱신했습니다');
     } catch (e) {
       if (e.code === 'auth') { logout('비밀번호가 바뀌었거나 틀렸습니다. 다시 입력하십시오.'); return; }
@@ -165,7 +172,7 @@
     $('#view-home').innerHTML = `
       <div class="pager-dots" role="tablist" aria-label="포트폴리오 화면">
         <button role="tab" data-p="0" class="on"><i></i>자산 구성</button>
-        <button role="tab" data-p="1"><i></i>투자자산 ${compact(T.value)}원</button>
+        <button role="tab" data-p="1"><i></i>투자 자산 ${compact(T.value)}원</button>
       </div>
       <div class="pager" id="pager">
       <div class="page">
@@ -194,7 +201,7 @@
       </div>
       <div class="page">
       <div class="card sum-card">
-        <div class="total-label">투자자산</div>
+        <div class="total-label">투자 자산</div>
         <div class="total-value num">${won(T.value)}</div>
         <div class="sum-chips num">
           <button class="mini sum-chip" data-stat="pl"><span>평가손익</span><b class="${cls(T.pl)}">${compactSigned(T.pl)} (${pct(T.ret, 1)})</b></button>
@@ -242,12 +249,14 @@
     return { fit, align };
   }
   let yPagerApi = { fit: () => {}, align: () => {} };
+  let homePagerApi = { fit: () => {}, align: () => {} };
   let assetsPagerApi = { fit: () => {}, align: () => {} };
   let recPagerApi = { fit: () => {}, align: () => {} };
 
   let fitPager = () => {};
   function bindPager() {
-    fitPager = setupPager($('#pager'), $$('#view-home .pager-dots button')).fit;
+    homePagerApi = setupPager($('#pager'), $$('#view-home .pager-dots button'), { start: state.hPage || 0, onChange: i => { state.hPage = i; sess.set('dh_hpage', i); } });
+    fitPager = homePagerApi.fit;
   }
 
   // 홈 '총 자산' 화면: 가계부 기준 순자산 미니 그래프
@@ -280,19 +289,23 @@
     const D = state.data;
     const ref = D.household.slice().reverse().find(h => h.jeonse !== null && h.loan !== null);
     if (!ref) return `<div class="nwc-empty">기록 탭 → 월 마감에서 전세보증금·대출을 입력하면 구성이 표시됩니다.</div>`;
-    const jeonse = ref.jeonse, loan = ref.loan, inv = last.book;
+    // 투자 자산은 위 카드의 원금과 같은 값(앱 원금)을 쓰고, 예금·현금은 나머지로 계산
+    const jeonse = ref.jeonse, loan = ref.loan, inv = D.total.cost;
     const cash = last.nw - inv - jeonse + loan;
     const parts = [
       { k: '전세보증금', v: jeonse, c: '#3182F6' },
-      { k: '투자자산', v: inv, c: '#12A15A', sub: `시세 ${compact(D.total.value)}원` },
+      { k: '투자 자산', v: inv, c: '#12A15A', sub: '원금' },
       { k: '예금·현금', v: cash, c: '#14B8A6' },
     ];
+    const gross = parts.reduce((t, p) => t + p.v, 0);
     const pos = parts.reduce((t, p) => t + Math.max(0, p.v), 0) || 1;
     return `<div class="nwc">
       <div class="nwc-bar" aria-hidden="true">${parts.map(p => `<i style="flex:${Math.max(0, p.v) / pos};background:${p.c}"></i>`).join('')}</div>
       <div class="nwc-rows num">
         ${parts.map(p => `<span class="nwc-row"><span><i style="background:${p.c}"></i>${p.k}${p.sub ? ` <small>${p.sub}</small>` : ''}</span><b>${compact(p.v)}원</b></span>`).join('')}
+        <span class="nwc-row total"><span>자산 합계</span><b>${compact(gross)}원</b></span>
         <span class="nwc-row loan"><span><i></i>대출·갚을 돈</span><b class="down">−${compact(loan)}원</b></span>
+        <span class="nwc-row net"><span>= 순자산</span><b>${compact(gross - loan)}원</b></span>
       </div>
     </div>`;
   }
@@ -725,7 +738,7 @@
     yPagerApi = setupPager($('#yPager'), $$('#yTabs button'), {
       start: state.yPage || 0,
       onChange: (i, first) => {
-        state.yPage = i;
+        state.yPage = i; sess.set('dh_ypage', i);
         const chips = $('#yChips'); if (chips) chips.hidden = i === 2;
         if (!first) { const tabs = $('#yTabs'); const top = tabs.getBoundingClientRect().top + window.scrollY - 70; if (window.scrollY > top) window.scrollTo({ top, behavior: 'smooth' }); }
       },
@@ -1685,7 +1698,7 @@
           </div>`).join('') : `<p class="empty">아직 앱에서 기록한 거래가 없습니다.<br>매수·매도를 기록하면 보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
       </div>
       </div><div class="page">${monthCloseCard() || '<div class="card"><p class="empty">가계부월별 탭이 없습니다.</p></div>'}</div></div>`;
-    recPagerApi = setupPager($('#rPager'), $$('#rTabs button'), { start: state.rPage || 0, onChange: i => { state.rPage = i; } });
+    recPagerApi = setupPager($('#rPager'), $$('#rTabs button'), { start: state.rPage || 0, onChange: i => { state.rPage = i; sess.set('dh_rpage', i); } });
 
     $$('.type-seg button', el).forEach(b => b.onclick = () => { F.type = b.dataset.type; renderRecord(); });
     const on = (id, ev, fn) => { const x = $(id, el); if (x) x.addEventListener(ev, fn); };
@@ -1855,12 +1868,12 @@
   }
 
   /* ───────────── 공통 UI ───────────── */
-  function go(view) {
-    state.view = view;
+  function go(view, keepY = false) {
+    state.view = view; sess.set('dh_view', view);
     $$('.view').forEach(v => { v.hidden = v.id !== `view-${view}`; });
     $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
-    window.scrollTo({ top: 0 });
-    if (view === 'home') drawPlan();
+    if (!keepY) window.scrollTo({ top: 0 });
+    if (view === 'home') { homePagerApi.align(state.hPage || 0); drawPlan(); }
     if (view === 'years') { fitOneLine($('#view-years')); yPagerApi.align(state.yPage || 0); }
     if (view === 'assets') assetsPagerApi.align(['cost', 'value', 'ret'].indexOf(state.sort));
     if (view === 'record') recPagerApi.align(state.rPage || 0);
@@ -1929,7 +1942,10 @@
       try { state.data = prepare(JSON.parse(cached)); render(); } catch { /* 캐시 손상 무시 */ }
     }
     if (!state.data) $('#view-home').innerHTML = '<div class="skeleton"></div><div class="skeleton" style="height:380px"></div>';
-    go(state.view);
+    go(state.view, true);
+    const sy = sessNum(`dh_scroll_${state.view}`);
+    pendingScroll = sy;
+    requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: sy })));
     load({ quiet: true });
   }
 
@@ -1966,8 +1982,10 @@
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
     let rT; window.addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(() => { if (state.view === 'home') drawPlan(); }, 120); });
     document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') sess.set(`dh_scroll_${state.view}`, Math.round(window.scrollY));
       if (document.visibilityState === 'visible' && state.data && store.get(LS.pw)) load({ quiet: true });
     });
+    let sT; window.addEventListener('scroll', () => { clearTimeout(sT); sT = setTimeout(() => sess.set(`dh_scroll_${state.view}`, Math.round(window.scrollY)), 150); }, { passive: true });
   }
 
   bind();
