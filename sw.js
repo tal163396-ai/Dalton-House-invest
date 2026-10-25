@@ -1,5 +1,5 @@
 // 앱 화면 파일만 저장 (자산 데이터는 저장하지 않음)
-const CACHE = 'dalton-house-v2';
+const CACHE = 'dalton-house-v3';
 const SHELL = ['./', 'index.html', 'app.css?v=2', 'app.js?v=2', 'config.js?v=1', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
@@ -18,7 +18,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' }) // 휴대폰에 남은 예전 파일 대신 항상 최신본 확인
       .then(res => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
         return res;

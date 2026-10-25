@@ -895,6 +895,15 @@
   if (store.get(LS.pw) && store.get(LS.name)) startApp(); else showLogin();
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
-    navigator.serviceWorker.register('sw.js').catch(() => { /* 오프라인 기능만 없음 */ });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+      // 앱으로 돌아올 때마다 새 버전이 있는지 확인
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+    }).catch(() => { /* 오프라인 기능만 없음 */ });
+    // 새 버전이 설치되면 한 번 새로고침해서 바로 적용
+    let reloaded = false;
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController && !reloaded) { reloaded = true; location.reload(); }
+    });
   }
 })();
