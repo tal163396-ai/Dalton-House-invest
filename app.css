@@ -592,3 +592,22 @@ button.sd-month { width: 100%; border: 0; background: none; color: inherit; text
 .sd-trades .trade { font-size: 13.5px; padding: 10px 0; border-top-color: var(--line); }
 .basis-tag { font-style: normal; font-size: 11px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 6px; padding: 1px 5px; margin-left: 4px; white-space: nowrap; }
 .pager { margin-bottom: 12px; }
+
+/* v14: 자산 성장 + 같은 돈 지수 비교 */
+.gw-hero { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: -4px 0 10px; }
+.gw-hero small { font-size: 13px; color: var(--ink-3); font-weight: 700; }
+.gw-hero b { font-size: 20px; font-weight: 800; }
+.gw-hero span { font-size: 15px; font-weight: 800; }
+.gw-split { display: flex; gap: 3px; height: 12px; border-radius: 6px; overflow: hidden; }
+.gw-split i { display: block; min-width: 4px; }
+.gw-legend { display: grid; gap: 6px; margin: 10px 0 14px; font-size: 13.5px; color: var(--ink-2); }
+.gw-legend span { display: flex; align-items: center; gap: 7px; }
+.gw-legend span b { margin-left: auto; font-weight: 800; color: var(--ink); }
+.gw-legend i, .sim-row i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.sim-list { margin-top: 10px; border-top: 1px solid var(--fill); }
+.sim-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--fill); font-size: 14px; }
+.sim-row span { display: flex; align-items: center; gap: 8px; color: var(--ink-2); }
+.sim-row b { font-weight: 800; white-space: nowrap; }
+.sim-row em { font-style: normal; font-size: 12.5px; margin-left: 4px; }
+.sim-row.head span { color: var(--ink-3); }
+.sim-row.me { background: var(--fill); border-radius: 10px; padding: 10px 10px; border-bottom: 0; margin: 4px 0; }

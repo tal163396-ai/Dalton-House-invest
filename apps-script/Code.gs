@@ -125,6 +125,7 @@ function readAll_() {
     monthly: rowsAsObjects_('월말평가', o => !o['월']),
     trades: rowsAsObjects_('거래기록', o => !o['날짜']).slice(-200),
     index: readIndex_(),
+    household: SpreadsheetApp.getActive().getSheetByName('가계부월별') ? rowsAsObjects_('가계부월별', o => !o['연도']) : [],
   };
 }
 
@@ -132,22 +133,29 @@ function readAll_() {
 
 // 지수는 구글 시세가 안정적으로 주는 대표 ETF로 대신함
 const INDEX_SERIES = [
-  { key: 'kospi',  label: '코스피(KODEX 200)', formula: '=GOOGLEFINANCE("KRX:069500","close",DATE(2025,8,1),TODAY(),"WEEKLY")' },
-  { key: 'sp500',  label: 'S&P500(SPY)',       formula: '=GOOGLEFINANCE("SPY","close",DATE(2025,8,1),TODAY(),"WEEKLY")' },
-  { key: 'nasdaq', label: '나스닥(QQQ)',        formula: '=GOOGLEFINANCE("QQQ","close",DATE(2025,8,1),TODAY(),"WEEKLY")' },
-  { key: 'usdkrw', label: '환율(USD/KRW)',      formula: '=GOOGLEFINANCE("CURRENCY:USDKRW","price",DATE(2025,8,1),TODAY(),"WEEKLY")' },
+  { key: 'kospi',  label: '코스피(KODEX 200)', formula: '=GOOGLEFINANCE("KRX:069500","close",DATE(2023,11,1),TODAY(),"WEEKLY")' },
+  { key: 'sp500',  label: 'S&P500(SPY)',       formula: '=GOOGLEFINANCE("SPY","close",DATE(2023,11,1),TODAY(),"WEEKLY")' },
+  { key: 'nasdaq', label: '나스닥(QQQ)',        formula: '=GOOGLEFINANCE("QQQ","close",DATE(2023,11,1),TODAY(),"WEEKLY")' },
+  { key: 'usdkrw', label: '환율(USD/KRW)',      formula: '=GOOGLEFINANCE("CURRENCY:USDKRW","price",DATE(2023,11,1),TODAY(),"WEEKLY")' },
 ];
 
 function ensureIndexSheet_() {
   const ss = SpreadsheetApp.getActive();
   let sh = ss.getSheetByName('지수');
-  if (sh) return sh;
+  if (sh) {
+    // 예전 버전(2025-08부터)이면 2023-11부터로 수식 교체
+    if (String(sh.getRange(2, 1).getFormula()).indexOf('DATE(2023,11,1)') < 0) {
+      INDEX_SERIES.forEach((s, i) => sh.getRange(2, i * 2 + 1).setFormula(s.formula));
+      sh.getRange(1, 10).setValue('자동으로 채워지는 탭입니다. 고치지 마세요. (2023-11부터 주간 종가)');
+    }
+    return sh;
+  }
   sh = ss.insertSheet('지수');
   INDEX_SERIES.forEach((s, i) => {
     sh.getRange(1, i * 2 + 1).setValue(s.label).setFontWeight('bold');
     sh.getRange(2, i * 2 + 1).setFormula(s.formula);
   });
-  sh.getRange(1, 10).setValue('자동으로 채워지는 탭입니다. 고치지 마세요. (2025-08부터 주간 종가)');
+  sh.getRange(1, 10).setValue('자동으로 채워지는 탭입니다. 고치지 마세요. (2023-11부터 주간 종가)');
   return sh;
 }
 
@@ -160,7 +168,7 @@ function readIndex_() {
     const c = i * 2, pts = [];
     for (let r = 1; r < v.length; r++) {
       const d = v[r][c], x = v[r][c + 1];
-      if (d instanceof Date && typeof x === 'number' && isFinite(x)) pts.push([Utilities.formatDate(d, TZ, 'yyyy-MM-dd'), x]);
+      if (d instanceof Date && typeof x === 'number' && isFinite(x)) pts.push([Utilities.formatDate(d, sheetTz_(), 'yyyy-MM-dd'), x]);
     }
     out[s.key] = pts;
   });
@@ -252,14 +260,14 @@ function recordTrade_(tr) {
   }
 
   appendByHeader_('거래기록', {
-    '날짜': date, '자산': asset, '세부종목': sub, '구분': type, '수량': qty, '단가': price,
+    '날짜': kstWall_(date), '자산': asset, '세부종목': sub, '구분': type, '수량': qty, '단가': price,
     '통화': cur, '금액(원)': amountKrw, '실현손익(원)': realized === null ? '' : realized,
     '입력자': tr.by || '', '메모': tr.memo || '',
   });
 
   if (realized !== null) {
     const row = appendByHeader_('실현손익', {
-      '날짜': date, '자산': asset, '세부종목': sub,
+      '날짜': kstWall_(date), '자산': asset, '세부종목': sub,
       '내용': `${sub} ${qty}주 매도 ${realized >= 0 ? '익절' : '손절'}`,
       '손익(원)': realized, '구분': realized >= 0 ? '익절' : '손절', '출처': '앱', '메모': tr.memo || '',
     });
@@ -436,7 +444,7 @@ function saveSnapshot_(month) {
   for (let r = mt.values.length - 1; r >= 1; r--) {
     if (String(clean_(mt.values[r][mt.col['월']])).slice(0, 7) === month) mt.sh.deleteRow(r + 1);
   }
-  const stamp = new Date();
+  const stamp = kstWall_(new Date());
   order.forEach(a => appendByHeader_('월말평가', {
     '월': "'" + month, '자산': a, '종류': agg[a].kind,
     '원금(원)': Math.round(agg[a].cost), '평가금(원)': Math.round(agg[a].val),
@@ -509,8 +517,18 @@ function withLock_(fn) {
   finally { lock.releaseLock(); }
 }
 
+// 시트에 적힌 날짜를 그대로 보내기 위해 시트의 시간대로 변환 (시트 시간대가 서울이 아니어도 날짜가 밀리지 않음)
+let SHEET_TZ_ = null;
+function sheetTz_() {
+  if (!SHEET_TZ_) { try { SHEET_TZ_ = SpreadsheetApp.getActive().getSpreadsheetTimeZone() || TZ; } catch (e) { SHEET_TZ_ = TZ; } }
+  return SHEET_TZ_;
+}
+// 시트에 쓸 날짜: 한국 시각 그대로 보이도록 (시트 시간대와 무관하게)
+function kstWall_(d) {
+  return Utilities.parseDate(Utilities.formatDate(d, TZ, 'yyyy-MM-dd HH:mm:ss'), sheetTz_(), 'yyyy-MM-dd HH:mm:ss');
+}
 function clean_(v) {
-  if (v instanceof Date) return Utilities.formatDate(v, TZ, "yyyy-MM-dd'T'HH:mm:ss");
+  if (v instanceof Date) return Utilities.formatDate(v, sheetTz_(), "yyyy-MM-dd'T'HH:mm:ss");
   if (typeof v === 'number' && !isFinite(v)) return null;
   return v;
 }

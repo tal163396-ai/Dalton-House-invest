@@ -126,6 +126,10 @@
       rate, rows, assets, comp, realized, years, bad,
       total: { ...total, pl: total.value - total.cost, ret: total.cost > 0 ? (total.value - total.cost) / total.cost : null },
       monthly: d.monthly || [], trades: (d.trades || []).slice().reverse(), index: d.index || null, updatedAt: d.updatedAt,
+      household: (d.household || []).map(h => ({
+        y: num(h['연도']), m: num(h['월']), nw: num(h['순자산']), inc: num(h['수입(근로·기타)']), exp: num(h['생활 지출']),
+        pnl: num(h['투자손익(실현)']), flow: num(h['투자 순투입']), book: num(h['투자 장부잔액']),
+      })).filter(h => h.y && h.m).sort((a, b) => a.y - b.y || a.m - b.m),
     };
   }
 
@@ -649,6 +653,111 @@
   }
 
   function cumulativeCard() {
+    if (state.data.household.length > 1) return growthCard() + indexSimCard();
+    return oldCumulativeCard();
+  }
+
+  const won0 = v => `${compactSigned(v)}`;
+  const ymLabel = h => `${String(h.y).slice(2)}.${h.m}`;
+  const monthEnd = h => new Date(h.y, h.m, 0, 23, 59, 59);
+
+  // ① 우리 집 자산 성장: 순자산 = 시작 + 모은 돈(수입−지출) + 투자손익
+  function growthCard() {
+    const D = state.data, H = D.household;
+    const start = H[0].nw;
+    let saveCum = 0, pnlCum = 0;
+    const pts = H.map((h, i) => {
+      if (i > 0) { pnlCum += h.pnl; saveCum += (h.nw - H[i - 1].nw) - h.pnl; }
+      return { label: ymLabel(h), nw: h.nw, save: start + saveCum, saveCum, pnlCum };
+    });
+    const last = pts.at(-1);
+    const unreal = D.total.pl;
+    const series = [
+      { key: 'nw', label: '순자산', color: 'var(--up)', solid: true },
+      { key: 'save', label: '투자 없이 모은 돈만', color: 'var(--ink-4)' },
+    ];
+    const meta = {
+      nw: [['시작', compact(start)], ['늘어난 돈', won0(last.nw - start), cls(last.nw - start)], ['그중 투자', won0(last.pnlCum), cls(last.pnlCum)]],
+      save: [['시작', compact(start)], ['모은 돈', won0(last.saveCum), cls(last.saveCum)], ['월평균', won0(last.saveCum / (pts.length - 1)), '']],
+    };
+    const tot = last.nw - start;
+    const wS = Math.max(0, last.saveCum), wP = Math.abs(last.pnlCum);
+    return `
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">우리 집 자산 성장</h2><span class="card-aside">${pts[0].label} → ${last.label}</span></div>
+        <div class="gw-hero num"><small>순자산</small><b>${compact(start)} → ${compact(last.nw)}</b><span class="${cls(tot)}">${won0(tot)}</span></div>
+        <div class="gw-split" aria-hidden="true"><i style="flex:${wS};background:var(--accent)"></i><i style="flex:${wP};background:${last.pnlCum >= 0 ? 'var(--up)' : 'var(--down)'}"></i></div>
+        <div class="gw-legend num">
+          <span><i style="background:var(--accent)"></i>모은 돈 (수입 − 지출) <b>${won0(last.saveCum)}</b></span>
+          <span><i style="background:${last.pnlCum >= 0 ? 'var(--up)' : 'var(--down)'}"></i>투자 손익 (실현) <b class="${cls(last.pnlCum)}">${won0(last.pnlCum)}</b></span>
+        </div>
+        <div class="legend">${series.map(s => `<span><i class="${s.solid ? '' : 'dash'}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
+        ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, valFmt: v => `${compact(v)}원`, meta })}
+        <p class="note">편한가계부 장부 기준(산 가격). 아직 안 판 종목의 평가손익 <b class="${cls(unreal)}">${won0(unreal)}원</b>은 빠져 있어요 → 반영하면 순자산 약 ${compact(last.nw + unreal)}원.</p>
+      </div>`;
+  }
+
+  // ② 같은 돈을 지수에 넣었다면: 매달 투자 계좌에 넣은 돈(순투입)으로 지수 ETF를 샀다고 가정
+  function indexSimCard() {
+    const D = state.data, H = D.household, idx = D.index || {};
+    const fx = idx.usdkrw || [];
+    const at = (arr, ds) => { let v = null; for (const [d, x] of arr) { if (d <= ds) v = x; else break; } return v ?? (arr[0] ? arr[0][1] : null); };
+    const ds = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const IDX = SERIES.filter(s => s.key !== 'mine' && (idx[s.key] || []).length > 1);
+    // 월말 평가금 기록이 있는 달은 실제 평가금 사용
+    const snap = {};
+    (D.monthly || []).forEach(r => {
+      const k = String(r['월']).slice(0, 7); if (String(r['종류']) === '기타') return;
+      snap[k] = (snap[k] || 0) + num(r['평가금(원)']);
+    });
+    const myNow = D.assets.filter(a => a.kind !== '기타').reduce((t, a) => t + a.value, 0);
+    const units = Object.fromEntries(IDX.map(s => [s.key, 0]));
+    let inv = 0;
+    const now = new Date();
+    const pts = H.map((h, i) => {
+      const end = monthEnd(h), d = ds(end > now ? now : end);
+      inv += h.flow;
+      const p = { label: ymLabel(h), inv };
+      IDX.forEach(s => {
+        const px = at(idx[s.key], d) * (s.usd ? at(fx, d) || 0 : 1);
+        if (px > 0) { units[s.key] += h.flow / px; p[s.key] = units[s.key] * px; }
+      });
+      const key = `${h.y}-${String(h.m).padStart(2, '0')}`;
+      const isLast = i === H.length - 1 && end >= new Date(now.getFullYear(), now.getMonth(), 1);
+      p.mine = isLast ? myNow : (snap[key] ?? h.book);
+      return p;
+    });
+    const last = pts.at(-1);
+    const series = [
+      { key: 'mine', label: '내 투자', color: 'var(--up)', solid: true },
+      ...IDX.map(s => ({ key: s.key, label: s.label, color: s.color })),
+      { key: 'inv', label: '넣은 돈', color: 'var(--ink-4)' },
+    ];
+    const r = v => (last.inv > 0 ? v / last.inv - 1 : null);
+    const meta = {};
+    series.forEach(s => {
+      const v = last[s.key];
+      meta[s.key] = s.key === 'inv'
+        ? [['넣은 돈', compact(v)], ['기간', `${pts[0].label}~`], ['', '']]
+        : [['지금', compact(v)], ['넣은 돈 대비', pct(r(v), 1), cls(r(v))], [s.key === 'mine' ? '손익' : '내 투자와 차이', won0(s.key === 'mine' ? v - last.inv : last.mine - v), cls(s.key === 'mine' ? v - last.inv : last.mine - v)]];
+    });
+    const rows = series.filter(s => s.key !== 'inv').map(s => ({ s, v: last[s.key] })).sort((a, b) => b.v - a.v);
+    return `
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">지수별 비교</h2><span class="card-aside">같은 돈을 넣었다면</span></div>
+        <div class="legend">${series.map(s => `<span><i class="${s.solid ? '' : 'dash'}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
+        ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, valFmt: v => `${compact(v)}원`, meta })}
+        <div class="sim-list num">
+          <div class="sim-row head"><span>넣은 돈 (${pts[0].label}~)</span><b>${won(last.inv)}</b></div>
+          ${rows.map(({ s, v }) => `<div class="sim-row ${s.key === 'mine' ? 'me' : ''}"><span><i style="background:${s.color}"></i>${s.key === 'mine' ? '내 투자 (지금 평가금)' : `${s.label}에 넣었다면`}</span>
+            <b>${compact(v)}원 <em class="${cls(r(v))}">${pct(r(v), 1)}</em></b></div>`).join('')}
+        </div>
+        <p class="note">매달 투자 계좌로 옮긴 돈(순투입)으로 그 달 말 지수 ETF(KODEX 200·SPY·QQQ)를 샀다고 가정해 원화로 계산했어요(환율 포함). 내 투자 선은 지난달까지 장부 기준(원금+실현손익)이고 마지막 점만 지금 평가금이에요. 월말 기록이 쌓이면 그 달부터는 실제 평가금으로 바뀌어요.
+        ${IDX.length ? '' : '<br>지수 선은 Apps Script를 새 버전으로 바꾸면 나타나요.'}</p>
+      </div>`;
+  }
+
+  function oldCumulativeCard() {
     const C = cumulativeSeries();
     if (!C) return '';
     const series = SERIES.filter(s => C.avail.has(s.key));
@@ -673,14 +782,14 @@
     const W = 340, H = 210, L = opt.L || 38, R = 8, T = 10, B = 22;
     const fmt = opt.fmt || (v => `${Math.round(v * 100)}%`);
     const vals = pts.flatMap(p => series.map(s => p[s.key]).filter(v => Number.isFinite(v)));
-    let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+    let lo = opt.noZero ? Math.min(...vals) : Math.min(0, ...vals), hi = opt.noZero ? Math.max(...vals) : Math.max(0, ...vals);
     const padV = (hi - lo) * 0.08 || 0.05; lo -= padV; hi += padV;
     const X = i => L + (W - L - R) * (pts.length > 1 ? i / (pts.length - 1) : 0);
     const Y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
     const ticks = [0, 1, 2, 3].map(i => lo + (hi - lo) * i / 3);
     const grid = ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-dasharray="3 4"/>
       <text x="${L - 6}" y="${Y(v) + 3}" text-anchor="end">${fmt(v)}</text>`).join('');
-    const zero = `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--ink-4)" stroke-width="1"/>`;
+    const zero = opt.noZero ? '' : `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--ink-4)" stroke-width="1"/>`;
     const step = Math.max(1, Math.ceil(pts.length / 6));
     const xl = pts.map((p, i) => (i % step === 0 || i === pts.length - 1) && !(i !== pts.length - 1 && pts.length - 1 - i < step / 2)
       ? `<text x="${X(i)}" y="${H - 4}" text-anchor="middle">${p.label}</text>` : '').join('');
