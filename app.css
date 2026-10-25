@@ -571,3 +571,24 @@ button.sum-chip { width: 100%; }
 .sd-bar i { display: block; height: 100%; border-radius: 4px; }
 .sd-month b { font-size: 14.5px; font-weight: 800; }
 .sd-month small { grid-column: 2 / 4; font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+
+/* v13: 홈 좌우 넘김 + 월별 펼침 */
+.pager-dots { display: flex; justify-content: center; gap: 6px; margin: 2px 0 8px; }
+.pager-dots button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 6px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; color: var(--ink-4); font-variant-numeric: tabular-nums; }
+.pager-dots button i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .6; transition: width .2s ease; }
+.pager-dots button.on { color: var(--ink); background: var(--fill); }
+.pager-dots button.on i { width: 16px; border-radius: 4px; background: var(--accent); opacity: 1; }
+.pager { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; align-items: flex-start; transition: height .25s ease; overscroll-behavior-x: contain; }
+.pager::-webkit-scrollbar { display: none; }
+.page { flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; }
+.page > .card { margin-bottom: 0; }
+.sd-month-wrap { border-top: 1px solid var(--fill); }
+.sd-month-wrap:first-of-type { border-top: 0; }
+button.sd-month { width: 100%; border: 0; background: none; color: inherit; text-align: left; border-top: 0; cursor: pointer; }
+.sd-chev { display: inline-block; margin-left: 6px; font-weight: 700; transition: transform .2s ease; }
+.sd-month.open .sd-chev { transform: rotate(90deg); }
+.sd-month.open { background: none; }
+.sd-trades { background: var(--fill); border-radius: 12px; padding: 2px 12px; margin: 0 0 10px; }
+.sd-trades .trade { font-size: 13.5px; padding: 10px 0; border-top-color: var(--line); }
+.basis-tag { font-style: normal; font-size: 11px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 6px; padding: 1px 5px; margin-left: 4px; white-space: nowrap; }
+.pager { margin-bottom: 12px; }

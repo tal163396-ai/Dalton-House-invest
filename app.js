@@ -155,16 +155,12 @@
     const thisYear = new Date().getFullYear();
     const rzYear = D.realized.filter(r => r.year === thisYear).reduce((s, r) => s + r.amount, 0);
     $('#view-home').innerHTML = `
-      <div class="card sum-card">
-        <div class="total-label">총 자산</div>
-        <div class="total-value num">${won(T.value)}</div>
-        <div class="sum-chips num">
-          <button class="mini sum-chip" data-stat="pl"><span>평가손익</span><b class="${cls(T.pl)}">${compactSigned(T.pl)} (${pct(T.ret, 1)})</b></button>
-          <button class="mini sum-chip" data-stat="rz"><span>${thisYear}년 실현</span><b class="${cls(rzYear)}">${compactSigned(rzYear)}</b></button>
-          <button class="mini sum-chip" data-stat="cost"><span>원금</span><b>${compact(T.cost)}</b></button>
-          <button class="mini sum-chip" data-stat="count"><span>자산</span><b>${D.assets.length}개</b></button>
-        </div>
+      <div class="pager-dots" role="tablist" aria-label="포트폴리오 화면">
+        <button role="tab" data-p="0" class="on"><i></i>자산 구성</button>
+        <button role="tab" data-p="1"><i></i>총 자산 ${compact(T.value)}원</button>
       </div>
+      <div class="pager" id="pager">
+      <div class="page">
       <div class="card plan-card">
         <div class="card-head">
           <h2 class="card-title">자산 구성</h2>
@@ -187,6 +183,20 @@
             ? `<span class="scale" aria-hidden="true">−30%<i style="background:${retColor(-0.3)}"></i><i style="background:${retColor(-0.1)}"></i><i style="background:${retColor(0)}"></i><i style="background:${retColor(0.1)}"></i><i style="background:${retColor(0.3)}"></i>+30%</span>`
             : ''}
         </div>
+      </div>
+      </div>
+      <div class="page">
+      <div class="card sum-card">
+        <div class="total-label">총 자산</div>
+        <div class="total-value num">${won(T.value)}</div>
+        <div class="sum-chips num">
+          <button class="mini sum-chip" data-stat="pl"><span>평가손익</span><b class="${cls(T.pl)}">${compactSigned(T.pl)} (${pct(T.ret, 1)})</b></button>
+          <button class="mini sum-chip" data-stat="rz"><span>${thisYear}년 실현</span><b class="${cls(rzYear)}">${compactSigned(rzYear)}</b></button>
+          <button class="mini sum-chip" data-stat="cost"><span>원금</span><b>${compact(T.cost)}</b></button>
+          <button class="mini sum-chip" data-stat="count"><span>자산</span><b>${D.assets.length}개</b></button>
+        </div>
+      </div>
+      </div>
       </div>`;
     $$('#view-home .mini').forEach(b => b.onclick = () => openStat(b.dataset.stat));
     $$('#modeSeg button').forEach(b => b.onclick = () => {
@@ -196,6 +206,26 @@
       state.basis = b.dataset.basis; store.set('dh_basis', state.basis); renderHome();
     });
     drawPlan();
+    bindPager();
+  }
+
+  // 홈: 자산 구성(트리맵) ↔ 총 자산 좌우로 넘기기
+  let fitPager = () => {};
+  function bindPager() {
+    const pager = $('#pager'), dots = $$('.pager-dots button');
+    if (!pager) return;
+    const pages = $$('.page', pager);
+    const idx = () => Math.round(pager.scrollLeft / (pager.clientWidth || 1));
+    const fit = () => {
+      const i = idx();
+      dots.forEach((d, j) => { d.classList.toggle('on', j === i); d.setAttribute('aria-selected', String(j === i)); });
+      pager.style.height = `${pages[i].offsetHeight}px`;
+    };
+    let t;
+    pager.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(fit, 60); }, { passive: true });
+    dots.forEach(d => d.onclick = () => pager.scrollTo({ left: Number(d.dataset.p) * pager.clientWidth, behavior: 'smooth' }));
+    fitPager = fit;
+    requestAnimationFrame(fit);
   }
 
   // 홈 요약 칸을 누르면 상세 팝업
@@ -310,6 +340,7 @@
     });
     el.innerHTML = html;
     $$('.tile', el).forEach(b => b.onclick = () => openAsset(b.dataset.asset));
+    fitPager();
   }
 
   function shortName(name, w, fs) {
@@ -488,6 +519,8 @@
     const rzYear = rz.filter(r => r.year === thisYear).reduce((s, r) => s + r.amount, 0);
     const rzAll = rz.reduce((s, r) => s + r.amount, 0);
     const recent = rz.slice().sort((p, q) => q.date - p.date).slice(0, 6);
+    // 비중: 포트폴리오에서 고른 기준(원금/평가금)을 따름
+    const share = state.basis === 'cost' ? (D.total.cost > 0 ? a.cost / D.total.cost : 0) : a.weight;
 
     const holdings = a.rows.map(r => {
       const isCash = /예수금/.test(r.sub) || r.method.startsWith('수동');
@@ -513,7 +546,7 @@
         <div><div class="stat-label">원금</div><div class="stat-value">${won(a.cost)}</div></div>
         <div><div class="stat-label">평가손익</div><div class="stat-value ${cls(a.pl)}">${signWon(a.pl)}</div></div>
         <div><div class="stat-label">수익률</div><div class="stat-value ${cls(a.ret)}">${pct(a.ret)}</div></div>
-        <div><div class="stat-label">전체 중 비중</div><div class="stat-value">${(a.weight * 100).toFixed(1)}%</div></div>
+        <div><div class="stat-label">전체 중 비중 <em class="basis-tag">${state.basis === 'cost' ? '원금' : '평가금'} 기준</em></div><div class="stat-value">${(share * 100).toFixed(1)}%</div></div>
         <div><div class="stat-label">${thisYear}년 실현손익</div><div class="stat-value ${cls(rzYear)}">${signWon(rzYear)}</div></div>
       </div>
       <h3 class="section-title">보유 내역</h3>
@@ -886,7 +919,7 @@
     const key = r => (y === 'all' ? `${String(r.year).slice(2)}.${String(r.month).padStart(2, '0')}` : `${r.month}월`);
     const months = [...groupBy(list, key)].map(([k, x]) => ({
       k, amt: x.reduce((t, r) => t + r.amount, 0), g: x.filter(r => r.amount > 0).length, l: x.filter(r => r.amount < 0).length,
-      order: x[0].year * 100 + x[0].month,
+      order: x[0].year * 100 + x[0].month, items: x,
     })).sort((a, b) => a.order - b.order);
     const mx = Math.max(...months.map(x => Math.abs(x.amt)), 1);
     const cells = [
@@ -903,13 +936,18 @@
       </div>
       <div class="pop-list">
         <div class="ro-cells sd-cells num">${cells.map(([a, b, c]) => `<div><small>${esc(a)}</small><b class="${c}">${esc(b)}</b></div>`).join('')}</div>
-        ${months.length ? `<h3 class="section-title">월별 실현손익</h3>
-          ${months.map(x => `<div class="sd-month num">
-            <span class="sd-m">${esc(x.k)}</span>
-            <span class="sd-bar" aria-hidden="true"><i style="width:${Math.max(2, Math.abs(x.amt) / mx * 100)}%;background:${x.amt >= 0 ? 'var(--bar-up)' : 'var(--down)'}"></i></span>
-            <b class="${cls(x.amt)}">${compactSigned(x.amt)}</b>
-            <small>${x.g ? `익절 ${x.g}` : ''}${x.g && x.l ? ' · ' : ''}${x.l ? `손절 ${x.l}` : ''}</small>
-          </div>`).join('')}` : ''}
+        ${months.length ? `<h3 class="section-title">월별 실현손익 <span class="note">월을 누르면 거래 건</span></h3>
+          ${months.map((x, i) => `<div class="sd-month-wrap">
+            <button class="sd-month num" data-i="${i}" aria-expanded="false">
+              <span class="sd-m">${esc(x.k)}</span>
+              <span class="sd-bar" aria-hidden="true"><i style="width:${Math.max(2, Math.abs(x.amt) / mx * 100)}%;background:${x.amt >= 0 ? 'var(--bar-up)' : 'var(--down)'}"></i></span>
+              <b class="${cls(x.amt)}">${compactSigned(x.amt)}</b>
+              <small>${x.g ? `익절 ${x.g}` : ''}${x.g && x.l ? ' · ' : ''}${x.l ? `손절 ${x.l}` : ''}<span class="sd-chev" aria-hidden="true">›</span></small>
+            </button>
+            <div class="sd-trades" hidden>
+              ${x.items.slice().sort((a, b) => b.date - a.date).map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)}${isKind ? ` · ${esc(r.sub || r.asset)}` : ''}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}
+            </div>
+          </div>`).join('')}` : '<p class="empty">이 기간에는 실현손익 기록이 없어요.</p>'}
         ${hold.length ? `<h3 class="section-title">지금 보유 <span class="note">${compact(hVal)}원 · 원금 ${compact(hCost)}원</span></h3>
           ${hold.map(r => {
             const ret = r.avg > 0 && r.price > 0 && isTradable(r) ? (r.price - r.avg) / r.avg : (r.cost > 0 ? (r.value - r.cost) / r.cost : null);
@@ -918,11 +956,13 @@
               <div class="stat-row-sub num">${r.qty && isTradable(r) ? `${r.qty.toLocaleString('ko-KR')}주 · ` : ''}원금 ${compact(r.cost)}원 · <span class="${cls(ret)}">${pct(ret, 1)}</span></div>
             </button>`;
           }).join('')}` : ''}
-        <h3 class="section-title">거래 ${list.length}건</h3>
-        ${list.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(isKind ? (r.sub || r.asset) : r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('') || '<p class="empty">이 기간에는 실현손익 기록이 없어요.</p>'}
       </div>
       <button class="btn pop-close" data-close>닫기</button>`, 'pop');
     $$('#sheetBody .stat-row[data-asset]').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
+    $$('#sheetBody .sd-month').forEach(b => b.onclick = () => {
+      const box = b.nextElementSibling, open = box.hidden;
+      box.hidden = !open; b.setAttribute('aria-expanded', String(open)); b.classList.toggle('open', open);
+    });
   }
 
   function renderOneYear(y) {
