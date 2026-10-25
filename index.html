@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dalton House</title>
+<meta name="description" content="준환·나예 가족 투자 자산 현황">
+<meta name="theme-color" content="#141A21">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dalton House">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="app.css?v=1">
+</head>
+<body>
+
+<div id="login" class="login" hidden>
+  <form id="loginForm" class="login-card" autocomplete="on">
+    <img src="icons/icon-192.png" alt="" class="login-icon" width="72" height="72">
+    <h1 class="nameplate">Dalton House</h1>
+    <p class="login-sub">우리 집 투자 현황</p>
+    <label class="field">
+      <span>누가 보나요?</span>
+      <div class="chips" id="nameChips">
+        <button type="button" class="chip" data-name="준환">준환</button>
+        <button type="button" class="chip" data-name="나예">나예</button>
+      </div>
+    </label>
+    <label class="field">
+      <span>비밀번호</span>
+      <input id="pwInput" type="password" inputmode="text" autocomplete="current-password" required>
+    </label>
+    <p id="loginError" class="form-error" role="alert"></p>
+    <button class="btn primary" type="submit" id="loginBtn">들어가기</button>
+  </form>
+</div>
+
+<div id="app" class="app" hidden>
+  <header class="topbar">
+    <div class="brand">
+      <span class="nameplate small">Dalton House</span>
+      <span id="updated" class="updated"></span>
+    </div>
+    <button id="refreshBtn" class="icon-btn" aria-label="새로고침">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+    </button>
+    <button id="menuBtn" class="icon-btn" aria-label="설정">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/></svg>
+    </button>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main>
+    <section id="view-home" class="view" aria-label="포트폴리오"></section>
+    <section id="view-assets" class="view" aria-label="자산별" hidden></section>
+    <section id="view-years" class="view" aria-label="월별·연도별" hidden></section>
+    <section id="view-record" class="view" aria-label="기록" hidden></section>
+  </main>
+
+  <nav class="tabbar" aria-label="화면 이동">
+    <button class="tab active" data-view="home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7v9H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 20v-6h6v6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      <span>포트폴리오</span>
+    </button>
+    <button class="tab" data-view="assets">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>자산별</span>
+    </button>
+    <button class="tab" data-view="years">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>월별·연도별</span>
+    </button>
+    <button class="tab" data-view="record">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>기록</span>
+    </button>
+  </nav>
+</div>
+
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-handle" data-close></div>
+    <div id="sheetBody"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="config.js?v=1"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
