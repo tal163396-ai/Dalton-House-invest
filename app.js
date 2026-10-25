@@ -335,7 +335,7 @@
       hero = { t: `${y}년 실현손익`, v: signWon(sum), c: sum >= 0 ? 'gain' : 'loss',
         s: `<span class="hero-btns"><button class="hero-btn" data-rz="gain">익절 ${g.length}건 ${compactSigned(g.reduce((t, r) => t + r.amount, 0))} ›</button><button class="hero-btn" data-rz="loss">손절 ${l.length}건 ${compactSigned(l.reduce((t, r) => t + r.amount, 0))} ›</button></span>` };
       list = ks.map(k => row(k.k, `익절 ${k.g} · 손절 ${k.l} · 누르면 거래 내역`, signWon(k.amt), cls(k.amt), Math.abs(k.amt) / mx, k.amt >= 0 ? 'var(--bar-up)' : 'var(--down)', `data-rzkind="${esc(k.k)}"`)).join('')
-        + `<button class="link-btn" id="goYears">수익률 탭에서 자세히 보기</button>`;
+        + `<button class="link-btn" id="goYears">월간·연간 손익 추이 보기 ›</button>`;
     } else if (type === 'cost') {
       const ks = [...groupBy(D.assets, a => a.kind)].map(([k, l]) => ({ k, c: l.reduce((t, a) => t + a.cost, 0), v: l.reduce((t, a) => t + a.value, 0) })).sort((a, b) => b.c - a.c);
       hero = { t: '투자원금', v: won(T.cost), s: `지금 평가금 ${won(T.value)}`, c: 'neutral' };
@@ -353,7 +353,7 @@
       </div>
       <div class="pop-list">${list}</div>
       <button class="btn pop-close" data-close>닫기</button>`, 'pop');
-    const g = $('#goYears'); if (g) g.onclick = () => { closeSheet(); state.year = y; renderYears(); go('years'); };
+    const g = $('#goYears'); if (g) g.onclick = () => { closeSheet(); state.year = y; state.yPage = 1; sess.set('dh_ypage', 1); renderYears(); go('years'); };
     $$('#sheetBody .stat-chip, #sheetBody .stat-row[data-asset]').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
     $$('#sheetBody .stat-row[data-kind]').forEach(b => b.onclick = () => openKind(b.dataset.kind));
     $$('#sheetBody [data-rz]').forEach(b => b.onclick = () => openRzList(b.dataset.rz === 'gain' ? r => r.amount > 0 : r => r.amount < 0, b.dataset.rz === 'gain' ? '익절' : '손절'));
