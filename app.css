@@ -753,3 +753,5 @@ body { word-break: keep-all; overflow-wrap: anywhere; }
 .kasset .row > span:first-child { min-width: 0; }
 .kasset .row-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kasset .row-name + br { display: none; }
+.note .one-line { display: block; white-space: nowrap; letter-spacing: -0.02em; }
+.page { min-width: 0; max-width: 100%; } .page > .card { min-width: 0; overflow: hidden; } .note:has(.one-line) { overflow: hidden; }

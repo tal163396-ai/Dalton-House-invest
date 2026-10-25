@@ -684,7 +684,17 @@
     bindCompare(body);
     bindBars(body);
     bindLines(body);
+    requestAnimationFrame(() => fitOneLine(body));
     $$('#fxSeg button', body).forEach(b => b.onclick = () => { state.fx = b.dataset.fx === '1'; store.set(LS.fx, state.fx ? '1' : '0'); keepScroll(renderYearBody); });
+  }
+
+  // 한 줄 문장: 폭에 맞을 때까지 글자 크기를 줄임
+  function fitOneLine(root) {
+    $$('.one-line', root).forEach(e => {
+      const box = e.parentElement; if (!box.clientWidth) return;
+      let fs = 13; e.style.fontSize = `${fs}px`;
+      while (e.scrollWidth > box.clientWidth && fs > 9.5) { fs -= 0.25; e.style.fontSize = `${fs}px`; }
+    });
   }
 
   const keepScroll = fn => { const y = window.scrollY; fn(); window.scrollTo({ top: y }); };
@@ -761,7 +771,7 @@
     const unreal = D.total.pl;
     const series = [
       { key: 'nw', label: '순자산', color: 'var(--up)', solid: true },
-      { key: 'save', label: '투자 없이 모은 돈만', color: 'var(--ink-4)' },
+      { key: 'save', label: '저축만 했을 때', color: 'var(--ink-4)' },
     ];
     const meta = {
       nw: [['시작', compact(start)], ['늘어난 돈', won0(last.nw - start), cls(last.nw - start)], ['그중 투자', won0(last.pnlCum), cls(last.pnlCum)]],
@@ -780,7 +790,7 @@
         </div>
         <div class="legend">${series.map(s => `<span><i class="${s.key === 'inv' || s.key === 'save' ? 'dash' : ''}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
         ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, areaKey: 'nw', tagFmt: v => compact(v), valFmt: v => `${compact(v)}원`, meta })}
-        <p class="note"><span class="nb">매도하지 않은 자산의</span> <span class="nb">평가손익 <b class="${cls(unreal)}">${won0(unreal)}원</b>은 제외되었습니다.</span><br>→ 반영 시 순자산 약 ${compact(last.nw + unreal)}원</p>
+        <p class="note"><span class="nb one-line">매도하지 않은 자산의 평가손익 <b class="${cls(unreal)}">${won0(unreal)}원</b>은 제외되었습니다.</span>→ 반영 시 순자산 약 ${compact(last.nw + unreal)}원</p>
       </div>`;
   }
 
@@ -1507,10 +1517,10 @@
 
   /* ── 기록 ── */
   const TYPE_HELP = {
-    '매수': '주식·코인을 샀을 때. 수량과 평단이 바뀌고, 연결된 예수금에서 차감됩니다.',
-    '매도': '팔았을 때. 실현손익(익절·손절)이 자동 계산되어 월별 수익에 반영됩니다.',
-    '입금': '계좌에 새 돈을 넣었을 때 (예: 월급에서 ISA로 이체). 원금과 예수금이 함께 늘어나 수익으로 잘못 잡히지 않습니다.',
-    '출금': '계좌에서 돈을 뺐을 때. 원금과 예수금이 함께 줄어듭니다.',
+    '매수': '주식·코인을 샀을 때. 수량과 평단이 바뀌고,<br>연결된 예수금에서 차감됩니다.',
+    '매도': '팔았을 때.<br>실현손익(익절·손절)이 자동 계산되어 월별 수익에 반영됩니다.',
+    '입금': '계좌에 새 돈을 넣었을 때 (예: 월급에서 ISA로 이체).<br>원금과 예수금이 함께 늘어나 수익으로 잘못 잡히지 않습니다.',
+    '출금': '계좌에서 돈을 뺐을 때.<br>원금과 예수금이 함께 줄어듭니다.',
     '금액 수정': '예수금·금·현용주화처럼 직접 관리하는 금액을 지금 값으로 맞출 때.',
   };
 
@@ -1683,7 +1693,7 @@
     return `
       <div class="card mc-card">
         <div class="card-head"><h2 class="card-title">월 마감</h2><span class="card-aside">마지막 저장 ${String(last.y).slice(2)}.${last.m}</span></div>
-        <p class="help">매달 한 번, 편한가계부 <b>자산 → 전체통계</b> 화면의 숫자 3개를 그대로 입력하십시오. 투자손익과 넣은 돈은 앱 기록으로 자동 계산됩니다.</p>
+        <p class="help">매달 한 번, 편한가계부 <b>자산 → 전체통계</b><br>화면의 숫자 3개를 그대로 입력하십시오.<br>투자손익과 넣은 돈은 앱 기록으로 자동 계산됩니다.</p>
         <div class="form">
           <label class="field"><span>마감할 달</span><input type="month" id="mcMonth" value="${y}-${String(m).padStart(2, '0')}"></label>
           <label class="field"><span>누적잔액</span><input id="mcNw" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="예: 285,322,041" value="${fmtComma(v('nw'))}"></label>
@@ -1695,7 +1705,7 @@
             <div><small>실현손익 ${C.kept ? '(저장된 값)' : '(앱 기록)'}</small><b class="${cls(C.pnl)}">${signWon(C.pnl)}</b></div>
             <div><small>넣은 돈 ${C.kept ? '(저장된 값)' : '(앱 입금−출금)'}</small><b>${signWon(C.flow)}</b></div>
           </div>
-          <p class="note" style="margin:0">수입에서 그 달 익절(${compact(C.gains)}원)은 빼고 저장합니다. ${C.saved ? '<b>이미 저장된 달입니다. 누적잔액·수입·지출만 수정합니다.</b>' : ''}</p>
+          <p class="note" style="margin:0">수입에서 그 달 익절(${compact(C.gains)}원)은 빼고 저장합니다.${C.saved ? '<br><b>이미 저장된 달입니다. 누적잔액·수입·지출만 수정합니다.</b>' : ''}</p>
           <p id="mcErr" class="form-error" role="alert"></p>
           <button class="btn primary" id="mcSave">${y}년 ${m}월 마감 저장</button>
         </div>
@@ -1786,7 +1796,7 @@
     $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
     window.scrollTo({ top: 0 });
     if (view === 'home') drawPlan();
-    if (view === 'years') yPagerApi.align(state.yPage || 0);
+    if (view === 'years') { fitOneLine($('#view-years')); yPagerApi.align(state.yPage || 0); }
   }
 
   function openSheet(html, mode = '') {
