@@ -16,6 +16,7 @@
     data: null,
     view: 'home',
     mode: store.get(LS.mode) || 'weight',
+    basis: store.get('dh_basis') === 'cost' ? 'cost' : 'value',
     sort: store.get(LS.sort) || 'cost',
     sortDir: store.get('dh_sortdir') === 'asc' ? 'asc' : 'desc',
     fx: store.get(LS.fx) === '1',
@@ -167,22 +168,32 @@
       <div class="card plan-card">
         <div class="card-head">
           <h2 class="card-title">자산 구성</h2>
-          <div class="seg" role="group" aria-label="표시 방식">
+          <div class="seg" id="basisSeg" role="group" aria-label="크기 기준">
+            <button data-basis="cost" class="${state.basis === 'cost' ? 'on' : ''}">원금</button>
+            <button data-basis="value" class="${state.basis === 'value' ? 'on' : ''}">평가금</button>
+          </div>
+        </div>
+        <div class="plan-tools">
+          <span class="plan-tools-label">색</span>
+          <div class="seg sm" id="modeSeg" role="group" aria-label="색 기준">
             <button data-mode="weight" class="${state.mode === 'weight' ? 'on' : ''}">비중</button>
             <button data-mode="return" class="${state.mode === 'return' ? 'on' : ''}">수익률</button>
           </div>
         </div>
         <div class="plan" id="plan" role="group" aria-label="자산 트리맵"></div>
         <div class="plan-legend">
-          <span>크기는 평가금, 칸을 누르면 자세히</span>
+          <span>크기·비중은 ${state.basis === 'cost' ? '원금' : '평가금'} 기준, 칸을 누르면 자세히</span>
           ${state.mode === 'return'
             ? `<span class="scale" aria-hidden="true">−30%<i style="background:${retColor(-0.3)}"></i><i style="background:${retColor(-0.1)}"></i><i style="background:${retColor(0)}"></i><i style="background:${retColor(0.1)}"></i><i style="background:${retColor(0.3)}"></i>+30%</span>`
             : ''}
         </div>
       </div>`;
     $$('#view-home .mini').forEach(b => b.onclick = () => openStat(b.dataset.stat));
-    $$('#view-home .seg button').forEach(b => b.onclick = () => {
+    $$('#modeSeg button').forEach(b => b.onclick = () => {
       state.mode = b.dataset.mode; store.set(LS.mode, state.mode); renderHome();
+    });
+    $$('#basisSeg button').forEach(b => b.onclick = () => {
+      state.basis = b.dataset.basis; store.set('dh_basis', state.basis); renderHome();
     });
     drawPlan();
   }
@@ -206,12 +217,12 @@
     } else if (type === 'rz') {
       const rz = D.realized.filter(r => r.year === y);
       const sum = rz.reduce((t, r) => t + r.amount, 0);
-      const ks = [...groupBy(rz, r => r.kind)].map(([k, l]) => ({ k, amt: l.reduce((t, r) => t + r.amount, 0), n: l.length })).sort((a, b) => b.amt - a.amt);
+      const ks = [...groupBy(rz, r => r.kind)].map(([k, l]) => ({ k, amt: l.reduce((t, r) => t + r.amount, 0), n: l.length, g: l.filter(r => r.amount > 0).length, l: l.filter(r => r.amount < 0).length })).sort((a, b) => b.amt - a.amt);
       const mx = Math.max(...ks.map(k => Math.abs(k.amt)), 1);
       const g = rz.filter(r => r.amount > 0), l = rz.filter(r => r.amount < 0);
       hero = { t: `${y}년 실현손익`, v: signWon(sum), c: sum >= 0 ? 'gain' : 'loss',
         s: `<span class="hero-btns"><button class="hero-btn" data-rz="gain">익절 ${g.length}건 ${compactSigned(g.reduce((t, r) => t + r.amount, 0))} ›</button><button class="hero-btn" data-rz="loss">손절 ${l.length}건 ${compactSigned(l.reduce((t, r) => t + r.amount, 0))} ›</button></span>` };
-      list = ks.map(k => row(k.k, `${k.n}건 · 누르면 거래 내역`, signWon(k.amt), cls(k.amt), Math.abs(k.amt) / mx, k.amt >= 0 ? 'var(--bar-up)' : 'var(--down)', `data-rzkind="${esc(k.k)}"`)).join('')
+      list = ks.map(k => row(k.k, `익절 ${k.g} · 손절 ${k.l} · 누르면 거래 내역`, signWon(k.amt), cls(k.amt), Math.abs(k.amt) / mx, k.amt >= 0 ? 'var(--bar-up)' : 'var(--down)', `data-rzkind="${esc(k.k)}"`)).join('')
         + `<button class="link-btn" id="goYears">수익률 탭에서 자세히 보기</button>`;
     } else if (type === 'cost') {
       const ks = [...groupBy(D.assets, a => a.kind)].map(([k, l]) => ({ k, c: l.reduce((t, a) => t + a.cost, 0), v: l.reduce((t, a) => t + a.value, 0) })).sort((a, b) => b.c - a.c);
@@ -263,27 +274,32 @@
     const W = el.clientWidth;
     const H = Math.round(Math.min(W * 1.32, 640));
     el.style.height = `${H}px`;
-    const kindItems = [...groupBy(D.assets.filter(a => a.value > 0), a => a.kind)]
-      .map(([k, list]) => ({ k, list, v: list.reduce((s, a) => s + a.value, 0) }))
+    // 크기 기준: 원금 또는 평가금
+    const byCost = state.basis === 'cost';
+    const sz = a => (byCost ? a.cost : a.value);
+    const base = byCost ? D.total.cost : D.total.value;
+    const wt = a => (base > 0 ? sz(a) / base : 0);
+    const kindItems = [...groupBy(D.assets.filter(a => sz(a) > 0), a => a.kind)]
+      .map(([k, list]) => ({ k, list, v: list.reduce((s, a) => s + sz(a), 0) }))
       .sort((a, b) => b.v - a.v);
     const rooms = squarify(kindItems, { x: 0, y: 0, w: W, h: H });
-    const maxW = Math.max(...D.assets.map(a => a.weight));
+    const maxW = Math.max(...D.assets.map(wt));
     const GAP = 3;
     let html = '';
     rooms.forEach(room => {
       const showLabel = room.h > 58 && room.w > 64;
       const top = showLabel ? 20 : 0;
       const kv = room.list.reduce((s, a) => ({ c: s.c + a.cost, v: s.v + a.value }), { c: 0, v: 0 });
-      const kindTip = state.mode === 'weight' ? `${(kv.v / D.total.value * 100).toFixed(1)}%` : pct(kv.c > 0 ? (kv.v - kv.c) / kv.c : null, 1);
+      const kindTip = state.mode === 'weight' ? `${((byCost ? kv.c : kv.v) / base * 100).toFixed(1)}%` : pct(kv.c > 0 ? (kv.v - kv.c) / kv.c : null, 1);
       html += `<div class="room" style="left:${room.x}px;top:${room.y}px;width:${room.w}px;height:${room.h}px">`;
       if (showLabel) html += `<div class="room-label">${esc(room.k)}<span>${kindTip}</span></div>`;
       const inner = { x: 0, y: top, w: room.w, h: room.h - top };
-      squarify(room.list.map(a => ({ a, v: a.value })).sort((p, q) => q.v - p.v), inner).forEach(t => {
+      squarify(room.list.filter(a => sz(a) > 0).map(a => ({ a, v: sz(a) })).sort((p, q) => q.v - p.v), inner).forEach(t => {
         const a = t.a;
         const w = Math.max(t.w - GAP, 0), h = Math.max(t.h - GAP, 0);
-        const bg = state.mode === 'weight' ? weightColor(a.weight / (maxW || 1)) : retColor(a.ret ?? 0);
+        const bg = state.mode === 'weight' ? weightColor(wt(a) / (maxW || 1)) : retColor(a.ret ?? 0);
         const fs = Math.max(10, Math.min(26, Math.sqrt(w * h) / 5.8));
-        const label = state.mode === 'weight' ? `${(a.weight * 100).toFixed(1)}%` : pct(a.ret, 1);
+        const label = state.mode === 'weight' ? `${(wt(a) * 100).toFixed(1)}%` : pct(a.ret, 1);
         html += `<button class="tile" data-asset="${esc(a.name)}" aria-label="${esc(a.name)} ${label}"
           style="left:${t.x + GAP / 2}px;top:${t.y + GAP / 2}px;width:${w}px;height:${h}px;background:${bg}">
           ${w > 30 && h > 20 ? `<span class="tile-name" style="font-size:${fs}px">${esc(shortName(a.name, w, fs))}</span>` : ''}
@@ -651,7 +667,7 @@
       series: series.map(s => ({ key: s.key, label: s.label, color: s.color, meta: (opt.meta || {})[s.key] || null, vals: pts.map(p => p[s.key]), ys: pts.map(p => Number.isFinite(p[s.key]) ? +Y(p[s.key]).toFixed(1) : null), fmt: pts.map(p => Number.isFinite(p[s.key]) ? valFmt(p[s.key]) : '—') })),
     };
     const hits = series.map(s => `<polyline class="hit" data-k="${s.key}" points="${ptsOf(s)}" fill="none" stroke="transparent" stroke-width="20" stroke-linejoin="round"/>`).join('');
-    return `<div class="line-wrap" data-info='${esc(JSON.stringify(info))}'>
+    return `<div class="line-wrap" ${opt.detail ? 'data-detail="1"' : ''} data-info='${esc(JSON.stringify(info))}'>
       <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="비교 그래프. 선을 누르면 이름과 금액이 나와요">${grid}${zero}${lines}${dot}${xl}${hits}
         <circle class="pick-dot" r="5" stroke="var(--card)" stroke-width="2" style="display:none" cx="0" cy="0"/></svg>
       <div class="line-readout num">선을 누르면 자세한 내용이 나와요</div>
@@ -759,7 +775,7 @@
         </div>
         ${sel.length ? `
           <div class="cmp-label">${yearLabel} 누적 실현손익</div>
-          ${lineChart(pts, series, { L: 46, fmt: v => compactSigned(v), noDot: true, interactive: true, valFmt: v => `${compactSigned(v)}원`,
+          ${lineChart(pts, series, { L: 46, fmt: v => compactSigned(v), noDot: true, interactive: true, detail: true, valFmt: v => `${compactSigned(v)}원`,
             meta: Object.fromEntries(sel.map((n, i) => { const m = M[n]; return [`c${i}`, y === 'all'
               ? [['누적 실현', compactSigned(m.amt), cls(m.amt)], [`${ty}년`, m.thisYear ? compactSigned(m.thisYear) : '—', cls(m.thisYear)], ['지금 수익률', m.value > 0 ? pct(m.ret, 1) : '보유 없음', cls(m.ret)]]
               : [[`${y}년 실현`, m.amt ? compactSigned(m.amt) : '—', cls(m.amt)], ['기준원금 대비', pct(m.baseRet, 1), cls(m.baseRet)], ['지금 수익률', m.value > 0 ? pct(m.ret, 1) : '보유 없음', cls(m.ret)]]]; })) })}
@@ -837,17 +853,76 @@
         const dot = $('.pick-dot', svg);
         dot.setAttribute('cx', info.xs[i]); dot.setAttribute('cy', s.ys[i]); dot.setAttribute('fill', s.color); dot.style.display = '';
         ro.innerHTML = `<div class="ro-top"><i style="background:${s.color}"></i><b>${esc(s.label)}</b><span>${esc(info.labels[i])}</span><b class="${cls(v)}">${esc(s.fmt[i])}</b></div>
-          ${s.meta ? `<div class="ro-cells">${s.meta.map(([l, t, c]) => `<div><small>${esc(l)}</small><b class="${c}">${esc(t)}</b></div>`).join('')}</div>` : ''}`;
+          ${s.meta ? `<div class="ro-cells">${s.meta.map(([l, t, c]) => `<div><small>${esc(l)}</small><b class="${c}">${esc(t)}</b></div>`).join('')}</div>` : ''}
+          ${wrap.dataset.detail ? `<div class="ro-more">눌러서 거래·월별·보유 자세히 보기 ›</div>` : ''}`;
         ro.style.setProperty('--c', s.color);
         ro.classList.add('on');
+        if (wrap.dataset.detail) {
+          ro.classList.add('tap'); ro.setAttribute('role', 'button'); ro.tabIndex = 0;
+          ro.onclick = () => openSeriesDetail(s.label, s.color);
+          ro.onkeydown = ev => { if (ev.key === 'Enter') openSeriesDetail(s.label, s.color); };
+        }
       });
       svg.addEventListener('click', e => {
         if (e.target.classList.contains('hit')) return;
         $$('.ln', svg).forEach(l => l.classList.remove('dim'));
         $('.pick-dot', svg).style.display = 'none';
-        ro.classList.remove('on'); ro.innerHTML = '선을 누르면 자세한 내용이 나와요';
+        ro.classList.remove('on', 'tap'); ro.onclick = null; ro.onkeydown = null; ro.removeAttribute('role'); ro.removeAttribute('tabindex');
+        ro.innerHTML = '선을 누르면 자세한 내용이 나와요';
       });
     });
+  }
+
+  // 비교 그래프의 상세 카드를 누르면: 그 자산 구성/종목의 월별 손익·보유·거래 전체
+  function openSeriesDetail(name, color = 'var(--accent)') {
+    const D = state.data, y = state.year, isKind = state.cmpMode === 'kind';
+    const m = compareMetrics(name, y);
+    const list = m.rz.slice().sort((a, b) => b.date - a.date);
+    const g = list.filter(r => r.amount > 0), l = list.filter(r => r.amount < 0);
+    const yearLabel = y === 'all' ? '전체 기간' : `${y}년`;
+    const hold = (isKind ? D.rows.filter(r => r.kind === name) : D.rows.filter(r => r.sub === name)).filter(r => r.cost > 0 || r.value > 0);
+    const hCost = hold.reduce((t, r) => t + r.cost, 0), hVal = hold.reduce((t, r) => t + r.value, 0);
+    // 월별 묶음 (전체 기간이면 연.월)
+    const key = r => (y === 'all' ? `${String(r.year).slice(2)}.${String(r.month).padStart(2, '0')}` : `${r.month}월`);
+    const months = [...groupBy(list, key)].map(([k, x]) => ({
+      k, amt: x.reduce((t, r) => t + r.amount, 0), g: x.filter(r => r.amount > 0).length, l: x.filter(r => r.amount < 0).length,
+      order: x[0].year * 100 + x[0].month,
+    })).sort((a, b) => a.order - b.order);
+    const mx = Math.max(...months.map(x => Math.abs(x.amt)), 1);
+    const cells = [
+      [y === 'all' ? '누적 실현' : `${y}년 실현`, m.amt ? compactSigned(m.amt) : '—', cls(m.amt)],
+      [y === 'all' ? `${new Date().getFullYear()}년` : '기준원금 대비', y === 'all' ? (m.thisYear ? compactSigned(m.thisYear) : '—') : pct(m.baseRet, 1), cls(y === 'all' ? m.thisYear : m.baseRet)],
+      ['지금 수익률', hVal > 0 ? pct(hCost > 0 ? (hVal - hCost) / hCost : null, 1) : '보유 없음', cls(hVal - hCost)],
+    ];
+    openSheet(`
+      <div class="pop-hero ${m.amt >= 0 ? 'gain' : 'loss'}">
+        <div><div class="pop-kind">${yearLabel} · ${isKind ? '자산 구성' : '종목'}</div>
+          <div class="sd-name"><i style="background:${color}"></i>${esc(name)}</div>
+          <h2 id="sheetTitle" class="num">${signWon(m.amt)}</h2>
+          <div class="pop-sub num">${[g.length ? `익절 ${g.length}건 ${compactSigned(g.reduce((t, r) => t + r.amount, 0))}` : '', l.length ? `손절 ${l.length}건 ${compactSigned(l.reduce((t, r) => t + r.amount, 0))}` : ''].filter(Boolean).join(' · ') || '실현손익 기록 없음'}</div></div>
+      </div>
+      <div class="pop-list">
+        <div class="ro-cells sd-cells num">${cells.map(([a, b, c]) => `<div><small>${esc(a)}</small><b class="${c}">${esc(b)}</b></div>`).join('')}</div>
+        ${months.length ? `<h3 class="section-title">월별 실현손익</h3>
+          ${months.map(x => `<div class="sd-month num">
+            <span class="sd-m">${esc(x.k)}</span>
+            <span class="sd-bar" aria-hidden="true"><i style="width:${Math.max(2, Math.abs(x.amt) / mx * 100)}%;background:${x.amt >= 0 ? 'var(--bar-up)' : 'var(--down)'}"></i></span>
+            <b class="${cls(x.amt)}">${compactSigned(x.amt)}</b>
+            <small>${x.g ? `익절 ${x.g}` : ''}${x.g && x.l ? ' · ' : ''}${x.l ? `손절 ${x.l}` : ''}</small>
+          </div>`).join('')}` : ''}
+        ${hold.length ? `<h3 class="section-title">지금 보유 <span class="note">${compact(hVal)}원 · 원금 ${compact(hCost)}원</span></h3>
+          ${hold.map(r => {
+            const ret = r.avg > 0 && r.price > 0 && isTradable(r) ? (r.price - r.avg) / r.avg : (r.cost > 0 ? (r.value - r.cost) / r.cost : null);
+            return `<button class="stat-row tap" data-asset="${esc(r.asset)}">
+              <div class="stat-row-top"><span class="stat-row-name">${esc(r.sub)}</span><b class="num">${won(r.value)}</b></div>
+              <div class="stat-row-sub num">${r.qty && isTradable(r) ? `${r.qty.toLocaleString('ko-KR')}주 · ` : ''}원금 ${compact(r.cost)}원 · <span class="${cls(ret)}">${pct(ret, 1)}</span></div>
+            </button>`;
+          }).join('')}` : ''}
+        <h3 class="section-title">거래 ${list.length}건</h3>
+        ${list.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(isKind ? (r.sub || r.asset) : r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('') || '<p class="empty">이 기간에는 실현손익 기록이 없어요.</p>'}
+      </div>
+      <button class="btn pop-close" data-close>닫기</button>`, 'pop');
+    $$('#sheetBody .stat-row[data-asset]').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
   }
 
   function renderOneYear(y) {
@@ -1080,7 +1155,7 @@
     const title = mode === 'month' ? `${year}년 ${m}월` : `${m}년`;
     const sum = list.reduce((t, r) => t + r.amount, 0);
     const g = list.filter(r => r.amount > 0), l = list.filter(r => r.amount < 0);
-    const ks = [...groupBy(list, r => r.kind)].map(([k, x]) => ({ k, amt: x.reduce((t, r) => t + r.amount, 0), n: x.length })).sort((a, b) => b.amt - a.amt);
+    const ks = [...groupBy(list, r => r.kind)].map(([k, x]) => ({ k, amt: x.reduce((t, r) => t + r.amount, 0), n: x.length, g: x.filter(r => r.amount > 0).length, l: x.filter(r => r.amount < 0).length })).sort((a, b) => b.amt - a.amt);
     const mx = Math.max(...ks.map(k => Math.abs(k.amt)), 1);
     openSheet(`
       <div class="pop-hero ${sum >= 0 ? 'gain' : 'loss'}">
@@ -1089,7 +1164,7 @@
       </div>
       <div class="pop-list">
         ${ks.map(k => `<div class="stat-row"><div class="stat-row-top"><span class="stat-row-name">${esc(k.k)}</span><b class="num ${cls(k.amt)}">${signWon(k.amt)}</b></div>
-          <div class="stat-row-sub num">${k.n}건</div>
+          <div class="stat-row-sub num">${k.n}건 (${[k.g ? `익절 ${k.g}` : '', k.l ? `손절 ${k.l}` : ''].filter(Boolean).join(' · ')})</div>
           <div class="stat-meter" aria-hidden="true"><i style="width:${Math.max(1.5, Math.abs(k.amt) / mx * 100)}%;background:${k.amt >= 0 ? 'var(--bar-up)' : 'var(--down)'}"></i></div></div>`).join('')}
         ${list.length ? `<h3 class="section-title">거래 ${list.length}건</h3>` : '<p class="empty">이 기간에는 기록이 없어요.</p>'}
         ${list.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}
