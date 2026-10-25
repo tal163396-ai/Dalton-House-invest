@@ -258,7 +258,7 @@
     const ch = last.nw - first.nw;
     return `
       <button class="card nw-card" id="nwCard" aria-label="우리 집 순자산, 수익률 탭에서 자세히">
-        <div class="nw-top"><span class="total-label">우리 집 순자산</span><span class="nw-more">자산 성장 보기 ›</span></div>
+        <div class="nw-top"><span class="total-label">우리 집 순자산</span><span class="nw-more">성장 보기 ›</span></div>
         <div class="nw-value num">${won(last.nw)}</div>
         <div class="nw-sub num"><span class="${cls(ch)}">${ymLabel(first)}부터 ${compactSigned(ch)}</span><span>평가손익 반영 시 약 ${compact(last.nw + D.total.pl)}원</span></div>
         <svg class="nw-spark" viewBox="0 0 ${W} ${Ht}" preserveAspectRatio="none" aria-hidden="true">
@@ -653,9 +653,9 @@
     const el = $('#view-years');
     el.innerHTML = `
       <div class="pager-dots" id="yTabs" role="tablist" aria-label="수익률 화면">
-        <button role="tab" data-p="0"><i></i>자산별</button>
-        <button role="tab" data-p="1"><i></i>연도·월별</button>
-        <button role="tab" data-p="2"><i></i>자산 성장</button>
+        <button role="tab" data-p="0"><i></i>항목별</button>
+        <button role="tab" data-p="1"><i></i>월간·연간</button>
+        <button role="tab" data-p="2"><i></i>성장</button>
       </div>
       <div class="year-chips" id="yChips" role="group" aria-label="연도 선택">
         ${chips.map(([y, l]) => `<button class="chip ${state.year === y ? 'on' : ''}" data-year="${y}">${l}</button>`).join('')}
