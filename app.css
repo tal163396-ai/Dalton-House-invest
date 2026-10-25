@@ -674,3 +674,15 @@ button.nw-card { display: block; width: 100%; text-align: left; border: 0; color
 .ro-row .line-readout.on { flex-basis: 100%; order: 2; }
 .ro-row .pick-edit { flex: none; padding: 7px 13px; font-size: 13.5px; }
 .ro-row .line-readout.on + .pick-edit { order: 1; margin-left: auto; }
+
+/* v21: 강조 모드 + 월 마감 */
+.chart .ln.mute { opacity: .45; }
+.chart .tag-t.mute { fill: var(--ink-3); font-weight: 700; }
+.focus-chips .pick-chip { cursor: pointer; font: inherit; }
+.focus-chips .pick-chip.off { border-color: var(--line); color: var(--ink-3); background: none; }
+.focus-chips .pick-chip.off i { background: var(--ink-4); }
+.focus-chips .pick-chip.on { box-shadow: 0 0 0 1px var(--c) inset; font-weight: 800; }
+.mc-auto { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: var(--fill); border-radius: 12px; padding: 10px 12px; }
+.mc-auto small { display: block; font-size: 12px; color: var(--ink-3); font-weight: 600; }
+.mc-auto b { font-size: 15px; font-weight: 800; }
+.mc-card .help { margin-bottom: 14px; }

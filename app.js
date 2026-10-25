@@ -29,6 +29,7 @@
     kindsOpen: false,
     monthsOpen: false,
     cmpMode: store.get('dh_cmpmode') === 'sub' ? 'sub' : 'kind',
+    cmpFocus: (() => { try { return JSON.parse(store.get('dh_cmpfocus')) || {}; } catch { return {}; } })(),
     cmpSel: (() => { try { return JSON.parse(store.get('dh_cmpsel')) || { kind: null, sub: null }; } catch { return { kind: null, sub: null }; } })(),
     form: { type: '매수', kind: '', key: '', cashAsset: '' },
   };
@@ -874,8 +875,9 @@
     const ptsArr = s => pts.map((p, i) => (Number.isFinite(p[s.key]) ? [X(i), Y(p[s.key])] : null)).filter(Boolean);
     const isRef = s => s.key === 'inv' || s.key === 'save';
     const isDash = s => isRef(s) || s.dash;
-    const isBold = s => s.key === 'mine' || s.key === 'nw';
-    const mainKey = opt.areaKey || (series.find(s => s.key === 'mine') || (opt.interactive ? null : series[0]) || {}).key;
+    const isBold = s => s.key === 'mine' || s.key === 'nw' || s.key === opt.focus;
+    const mainKey = opt.focus || opt.areaKey || (series.find(s => s.key === 'mine') || (opt.interactive ? null : series[0]) || {}).key;
+    const muted = s => !!opt.focus && s.key !== opt.focus;
     const base = Math.min(H - B, Math.max(T, opt.noZero ? H - B : Y(Math.max(lo, Math.min(0, hi)))));
     const defs = series.map(s => `<linearGradient id="${id}-${s.key}" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" style="stop-color:${s.color};stop-opacity:.32"/><stop offset=".75" style="stop-color:${s.color};stop-opacity:.04"/><stop offset="1" style="stop-color:${s.color};stop-opacity:0"/></linearGradient>`).join('');
@@ -887,6 +889,7 @@
     const order = series.slice().sort((p, q) => (isBold(p) ? 1 : 0) - (isBold(q) ? 1 : 0) || (isDash(q) ? 1 : 0) - (isDash(p) ? 1 : 0));
     const lines = order.map(s => {
       const d = linePath(ptsArr(s));
+      if (muted(s)) return `<path class="ln mute" data-k="${s.key}" d="${d}" fill="none" stroke="var(--ink-4)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>`;
       const w = isBold(s) ? 3 : isDash(s) ? 1.8 : 2.2;
       return `<path class="ln ${isDash(s) ? 'ref' : 'draw'}" data-k="${s.key}" d="${d}" fill="none" stroke="${s.color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round" ${isDash(s) ? `stroke-dasharray="${isRef(s) ? '3 5' : '6 5'}"` : 'pathLength="1"'}/>`;
     }).join('');
@@ -894,7 +897,8 @@
     const ends = series.filter(s => !isRef(s) && Number.isFinite(lastP[s.key]));
     const dots = ends.map(s => {
       const cx = X(pts.length - 1).toFixed(1), cy = Y(lastP[s.key]).toFixed(1);
-      return `<g class="end" data-k="${s.key}"><circle cx="${cx}" cy="${cy}" r="${isBold(s) ? 7 : 5}" fill="${s.color}" opacity=".18"/><circle cx="${cx}" cy="${cy}" r="${isBold(s) ? 3.6 : 2.8}" fill="${s.color}" stroke="var(--card)" stroke-width="1.5"/></g>`;
+      const c = muted(s) ? 'var(--ink-4)' : s.color;
+      return `<g class="end" data-k="${s.key}"><circle cx="${cx}" cy="${cy}" r="${isBold(s) ? 7 : 5}" fill="${c}" opacity="${muted(s) ? 0 : .18}"/><circle cx="${cx}" cy="${cy}" r="${isBold(s) ? 3.6 : 2.6}" fill="${c}" stroke="var(--card)" stroke-width="1.5"/></g>`;
     }).join('');
     // 오른쪽 끝 값 태그 (겹치지 않게 위아래로 밀기)
     let tagSvg = '';
@@ -908,6 +912,8 @@
       const x0 = X(pts.length - 1) + 9;
       tagSvg = items.map(({ s, y, t }) => {
         const w = Math.max(30, String(t).length * 6.1 + 12);
+        if (muted(s)) return `<g class="tag" data-k="${s.key}"><rect x="${x0.toFixed(1)}" y="${(y - 8.5).toFixed(1)}" width="${w.toFixed(1)}" height="17" rx="8.5" fill="var(--fill)"/>
+          <text x="${(x0 + w / 2).toFixed(1)}" y="${(y + 3.6).toFixed(1)}" text-anchor="middle" class="tag-t mute">${esc(t)}</text></g>`;
         return `<g class="tag" data-k="${s.key}"><rect x="${x0.toFixed(1)}" y="${(y - 8.5).toFixed(1)}" width="${w.toFixed(1)}" height="17" rx="8.5" fill="${s.color}" ${isDash(s) ? 'fill-opacity=".22" stroke="' + s.color + '" stroke-width="1"' : ''}/>
           <text x="${(x0 + w / 2).toFixed(1)}" y="${(y + 3.6).toFixed(1)}" text-anchor="middle" class="tag-t ${isDash(s) ? 'soft' : ''}">${esc(t)}</text></g>`;
       }).join('');
@@ -916,7 +922,7 @@
     if (!opt.interactive) return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="수익률 비교 그래프">${svgInner}</svg>`;
     const valFmt = opt.valFmt || fmt;
     const info = {
-      areaKey: mainKey || null, W, L, R, n: pts.length, xs: pts.map((_, i) => +X(i).toFixed(1)), labels: pts.map(p => p.label),
+      areaKey: mainKey || null, focus: opt.focus || null, W, L, R, n: pts.length, xs: pts.map((_, i) => +X(i).toFixed(1)), labels: pts.map(p => p.label),
       series: series.map(s => ({ key: s.key, label: s.label, color: s.color, meta: (opt.meta || {})[s.key] || null, vals: pts.map(p => p[s.key]), ys: pts.map(p => Number.isFinite(p[s.key]) ? +Y(p[s.key]).toFixed(1) : null), fmt: pts.map(p => Number.isFinite(p[s.key]) ? valFmt(p[s.key]) : '—') })),
     };
     const hits = series.map(s => `<path class="hit" data-k="${s.key}" d="${linePath(ptsArr(s))}" fill="none" stroke="transparent" stroke-width="22" stroke-linejoin="round"/>`).join('');
@@ -1017,6 +1023,8 @@
     const M = Object.fromEntries(sel.map(n => [n, compareMetrics(n, y)]));
     const pts = monthPoints(y);
     const series = sel.map((n, i) => ({ key: `c${i}`, label: n, color: CMP_COLORS[i], solid: true }));
+    const fName = sel.includes(state.cmpFocus[state.cmpMode]) ? state.cmpFocus[state.cmpMode] : sel[0];
+    const focusKey = `c${sel.indexOf(fName)}`;
     pts.forEach(p => sel.forEach((n, i) => { p[`c${i}`] = M[n].rz.filter(r => r.date <= p.date).reduce((t, r) => t + r.amount, 0); }));
     const ty = new Date().getFullYear();
     const yearLabel = y === 'all' ? '전체 기간' : `${y}년`;
@@ -1030,12 +1038,12 @@
         </div>
         ${sel.length ? `
           <div class="cmp-label">${yearLabel} 누적 실현손익</div>
-          ${lineChart(pts, series, { L: 46, fmt: v => compactSigned(v), tagFmt: v => compactSigned(v), action: `<button class="pick-edit" id="cmpPick" aria-label="비교할 항목 바꾸기"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>변경</button>`, noDot: true, interactive: true, detail: true, valFmt: v => `${compactSigned(v)}원`,
+          ${lineChart(pts, series, { L: 46, fmt: v => compactSigned(v), tagFmt: v => compactSigned(v), action: `<button class="pick-edit" id="cmpPick" aria-label="비교할 항목 바꾸기"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>변경</button>`, noDot: true, interactive: true, detail: true, focus: focusKey, valFmt: v => `${compactSigned(v)}원`,
             meta: Object.fromEntries(sel.map((n, i) => { const m = M[n]; return [`c${i}`, y === 'all'
               ? [['누적 실현', compactSigned(m.amt), cls(m.amt)], [`${ty}년`, m.thisYear ? compactSigned(m.thisYear) : '—', cls(m.thisYear)], ['지금 수익률', m.value > 0 ? pct(m.ret, 1) : '보유 없음', cls(m.ret)]]
               : [[`${y}년 실현`, m.amt ? compactSigned(m.amt) : '—', cls(m.amt)], ['기준원금 대비', pct(m.baseRet, 1), cls(m.baseRet)], ['지금 수익률', m.value > 0 ? pct(m.ret, 1) : '보유 없음', cls(m.ret)]]]; })) })}
-          <div class="pick small">
-            ${sel.map(n => `<span class="pick-chip on" style="--c:${color(n)}"><i></i>${esc(n)}</span>`).join('')}
+          <div class="pick small focus-chips" role="group" aria-label="강조할 항목">
+            ${sel.map(n => `<button class="pick-chip ${n === fName ? 'on' : 'off'}" data-focus="${esc(n)}" style="--c:${color(n)}" aria-pressed="${n === fName}"><i></i>${esc(n)}</button>`).join('')}
           </div>
           <p class="note">위의 연도를 바꾸면 그 해 기준으로 비교해요.<br>지금 수익률 = 보유 중인 평가금 기준${state.cmpMode === 'sub' ? '(종목은 평단 대비)' : ''}.</p>`
         : `<p class="empty">${yearLabel}에 비교할 기록이 없어요.</p>
@@ -1047,6 +1055,9 @@
     $$('#cmpMode button', el).forEach(b => b.onclick = () => { state.cmpMode = b.dataset.mode; store.set('dh_cmpmode', state.cmpMode); keepScroll(renderYearBody); });
     const btn = $('#cmpPick', el);
     if (btn) btn.onclick = openComparePicker;
+    const setFocus = n => { state.cmpFocus[state.cmpMode] = n; store.set('dh_cmpfocus', JSON.stringify(state.cmpFocus)); keepScroll(renderYearBody); };
+    $$('.focus-chips [data-focus]', el).forEach(b => b.onclick = () => setFocus(b.dataset.focus));
+    $$('.line-wrap[data-detail]', el).forEach(w => w.addEventListener('linefocus', e => setFocus(e.detail)));
   }
 
   // 비교할 항목 고르는 팝업
@@ -1095,19 +1106,15 @@
     $$('.line-wrap', root).forEach(wrap => {
       const svg = $('svg', wrap), ro = $('.line-readout', wrap);
       const info = JSON.parse(wrap.dataset.info || '{}');
-      $$('.hit', svg).forEach(h => h.onclick = e => {
-        const k = h.dataset.k, s = info.series.find(x => x.key === k);
-        const r = svg.getBoundingClientRect();
-        const vx = (e.clientX - r.left) / r.width * info.W;
-        let i = Math.round((vx - info.L) / ((info.W - info.L - info.R) / Math.max(1, info.n - 1)));
-        i = Math.max(0, Math.min(info.n - 1, i));
+      const select = (k, i) => {
+        const s = info.series.find(x => x.key === k); if (!s) return;
         const v = s.vals[i];
-        $$('.ln, .end, .tag', svg).forEach(l => l.classList.toggle('dim', l.dataset.k !== k));
+        $$('.ln, .end, .tag', svg).forEach(l => l.classList.toggle('dim', !info.focus && l.dataset.k !== k));
         $$('.area', svg).forEach(a => a.classList.toggle('on', a.dataset.k === k));
         const dot = $('.pick-dot', svg), halo = $('.pick-halo', svg), guide = $('.guide', svg);
         dot.setAttribute('cx', info.xs[i]); dot.setAttribute('cy', s.ys[i]); dot.setAttribute('fill', s.color); dot.style.display = '';
         halo.setAttribute('cx', info.xs[i]); halo.setAttribute('cy', s.ys[i]); halo.style.fill = s.color; halo.style.display = '';
-        guide.setAttribute('x1', info.xs[i]); guide.setAttribute('x2', info.xs[i]); guide.style.display = '';
+        guide.setAttribute('x1', info.xs[i]); guide.setAttribute('x2', info.xs[i]); guide.style.display = i === info.n - 1 && info.focus ? 'none' : '';
         ro.innerHTML = `<div class="ro-top"><i style="background:${s.color}"></i><b>${esc(s.label)}</b><span>${esc(info.labels[i])}</span><b class="${cls(v)}">${esc(s.fmt[i])}</b></div>
           ${s.meta ? `<div class="ro-cells">${s.meta.map(([l, t, c]) => `<div><small>${esc(l)}</small><b class="${c}">${esc(t)}</b></div>`).join('')}</div>` : ''}
           ${wrap.dataset.detail ? `<div class="ro-more">눌러서 거래·월별·보유 자세히 보기 ›</div>` : ''}`;
@@ -1118,15 +1125,26 @@
           ro.onclick = () => openSeriesDetail(s.label, s.color);
           ro.onkeydown = ev => { if (ev.key === 'Enter') openSeriesDetail(s.label, s.color); };
         }
-      });
-      svg.addEventListener('click', e => {
-        if (e.target.classList.contains('hit')) return;
+      };
+      const reset = () => {
+        if (info.focus) { select(info.focus, info.n - 1); return; }
         $$('.ln, .end, .tag', svg).forEach(l => l.classList.remove('dim'));
         $$('.area', svg).forEach(a => a.classList.toggle('on', a.dataset.k === info.areaKey));
         ['.pick-dot', '.pick-halo', '.guide'].forEach(q => { $(q, svg).style.display = 'none'; });
         ro.classList.remove('on', 'tap'); ro.onclick = null; ro.onkeydown = null; ro.removeAttribute('role'); ro.removeAttribute('tabindex');
         ro.innerHTML = '선을 누르면 자세한 내용이 나와요';
+      };
+      $$('.hit', svg).forEach(h => h.onclick = e => {
+        const k = h.dataset.k;
+        // 강조 모드: 회색 선을 누르면 그 항목으로 강조를 옮김
+        if (info.focus && k !== info.focus) { wrap.dispatchEvent(new CustomEvent('linefocus', { detail: info.series.find(x => x.key === k).label })); return; }
+        const r = svg.getBoundingClientRect();
+        const vx = (e.clientX - r.left) / r.width * info.W;
+        let i = Math.round((vx - info.L) / ((info.W - info.L - info.R) / Math.max(1, info.n - 1)));
+        select(k, Math.max(0, Math.min(info.n - 1, i)));
       });
+      svg.addEventListener('click', e => { if (!e.target.classList.contains('hit')) reset(); });
+      if (info.focus) select(info.focus, info.n - 1);
     });
   }
 
@@ -1556,6 +1574,7 @@
           ${body}
         </div>
       </div>
+      ${monthCloseCard()}
       <div class="card">
         <div class="card-head"><h2 class="card-title">최근 기록</h2></div>
         ${D.trades.length ? D.trades.slice(0, 15).map(t => `
@@ -1581,6 +1600,77 @@
     };
     on('#fQty', 'input', upd); on('#fPrice', 'input', upd);
     on('#fSubmit', 'click', submitForm);
+    bindMonthClose(el);
+  }
+
+  /* ── 월 마감: 편한가계부 숫자 3개 + 앱 기록으로 '가계부월별' 한 줄 ── */
+  function monthCloseCalc(y, m) {
+    const D = state.data, ym = `${y}-${String(m).padStart(2, '0')}`;
+    const rz = D.realized.filter(r => r.year === y && r.month === m);
+    const pnl = rz.reduce((t, r) => t + r.amount, 0), gains = rz.filter(r => r.amount > 0).reduce((t, r) => t + r.amount, 0);
+    const tr = D.trades.filter(t => String(t['날짜']).slice(0, 7) === ym);
+    const flow = tr.filter(t => t['구분'] === '입금').reduce((q, t) => q + num(t['금액(원)']), 0) - tr.filter(t => t['구분'] === '출금').reduce((q, t) => q + num(t['금액(원)']), 0);
+    const prev = D.household.filter(h => h.y * 100 + h.m < y * 100 + m).at(-1);
+    const book = (prev ? prev.book : 0) + flow + pnl;
+    const saved = D.household.find(h => h.y === y && h.m === m) || null;
+    // 이미 저장된 달은 투자손익·넣은 돈을 그대로 두고 누적잔액·수입·지출만 고침
+    if (saved) return { pnl: saved.pnl, gains, flow: saved.flow, book: saved.book, saved, prev, kept: true };
+    return { pnl, gains, flow, book, saved, prev };
+  }
+
+  function monthCloseCard() {
+    const D = state.data;
+    if (!D.household.length) return '';
+    const last = D.household.at(-1), now = new Date();
+    let y = state.mc?.y, m = state.mc?.m;
+    if (!y) { y = now.getFullYear(); m = now.getMonth() + 1; if (now.getDate() <= 10) { m -= 1; if (!m) { m = 12; y -= 1; } } }
+    const C = monthCloseCalc(y, m);
+    const v = k => (C.saved ? ({ nw: C.saved.nw, inc: C.saved.inc + C.gains, exp: C.saved.exp })[k] : '');
+    return `
+      <div class="card mc-card">
+        <div class="card-head"><h2 class="card-title">월 마감</h2><span class="card-aside">마지막 저장 ${String(last.y).slice(2)}.${last.m}</span></div>
+        <p class="help">매달 한 번, 편한가계부 <b>자산 → 전체통계</b> 화면의 숫자 3개를 그대로 옮겨 적어 주세요. 투자손익과 넣은 돈은 앱 기록으로 자동 계산돼요.</p>
+        <div class="form">
+          <label class="field"><span>마감할 달</span><input type="month" id="mcMonth" value="${y}-${String(m).padStart(2, '0')}"></label>
+          <label class="field"><span>누적잔액</span><input id="mcNw" inputmode="numeric" placeholder="예: 285322041" value="${v('nw')}"></label>
+          <div class="two">
+            <label class="field"><span>수입 (파란 숫자)</span><input id="mcInc" inputmode="numeric" value="${v('inc')}"></label>
+            <label class="field"><span>지출 (빨간 숫자)</span><input id="mcExp" inputmode="numeric" value="${v('exp')}"></label>
+          </div>
+          <div class="mc-auto num">
+            <div><small>실현손익 ${C.kept ? '(저장된 값)' : '(앱 기록)'}</small><b class="${cls(C.pnl)}">${signWon(C.pnl)}</b></div>
+            <div><small>넣은 돈 ${C.kept ? '(저장된 값)' : '(앱 입금−출금)'}</small><b>${signWon(C.flow)}</b></div>
+          </div>
+          <p class="note" style="margin:0">수입에서 그 달 익절(${compact(C.gains)}원)은 빼고 저장해요. ${C.saved ? '<b>이미 저장된 달이에요. 누적잔액·수입·지출만 고쳐요.</b>' : ''}</p>
+          <p id="mcErr" class="form-error" role="alert"></p>
+          <button class="btn primary" id="mcSave">${y}년 ${m}월 마감 저장</button>
+        </div>
+      </div>`;
+  }
+
+  function bindMonthClose(el) {
+    const mi = $('#mcMonth', el); if (!mi) return;
+    mi.onchange = () => { const [y, m] = mi.value.split('-').map(Number); if (y && m) { state.mc = { y, m }; renderRecord(); } };
+    $('#mcSave', el).onclick = async () => {
+      const err = $('#mcErr'); err.textContent = '';
+      const [y, m] = mi.value.split('-').map(Number);
+      const val = id => Number(String($(id).value).replace(/[^\d.-]/g, ''));
+      const nw = val('#mcNw'), inc = val('#mcInc'), exp = val('#mcExp');
+      if (!y || !m) { err.textContent = '마감할 달을 고르세요.'; return; }
+      if (!(nw > 0)) { err.textContent = '누적잔액을 입력하세요.'; return; }
+      if (!Number.isFinite(inc) || !Number.isFinite(exp)) { err.textContent = '수입과 지출을 입력하세요.'; return; }
+      const C = monthCloseCalc(y, m);
+      const btn = $('#mcSave'); btn.disabled = true; btn.textContent = '저장 중…';
+      try {
+        const r = await api('month', { month: { y, m, nw, inc: Math.max(0, inc - C.gains), exp, pnl: C.pnl, flow: C.flow, book: C.book } });
+        state.mc = null;
+        await load({ quiet: true });
+        toast(r.message || '저장했어요');
+      } catch (e) {
+        if (e.code === 'auth') { logout('비밀번호를 다시 입력해 주세요.'); return; }
+        err.textContent = e.message; btn.disabled = false; btn.textContent = `${y}년 ${m}월 마감 저장`;
+      }
+    };
   }
 
   async function submitForm() {

@@ -106,6 +106,7 @@ function doPost(e) {
       case 'data':   return json_({ ok: true, data: readAll_() });
       case 'trade':  return json_(withLock_(() => recordTrade_(req.trade)));
       case 'manual': return json_(withLock_(() => setManual_(req.manual)));
+      case 'month':  return json_(withLock_(() => saveMonth_(req.month)));
       default:       return json_({ ok: false, error: '알 수 없는 요청' });
     }
   } catch (err) {
@@ -451,6 +452,36 @@ function saveSnapshot_(month) {
     '평가손익(원)': Math.round(agg[a].val - agg[a].cost), '저장시각': stamp,
   }));
   return order.length;
+}
+
+/* ───────────────────────── 월 마감 (가계부월별) ───────────────────────── */
+
+const HH_HEADERS = ['연도', '월', '순자산', '수입(근로·기타)', '생활 지출', '투자손익(실현)', '투자 순투입', '투자 장부잔액', '기타 보정'];
+
+/** month = { y, m, nw, inc, exp, pnl, flow, book } → 같은 달이 있으면 덮어쓰고, 없으면 아래에 추가 */
+function saveMonth_(mo) {
+  if (!mo) throw new Error('값이 없습니다');
+  const y = Math.round(num_(mo.y)), m = Math.round(num_(mo.m));
+  if (!(y > 2000) || !(m >= 1 && m <= 12)) throw new Error('연도·월이 올바르지 않습니다');
+  if (!(num_(mo.nw) > 0)) throw new Error('누적잔액을 입력하세요');
+  const ss = SpreadsheetApp.getActive();
+  if (!ss.getSheetByName('가계부월별')) {
+    const sh = ss.insertSheet('가계부월별');
+    sh.getRange(1, 1, 1, HH_HEADERS.length).setValues([HH_HEADERS]).setFontWeight('bold');
+  }
+  const obj = {
+    '연도': y, '월': m, '순자산': Math.round(num_(mo.nw)), '수입(근로·기타)': Math.round(num_(mo.inc)), '생활 지출': Math.round(num_(mo.exp)),
+    '투자손익(실현)': Math.round(num_(mo.pnl)), '투자 순투입': Math.round(num_(mo.flow)), '투자 장부잔액': Math.round(num_(mo.book)),
+  };
+  const t = table_('가계부월별');
+  for (let r = 1; r < t.values.length; r++) {
+    if (num_(t.values[r][t.col['연도']]) === y && num_(t.values[r][t.col['월']]) === m) {
+      Object.keys(obj).forEach(h => { if (h in t.col) setCell_(t, r, h, obj[h]); });
+      return { ok: true, message: `${y}년 ${m}월 마감을 고쳤어요` };
+    }
+  }
+  appendByHeader_('가계부월별', obj);
+  return { ok: true, message: `${y}년 ${m}월 마감을 저장했어요` };
 }
 
 /* ───────────────────────── 공통 도우미 ───────────────────────── */
