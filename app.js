@@ -1768,7 +1768,7 @@
             <div><small>실현손익 ${C.kept ? '(저장된 값)' : '(앱 기록)'}</small><b class="${cls(C.pnl)}">${signWon(C.pnl)}</b></div>
             <div><small>순입금 ${C.kept ? '(저장된 값)' : '(앱 입금−출금)'}</small><b>${signWon(C.flow)}</b></div>
           </div>
-          <p class="note" style="margin:0">수입에서 그 달 익절(${compact(C.gains)}원)은 빼고 저장합니다.${C.saved ? '<br><b>이미 저장된 달입니다. 투자 숫자는 그대로 두고 나머지만 수정합니다.</b>' : ''}</p>
+          <p class="note" style="margin:0">편한가계부 수입에 포함된 ${m}월 익절 ${compact(C.gains)}원은 투자손익으로 따로 계산되므로, 수입에서는 빼고 저장합니다.${C.saved ? '<br><b>이미 저장된 달이라 실현손익·순입금은 유지하고 나머지 칸만 수정합니다.</b>' : ''}</p>
           <p id="mcErr" class="form-error" role="alert"></p>
           <button class="btn primary" id="mcSave">${y}년 ${m}월 마감 저장</button>
         </div>
