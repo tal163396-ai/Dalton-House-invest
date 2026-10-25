@@ -531,6 +531,8 @@
           <div class="pop-kind">${esc(g.k)}</div>
           <h2 id="sheetTitle" class="num">${won(g.v)}</h2>
           <div class="pop-sub num">원금 ${won(g.c)} · <b>${signWon(g.v - g.c)} (${pct(g.ret)})</b></div>
+          ${(() => { const ty = new Date().getFullYear(), names = g.list.map(a => a.name), rz = D.realized.filter(x => names.includes(x.asset)); const yr = rz.filter(x => x.year === ty).reduce((t, x) => t + x.amount, 0), all = rz.reduce((t, x) => t + x.amount, 0);
+            return rz.length ? `<div class="pop-sub num">실현손익 ${ty}년 <b>${signWon(yr)}</b> · 누적 <b>${signWon(all)}</b></div>` : ''; })()}
         </div>
         <span class="kt-donut big" style="--p:${(w * 100).toFixed(1)}" aria-hidden="true"><b>${(w * 100).toFixed(1)}%</b></span>
       </div>
@@ -546,10 +548,19 @@
               <span class="row-sub num ${cls(a.pl)}">${signWon(a.pl)}</span>
             </span>
             ${bar(a.ret)}
-            ${a.rows.length > 1 || (a.rows[0] && a.rows[0].sub !== a.name) ? `<span class="row-subs">${a.rows.filter(r => r.value || r.cost).map(r => {
-              const pl = r.value - r.cost, cash = isCashRow(r) || r.method.startsWith('수동');
-              return `<span class="row-subline num"><span>${esc(r.sub)}</span><span>${cash ? `${compact(r.value)}원` : `${compact(r.value)}원 · <b class="${cls(pl)}">${compactSigned(pl)} (${pct(r.cost > 0 ? pl / r.cost : null, 1)})</b>`}</span></span>`;
-            }).join('')}</span>` : ''}
+            ${(() => {
+              const subs = a.rows.length > 1 || (a.rows[0] && a.rows[0].sub !== a.name);
+              const held = subs ? a.rows.filter(r => r.value || r.cost).map(r => {
+                const pl = r.value - r.cost, cash = isCashRow(r) || r.method.startsWith('수동');
+                return `<span class="row-subline num"><span>${esc(r.sub)}</span><span>${cash ? `${compact(r.value)}원` : `${compact(r.value)}원 · <b class="${cls(pl)}">${compactSigned(pl)} (${pct(r.cost > 0 ? pl / r.cost : null, 1)})</b>`}</span></span>`;
+              }).join('') : '';
+              const rz = D.realized.filter(x => x.asset === a.name);
+              const ty = new Date().getFullYear();
+              const bySub = [...groupBy(rz, x => String(x.sub || a.name))].map(([k, l]) => ({ k, all: l.reduce((t, x) => t + x.amount, 0), yr: l.filter(x => x.year === ty).reduce((t, x) => t + x.amount, 0), g: l.filter(x => x.amount > 0).length, lo: l.filter(x => x.amount < 0).length }))
+                .sort((p, q) => Math.abs(q.all) - Math.abs(p.all));
+              const rzHtml = bySub.length ? `<span class="row-subhead"><span>실현손익</span><span class="rz-cols"><em>${ty}년</em><em>누적</em></span></span>` + bySub.map(x => `<span class="row-subline rz num"><span>${esc(x.k)} <small>익절 ${x.g}·손절 ${x.lo}</small></span><span><b class="${cls(x.yr)}">${x.yr ? compactSigned(x.yr) : '—'}</b><b class="${cls(x.all)}">${compactSigned(x.all)}</b></span></span>`).join('') : '';
+              return held || rzHtml ? `<span class="row-subs">${held ? `<span class="row-subhead"><span>보유</span><span>평가금 · 평가손익</span></span>${held}` : ''}${rzHtml}</span>` : '';
+            })()}
           </button>`).join('')}
       </div>
       <button class="btn pop-close" data-close>닫기</button>`, 'pop');
@@ -744,7 +755,7 @@
     const wS = Math.max(0, last.saveCum), wP = Math.abs(last.pnlCum);
     return `
       <div class="card">
-        <div class="card-head"><h2 class="card-title">우리 집 자산 성장</h2><span class="card-aside">${pts[0].label} → ${last.label}</span></div>
+        <div class="card-head"><h2 class="card-title">자산 성장</h2><span class="card-aside">${pts[0].label} → ${last.label}</span></div>
         <div class="gw-hero num"><small>순자산</small><b>${compact(start)} → ${compact(last.nw)}</b><span class="${cls(tot)}">${won0(tot)}</span></div>
         <div class="gw-split" aria-hidden="true"><i style="flex:${wS};background:var(--accent)"></i><i style="flex:${wP};background:${last.pnlCum >= 0 ? 'var(--up)' : 'var(--down)'}"></i></div>
         <div class="gw-legend num">
@@ -753,7 +764,7 @@
         </div>
         <div class="legend">${series.map(s => `<span><i class="${s.key === 'inv' || s.key === 'save' ? 'dash' : ''}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
         ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, areaKey: 'nw', tagFmt: v => compact(v), valFmt: v => `${compact(v)}원`, meta })}
-        <p class="note">편한가계부 장부 기준(산 가격). 아직 안 판 종목의 평가손익 <b class="${cls(unreal)}">${won0(unreal)}원</b>은 빠져 있어요 → 반영하면 순자산 약 ${compact(last.nw + unreal)}원.</p>
+        <p class="note">매도하지 않은 자산의 평가손익 <b class="${cls(unreal)}">${won0(unreal)}원</b>은 빠져 있어요 → 반영하면 순자산 약 ${compact(last.nw + unreal)}원.</p>
       </div>`;
   }
 
@@ -1499,7 +1510,7 @@
           <select id="fManual">${manualRows.map(r => `<option value="${esc(rowKey(r))}" ${rowKey(r) === F.key ? 'selected' : ''}>${esc(r.kind)} · ${esc(r.asset === r.sub ? r.asset : r.sub)}</option>`).join('')}</select>
         </label>
         <label class="field"><span>${usd ? '지금 금액 (달러)' : '지금 금액 (원)'}</span>
-          <input id="fValue" type="number" inputmode="decimal" step="any" placeholder="${cur ? (usd ? cur.qty : Math.round(cur.value)) : ''}">
+          <input id="fValue" class="${usd ? '' : 'money'}" type="${usd ? 'number' : 'text'}" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur ? (usd ? cur.qty : Math.round(cur.value).toLocaleString('ko-KR')) : ''}">
         </label>
         <p class="preview">${cur ? `기록된 값 ${usd ? `$${cur.qty.toLocaleString('en-US')}` : won(cur.value)}` : ''}</p>
         <p class="form-error" id="fErr" role="alert"></p>
@@ -1512,7 +1523,7 @@
         <label class="field"><span>어느 계좌?</span>
           <select id="fCash">${accts.map(x => `<option value="${esc(x.a)}" ${x.a === F.cashAsset ? 'selected' : ''}>${esc(x.kind)}${x.a !== x.kind && x.kind !== '현금' ? ` · ${esc(x.a)}` : ''}</option>`).join('')}</select>
         </label>
-        <label class="field"><span>금액 (원)</span><input id="fKrw" type="number" inputmode="numeric" step="1" min="0"></label>
+        <label class="field"><span>금액 (원)</span><input id="fKrw" class="money" type="text" inputmode="numeric" autocomplete="off"></label>
         <div class="two">
           <label class="field"><span>날짜</span><input id="fDate" type="date" value="${todayStr()}"></label>
           <label class="field"><span>메모</span><input id="fMemo" placeholder="선택"></label>
@@ -1554,7 +1565,7 @@
         </div>
         <p class="preview num" id="fPreview"></p>
         <label class="field"><span>실제 원화 금액 (선택)</span>
-          <input id="fKrw" type="number" inputmode="numeric" step="1" min="0" placeholder="비우면 수량 × 단가 × 환율">
+          <input id="fKrw" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="비우면 수량 × 단가 × 환율">
         </label>
         <div class="two">
           <label class="field"><span>날짜</span><input id="fDate" type="date" value="${todayStr()}"></label>
@@ -1601,6 +1612,23 @@
     on('#fQty', 'input', upd); on('#fPrice', 'input', upd);
     on('#fSubmit', 'click', submitForm);
     bindMonthClose(el);
+    bindMoney(el);
+  }
+
+  // 금액 칸: 입력하는 동안 천 단위 콤마
+  const fmtComma = v => (v === '' || v === null || v === undefined || !Number.isFinite(Number(v)) ? '' : Math.round(Number(v)).toLocaleString('ko-KR'));
+  function bindMoney(root) {
+    $$('input.money', root).forEach(inp => inp.addEventListener('input', () => {
+      const raw = inp.value, pos = inp.selectionStart ?? raw.length;
+      const digitsBefore = raw.slice(0, pos).replace(/[^\d]/g, '').length;
+      const neg = raw.trim().startsWith('-');
+      const digits = raw.replace(/[^\d]/g, '');
+      const out = digits ? (neg ? '-' : '') + Number(digits).toLocaleString('ko-KR') : (neg ? '-' : '');
+      inp.value = out;
+      let n = 0, i = 0;
+      while (i < out.length && n < digitsBefore) { if (/\d/.test(out[i])) n++; i++; }
+      try { inp.setSelectionRange(i, i); } catch (e) { /* 일부 브라우저 */ }
+    }));
   }
 
   /* ── 월 마감: 편한가계부 숫자 3개 + 앱 기록으로 '가계부월별' 한 줄 ── */
@@ -1632,10 +1660,10 @@
         <p class="help">매달 한 번, 편한가계부 <b>자산 → 전체통계</b> 화면의 숫자 3개를 그대로 옮겨 적어 주세요. 투자손익과 넣은 돈은 앱 기록으로 자동 계산돼요.</p>
         <div class="form">
           <label class="field"><span>마감할 달</span><input type="month" id="mcMonth" value="${y}-${String(m).padStart(2, '0')}"></label>
-          <label class="field"><span>누적잔액</span><input id="mcNw" inputmode="numeric" placeholder="예: 285322041" value="${v('nw')}"></label>
+          <label class="field"><span>누적잔액</span><input id="mcNw" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="예: 285,322,041" value="${fmtComma(v('nw'))}"></label>
           <div class="two">
-            <label class="field"><span>수입 (파란 숫자)</span><input id="mcInc" inputmode="numeric" value="${v('inc')}"></label>
-            <label class="field"><span>지출 (빨간 숫자)</span><input id="mcExp" inputmode="numeric" value="${v('exp')}"></label>
+            <label class="field"><span>수입 (파란 숫자)</span><input id="mcInc" class="money" type="text" inputmode="numeric" autocomplete="off" value="${fmtComma(v('inc'))}"></label>
+            <label class="field"><span>지출 (빨간 숫자)</span><input id="mcExp" class="money" type="text" inputmode="numeric" autocomplete="off" value="${fmtComma(v('exp'))}"></label>
           </div>
           <div class="mc-auto num">
             <div><small>실현손익 ${C.kept ? '(저장된 값)' : '(앱 기록)'}</small><b class="${cls(C.pnl)}">${signWon(C.pnl)}</b></div>
@@ -1681,18 +1709,18 @@
     const base = () => ({ type: F.type, by: store.get(LS.name) || '', memo: $('#fMemo').value.trim(), date: `${$('#fDate').value}T${new Date().toTimeString().slice(0, 8)}+09:00` });
     if (F.type === '금액 수정') {
       const row = findRow($('#fManual').value);
-      const v = $('#fValue').value;
+      const v = String($('#fValue').value).replace(/,/g, '');
       if (!row) { err.textContent = '고칠 항목을 고르세요.'; return; }
       if (v === '' || !Number.isFinite(Number(v))) { err.textContent = '금액을 입력하세요.'; return; }
       action = 'manual';
       payload = { manual: row.cur === 'USD' ? { asset: row.asset, sub: row.sub, usd: Number(v) } : { asset: row.asset, sub: row.sub, value: Number(v) } };
     } else if (F.type === '입금' || F.type === '출금') {
-      const t = { ...base(), asset: $('#fCash').value, amountKrw: Number($('#fKrw').value) };
+      const t = { ...base(), asset: $('#fCash').value, amountKrw: Number(String($('#fKrw').value).replace(/,/g, '')) };
       if (!(t.amountKrw > 0)) { err.textContent = '금액을 입력하세요.'; return; }
       action = 'trade'; payload = { trade: t };
     } else {
       const t = base();
-      const krw = $('#fKrw').value;
+      const krw = String($('#fKrw').value).replace(/,/g, '');
       if (krw !== '') t.amountKrw = Number(krw);
       t.qty = Number($('#fQty').value); t.price = Number($('#fPrice').value);
       if (!(t.qty > 0)) { err.textContent = '수량을 입력하세요.'; return; }
