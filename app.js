@@ -22,6 +22,7 @@
     year: null,
     openKinds: new Set(),
     openMonths: new Set(),
+    openTrades: new Set(),
     kindsOpen: false,
     cmpMode: store.get('dh_cmpmode') === 'sub' ? 'sub' : 'kind',
     cmpSel: (() => { try { return JSON.parse(store.get('dh_cmpsel')) || { kind: null, sub: null }; } catch { return { kind: null, sub: null }; } })(),
@@ -312,11 +313,10 @@
           const w = g.v / tot;
           const main = state.sort === 'cost' ? g.c : g.v;
           return `
-          <button class="kind-tile ${i === 0 ? 'wide' : ''}" data-kind="${esc(g.k)}" style="--i:${i}">
-            <span class="kt-donut" style="--p:${(w * 100).toFixed(1)}" aria-hidden="true"><b>${(w * 100).toFixed(0)}%</b></span>
+          <button class="kind-tile ${i === 0 ? 'wide' : ''}" data-kind="${esc(g.k)}" style="--i:${i}" aria-label="${esc(g.k)} ${state.sort === 'cost' ? '원금' : '평가금'} ${compact(main)}원 수익률 ${pct(g.ret)}">
             <span class="kt-name">${esc(g.k)}</span>
+            <span class="kt-label">${state.sort === 'cost' ? '원금' : '평가금'}</span>
             <span class="kt-value num">${compact(main)}원</span>
-            <span class="kt-sub num">${state.sort === 'cost' ? `평가 ${compact(g.v)}원` : `원금 ${compact(g.c)}원`} · ${g.list.length}개</span>
             <span class="kt-ret num ${cls(g.ret)}">${pct(g.ret)}</span>
             ${bar(g.ret)}
           </button>`;
@@ -601,14 +601,15 @@
     const y = new Date().getFullYear();
     return `
       <div class="card">
-        <div class="card-head"><h2 class="card-title">골라서 비교</h2>
+        <div class="card-head"><h2 class="card-title">자산별 비교</h2>
           <div class="seg" id="cmpMode" role="group" aria-label="비교 단위">
             <button data-mode="kind" class="${state.cmpMode === 'kind' ? 'on' : ''}">자산 구성</button>
             <button data-mode="sub" class="${state.cmpMode === 'sub' ? 'on' : ''}">종목</button>
           </div>
         </div>
-        <div class="pick" role="group" aria-label="비교할 항목">
-          ${opts.map(n => `<button class="pick-chip ${sel.includes(n) ? 'on' : ''}" data-name="${esc(n)}" style="--c:${color(n)}" aria-pressed="${sel.includes(n)}">${sel.includes(n) ? '<i></i>' : ''}${esc(n)}</button>`).join('')}
+        <div class="pick">
+          ${sel.map(n => `<span class="pick-chip on" style="--c:${color(n)}"><i></i>${esc(n)}</span>`).join('')}
+          <button class="pick-add" id="cmpPick">${sel.length ? '변경' : '+ 비교할 자산 고르기'}</button>
         </div>
         ${sel.length ? `
           <div class="cmp-label">누적 실현손익</div>
@@ -624,21 +625,54 @@
             </table>
           </div>
           <p class="note">누적 실현 = 기록된 익절·손절 합계. 지금 수익률 = 보유 중인 평가금 기준${state.cmpMode === 'sub' ? '(종목은 평단 대비)' : ''}.</p>`
-        : `<p class="empty">비교할 항목을 위에서 골라 주세요. 최대 ${CMP_MAX}개까지 비교할 수 있어요.</p>`}
+        : `<p class="empty">위 버튼을 눌러 비교할 ${state.cmpMode === 'kind' ? '자산 구성' : '종목'}을 골라 주세요. 최대 ${CMP_MAX}개까지 비교할 수 있어요.</p>`}
       </div>`;
   }
 
   function bindCompare(el) {
     $$('#cmpMode button', el).forEach(b => b.onclick = () => { state.cmpMode = b.dataset.mode; store.set('dh_cmpmode', state.cmpMode); renderYears(); });
-    $$('.pick-chip', el).forEach(b => b.onclick = () => {
-      const sel = compareSelection(), n = b.dataset.name;
-      if (sel.includes(n)) sel.splice(sel.indexOf(n), 1);
-      else if (sel.length >= CMP_MAX) { toast(`최대 ${CMP_MAX}개까지 비교할 수 있어요`); return; }
-      else sel.push(n);
-      state.cmpSel[state.cmpMode] = sel;
-      store.set('dh_cmpsel', JSON.stringify(state.cmpSel));
-      const y = window.scrollY; renderYears(); window.scrollTo({ top: y });
-    });
+    const btn = $('#cmpPick', el);
+    if (btn) btn.onclick = openComparePicker;
+  }
+
+  // 비교할 항목 고르는 팝업
+  function openComparePicker() {
+    const opts = compareOptions();
+    let sel = compareSelection().slice();
+    const D = state.data;
+    const draw = () => {
+      openSheet(`
+        <div class="picker">
+          <h2 id="sheetTitle">비교할 ${state.cmpMode === 'kind' ? '자산 구성' : '종목'} 고르기</h2>
+          <p class="kind">최대 ${CMP_MAX}개 · ${sel.length}개 선택</p>
+          <div class="picker-list">
+            ${opts.map(n => {
+              const i = sel.indexOf(n);
+              const amt = D.realized.filter(r => state.cmpMode === 'kind' ? r.kind === n : String(r.sub) === n).reduce((t, r) => t + r.amount, 0);
+              return `<button class="picker-item ${i >= 0 ? 'on' : ''}" data-name="${esc(n)}" style="--c:${CMP_COLORS[i] || 'var(--line)'}" aria-pressed="${i >= 0}">
+                <span class="check" aria-hidden="true">${i >= 0 ? '✓' : ''}</span>
+                <span class="picker-name">${esc(n)}</span>
+                <span class="picker-amt num ${cls(amt)}">${amt ? compactSigned(amt) : ''}</span>
+              </button>`;
+            }).join('')}
+          </div>
+          <div class="sheet-actions"><button class="btn primary" id="pickDone">${sel.length ? `${sel.length}개 비교하기` : '닫기'}</button></div>
+        </div>`, 'pop');
+      $$('#sheetBody .picker-item').forEach(b => b.onclick = () => {
+        const n = b.dataset.name;
+        if (sel.includes(n)) sel.splice(sel.indexOf(n), 1);
+        else if (sel.length >= CMP_MAX) { toast(`최대 ${CMP_MAX}개까지 비교할 수 있어요`); return; }
+        else sel.push(n);
+        const sc = $('.sheet-panel').scrollTop; draw(); $('.sheet-panel').scrollTop = sc;
+      });
+      $('#pickDone').onclick = () => {
+        state.cmpSel[state.cmpMode] = sel;
+        store.set('dh_cmpsel', JSON.stringify(state.cmpSel));
+        closeSheet();
+        const y = window.scrollY; renderYears(); window.scrollTo({ top: y });
+      };
+    };
+    draw();
   }
 
   function renderOneYear(y) {
@@ -711,24 +745,28 @@
       </div>
 
       <div class="card">
-        <div class="card-head"><h2 class="card-title">월별 상세</h2><span class="card-aside">누르면 거래별로</span></div>
+        <div class="card-head"><h2 class="card-title">월별 상세</h2><span class="card-aside">달을 누르면 자세히</span></div>
         ${activeMonths.length ? (() => {
           const maxM = Math.max(...activeMonths.map(([, v]) => Math.abs(v)), 1);
           return activeMonths.slice().reverse().map(([m, v]) => {
             const open = state.openMonths.has(`${y}-${m}`);
             const ks = shownKinds.filter(k => k.months[m - 1] !== 0).sort((p, q) => Math.abs(q.months[m - 1]) - Math.abs(p.months[m - 1]));
-            const items = open ? list.filter(r => r.month === m).sort((p, q) => q.date - p.date) : [];
+            const showTrades = state.openTrades.has(`${y}-${m}`);
+            const items = list.filter(r => r.month === m).sort((p, q) => q.date - p.date);
             return `
-            <div class="month" data-month="${m}">
-              <button class="month-head">
+            <div class="month ${open ? 'open' : ''}">
+              <button class="month-head" data-month="${m}" aria-expanded="${open}">
                 <span class="month-name">${m}월</span>
                 <span class="month-total num ${cls(v)}">${signWon(v)}</span>
+                <span class="chev ${open ? 'up' : ''}" aria-hidden="true"></span>
               </button>
               <div class="month-bar" aria-hidden="true"><i style="width:${Math.abs(v) / maxM * 100}%;background:${v >= 0 ? 'var(--up)' : 'var(--down)'}"></i></div>
+              ${open ? `
               <div class="month-kinds num">
                 ${ks.map(k => `<div><span>${esc(k.k)}</span><b class="${cls(k.months[m - 1])}">${signWon(k.months[m - 1])}</b></div>`).join('')}
               </div>
-              ${open ? `<div class="month-items">${items.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}</div>` : ''}
+              <button class="link-btn" data-trades="${m}">${showTrades ? '거래 접기' : `거래 ${items.length}건 보기`}</button>
+              ${showTrades ? `<div class="month-items">${items.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}</div>` : ''}` : ''}
             </div>`;
           }).join('');
         })() : `<p class="empty">${y}년 실현손익 기록이 아직 없어요.</p>`}
@@ -736,11 +774,17 @@
       ${monthlyEvalCard(y)}`;
 
     $('#kindsFold').onclick = () => { state.kindsOpen = !state.kindsOpen; renderOneYear(y); };
-    $$('#yearBody .month').forEach(el => el.onclick = () => {
+    $$('#yearBody .month-head').forEach(el => el.onclick = () => {
       const key = `${y}-${el.dataset.month}`;
       state.openMonths.has(key) ? state.openMonths.delete(key) : state.openMonths.add(key);
       renderOneYear(y);
     });
+    $$('#yearBody [data-trades]').forEach(el => el.onclick = () => {
+      const key = `${y}-${el.dataset.trades}`;
+      state.openTrades.has(key) ? state.openTrades.delete(key) : state.openTrades.add(key);
+      renderOneYear(y);
+    });
+    bindBars($('#yearBody'));
     $$('#yearBody .kind-row').forEach(tr => tr.onclick = () => {
       const k = tr.dataset.kind;
       state.openKinds.has(k) ? state.openKinds.delete(k) : state.openKinds.add(k);
@@ -800,24 +844,47 @@
         </table></div>
         <p class="note">연도를 누르면 그 해의 자산 구성과 월별 수익이 나와요.</p>
       </div>`;
+    bindBars($('#yearBody'));
   }
 
   function barChart(pairs) {
-    const W = 340, H = 150, padB = 18, padT = 10;
+    const W = 340, H = 168, padB = 22, padT = 12;
     const posMax = Math.max(0, ...pairs.map(([, v]) => v)), negMax = Math.max(0, ...pairs.map(([, v]) => -v));
     const span = H - padT - padB;
-    const zy = padT + span * (posMax / ((posMax + negMax) || 1));
-    const scale = span / ((posMax + negMax) || 1);
+    const tot = (posMax + negMax) || 1;
+    const zy = padT + span * (posMax / tot);
+    const scale = span / tot;
     const bw = W / pairs.length;
+    const last = pairs.map(([, v], i) => (v ? i : -1)).filter(i => i >= 0).pop() ?? 0;
     const bars = pairs.map(([l, v], i) => {
-      const h = Math.abs(v) * scale;
+      const h = Math.max(Math.abs(v) * scale, v ? 3 : 0);
       const y = v >= 0 ? zy - h : zy;
-      const short = l.replace('월', '');
-      return `<rect x="${i * bw + bw * 0.2}" y="${y}" width="${bw * 0.6}" height="${Math.max(h, v ? 1.5 : 0)}" rx="3" fill="${v >= 0 ? 'var(--up)' : 'var(--down)'}"><title>${l}: ${signWon(v)}</title></rect>
-        <text x="${i * bw + bw / 2}" y="${H - 4}" text-anchor="middle">${short}</text>`;
+      const x = i * bw + bw * 0.22, w = bw * 0.56;
+      const col = v >= 0 ? 'var(--up)' : 'var(--down)';
+      return `<g class="bar-g ${i === last ? 'sel' : ''}" data-i="${i}" data-label="${esc(l)}" data-v="${v}">
+        <rect x="${i * bw}" y="0" width="${bw}" height="${H}" fill="transparent"/>
+        <rect class="track" x="${x}" y="${padT}" width="${w}" height="${span}" rx="${w / 2}" fill="var(--fill)"/>
+        ${v ? `<rect class="val" x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.min(w / 2, h / 2)}" fill="${col}"/>` : ''}
+        <text x="${i * bw + bw / 2}" y="${H - 5}" text-anchor="middle">${esc(l.replace('월', ''))}</text>
+      </g>`;
     }).join('');
-    return `<svg class="chart bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="실현손익 막대 그래프" style="margin-top:16px">
-      <line x1="0" x2="${W}" y1="${zy}" y2="${zy}" stroke="var(--line)" stroke-width="1"/>${bars}</svg>`;
+    const [ll, lv] = pairs[last] || ['', 0];
+    return `<div class="bar-wrap">
+      <div class="bar-readout num"><span class="br-label">${esc(ll)}</span><b class="br-value ${cls(lv)}">${signWon(lv)}</b></div>
+      <svg class="chart bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="실현손익 막대 그래프. 막대를 누르면 금액이 나와요">
+        <line x1="0" x2="${W}" y1="${zy}" y2="${zy}" stroke="var(--line)" stroke-width="1"/>${bars}</svg>
+    </div>`;
+  }
+
+  function bindBars(root) {
+    $$('.bar-wrap', root).forEach(wrap => {
+      $$('.bar-g', wrap).forEach(g => g.onclick = () => {
+        $$('.bar-g', wrap).forEach(x => x.classList.toggle('sel', x === g));
+        const v = Number(g.dataset.v);
+        $('.br-label', wrap).textContent = g.dataset.label;
+        const b = $('.br-value', wrap); b.textContent = signWon(v); b.className = `br-value ${cls(v)}`;
+      });
+    });
   }
 
   /* ── 기록 ── */

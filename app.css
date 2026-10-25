@@ -389,3 +389,45 @@ table.grid tr.subsub td:first-child::before { content: "└ "; color: var(--ink-
 .cmp-label { font-size: 12.5px; font-weight: 600; color: var(--ink-3); margin-bottom: 2px; }
 table.grid.cmp td:first-child { white-space: normal; word-break: keep-all; max-width: 130px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+
+/* ── 타일 단순화 ── */
+.kt-name { padding-right: 0; }
+.kt-label { font-size: 12px; color: var(--ink-3); margin-top: 8px; }
+.kt-value { margin-top: 0; }
+.kind-tile { min-height: 128px; }
+.kind-tile.wide { min-height: 120px; }
+
+/* ── 비교 항목 고르기 ── */
+.pick { align-items: center; }
+.pick-chip { cursor: default; }
+.pick-add { border: 1.5px dashed var(--ink-4); background: none; border-radius: 999px; padding: 6px 13px; font-size: 13.5px; font-weight: 700; color: var(--accent); }
+.picker { padding: 22px 20px 0; }
+.picker h2 { font-size: 20px; }
+.picker-list { display: grid; gap: 8px; margin-top: 14px; max-height: 52dvh; overflow-y: auto; }
+.picker-item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border: 1.5px solid var(--line); background: var(--card); border-radius: 14px; padding: 12px 14px; font-size: 15px; font-weight: 600; transition: border-color .15s, background .15s; }
+.picker-item.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 9%, var(--card)); }
+.picker-item .check { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--ink-4); display: grid; place-items: center; font-size: 13px; color: #fff; flex: none; }
+.picker-item.on .check { background: var(--c); border-color: var(--c); }
+.picker-name { flex: 1; word-break: keep-all; }
+.picker-amt { font-size: 13px; font-weight: 700; }
+.picker .sheet-actions { position: sticky; bottom: 0; background: var(--card); padding: 12px 0 4px; margin-top: 8px; }
+
+/* ── 월별 상세: 접기 ── */
+.month { cursor: default; padding: 12px 0; }
+.month-head { cursor: pointer; gap: 10px; align-items: center; }
+.month-head .month-total { margin-left: auto; }
+.month-bar { margin: 8px 0 0; }
+.month.open .month-bar { margin-bottom: 10px; }
+.link-btn { background: none; border: 0; padding: 8px 0 0; font-size: 13.5px; font-weight: 700; color: var(--accent); }
+
+/* ── 막대그래프 ── */
+.bar-wrap { margin-top: 14px; }
+.bar-readout { display: flex; align-items: baseline; gap: 8px; min-height: 26px; }
+.br-label { font-size: 13px; color: var(--ink-3); font-weight: 600; }
+.br-value { font-size: 18px; font-weight: 800; }
+.bars .bar-g { cursor: pointer; }
+.bars .bar-g .val { opacity: .45; transition: opacity .15s; }
+.bars .bar-g.sel .val { opacity: 1; }
+.bars .bar-g .track { opacity: .55; }
+.bars .bar-g.sel text { fill: var(--ink); font-weight: 700; }
+.bars text { font-size: 10.5px; }
