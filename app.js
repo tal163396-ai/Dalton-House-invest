@@ -155,16 +155,6 @@
     const rzYear = D.realized.filter(r => r.year === thisYear).reduce((s, r) => s + r.amount, 0);
     $('#view-home').innerHTML = `
       <div class="card">
-        <div class="total-label">총 자산</div>
-        <div class="total-value num">${won(T.value)}</div>
-        <div class="total-grid num">
-          <button class="mini" data-stat="pl"><div class="mini-label">평가손익</div><div class="mini-value ${cls(T.pl)}">${compactSigned(T.pl)} <small>(${pct(T.ret, 1)})</small></div></button>
-          <button class="mini" data-stat="rz"><div class="mini-label">${thisYear}년 실현손익</div><div class="mini-value ${cls(rzYear)}">${compactSigned(rzYear)}</div></button>
-          <button class="mini" data-stat="cost"><div class="mini-label">투자원금</div><div class="mini-value">${compact(T.cost)}</div></button>
-          <button class="mini" data-stat="count"><div class="mini-label">자산 수</div><div class="mini-value">${D.assets.length}개</div></button>
-        </div>
-      </div>
-      <div class="card">
         <div class="card-head">
           <h2 class="card-title">자산 구성</h2>
           <div class="seg" role="group" aria-label="표시 방식">
@@ -179,6 +169,16 @@
             ? `<span class="scale" aria-hidden="true">−30%<i style="background:${retColor(-0.3)}"></i><i style="background:${retColor(-0.1)}"></i><i style="background:${retColor(0)}"></i><i style="background:${retColor(0.1)}"></i><i style="background:${retColor(0.3)}"></i>+30%</span>`
             : ''}
         </div>
+      </div>
+      <div class="card">
+        <div class="total-label">총 자산</div>
+        <div class="total-value num">${won(T.value)}</div>
+        <div class="total-grid num">
+          <button class="mini" data-stat="pl"><div class="mini-label">평가손익</div><div class="mini-value ${cls(T.pl)}">${compactSigned(T.pl)} <small>(${pct(T.ret, 1)})</small></div></button>
+          <button class="mini" data-stat="rz"><div class="mini-label">${thisYear}년 실현손익</div><div class="mini-value ${cls(rzYear)}">${compactSigned(rzYear)}</div></button>
+          <button class="mini" data-stat="cost"><div class="mini-label">투자원금</div><div class="mini-value">${compact(T.cost)}</div></button>
+          <button class="mini" data-stat="count"><div class="mini-label">자산 수</div><div class="mini-value">${D.assets.length}개</div></button>
+        </div>
       </div>`;
     $$('#view-home .mini').forEach(b => b.onclick = () => openStat(b.dataset.stat));
     $$('#view-home .seg button').forEach(b => b.onclick = () => {
@@ -190,32 +190,34 @@
   // 홈 요약 칸을 누르면 상세 팝업
   function openStat(type) {
     const D = state.data, T = D.total, y = new Date().getFullYear();
-    const row = (name, sub, right, cl = '', w = null, col = 'var(--accent)') => `
-      <div class="stat-row">
+    const row = (name, sub, right, cl = '', w = null, col = 'var(--accent)', attr = '') => `
+      <${attr ? 'button' : 'div'} class="stat-row ${attr ? 'tap' : ''}" ${attr}>
         <div class="stat-row-top"><span class="stat-row-name">${esc(name)}</span><b class="num ${cl}">${right}</b></div>
         ${sub ? `<div class="stat-row-sub num">${sub}</div>` : ''}
         ${w !== null ? `<div class="stat-meter" aria-hidden="true"><i style="width:${Math.max(1.5, Math.min(100, w * 100))}%;background:${col}"></i></div>` : ''}
-      </div>`;
+      </${attr ? 'button' : 'div'}>`;
     let hero, list;
     if (type === 'pl') {
       const arr = D.assets.filter(a => a.cost > 0 && Math.abs(a.pl) >= 1).sort((a, b) => a.pl - b.pl);
       const mx = Math.max(...arr.map(a => Math.abs(a.pl)), 1);
       hero = { t: '평가손익', v: signWon(T.pl), s: `원금 ${won(T.cost)} 대비 ${pct(T.ret)}`, c: T.pl >= 0 ? 'gain' : 'loss' };
-      list = arr.map(a => row(a.name, `${esc(a.kind)} · ${pct(a.ret, 1)}`, signWon(a.pl), cls(a.pl), Math.abs(a.pl) / mx, a.pl >= 0 ? 'var(--bar-up)' : 'var(--down)')).join('')
+      list = arr.map(a => row(a.name, `${esc(a.kind)} · ${pct(a.ret, 1)}`, signWon(a.pl), cls(a.pl), Math.abs(a.pl) / mx, a.pl >= 0 ? 'var(--bar-up)' : 'var(--down)', `data-asset="${esc(a.name)}"`)).join('')
         || '<p class="empty">손익이 있는 자산이 없어요.</p>';
     } else if (type === 'rz') {
       const rz = D.realized.filter(r => r.year === y);
       const sum = rz.reduce((t, r) => t + r.amount, 0);
       const ks = [...groupBy(rz, r => r.kind)].map(([k, l]) => ({ k, amt: l.reduce((t, r) => t + r.amount, 0), n: l.length })).sort((a, b) => b.amt - a.amt);
       const mx = Math.max(...ks.map(k => Math.abs(k.amt)), 1);
-      hero = { t: `${y}년 실현손익`, v: signWon(sum), s: `익절 ${rz.filter(r => r.amount > 0).length}건 · 손절 ${rz.filter(r => r.amount < 0).length}건`, c: sum >= 0 ? 'gain' : 'loss' };
-      list = ks.map(k => row(k.k, `${k.n}건`, signWon(k.amt), cls(k.amt), Math.abs(k.amt) / mx, k.amt >= 0 ? 'var(--bar-up)' : 'var(--down)')).join('')
+      const g = rz.filter(r => r.amount > 0), l = rz.filter(r => r.amount < 0);
+      hero = { t: `${y}년 실현손익`, v: signWon(sum), c: sum >= 0 ? 'gain' : 'loss',
+        s: `<span class="hero-btns"><button class="hero-btn" data-rz="gain">익절 ${g.length}건 ${compactSigned(g.reduce((t, r) => t + r.amount, 0))} ›</button><button class="hero-btn" data-rz="loss">손절 ${l.length}건 ${compactSigned(l.reduce((t, r) => t + r.amount, 0))} ›</button></span>` };
+      list = ks.map(k => row(k.k, `${k.n}건 · 누르면 거래 내역`, signWon(k.amt), cls(k.amt), Math.abs(k.amt) / mx, k.amt >= 0 ? 'var(--bar-up)' : 'var(--down)', `data-rzkind="${esc(k.k)}"`)).join('')
         + `<button class="link-btn" id="goYears">수익률 탭에서 자세히 보기</button>`;
     } else if (type === 'cost') {
       const ks = [...groupBy(D.assets, a => a.kind)].map(([k, l]) => ({ k, c: l.reduce((t, a) => t + a.cost, 0), v: l.reduce((t, a) => t + a.value, 0) })).sort((a, b) => b.c - a.c);
       hero = { t: '투자원금', v: won(T.cost), s: `지금 평가금 ${won(T.value)}`, c: 'neutral' };
       list = `<div class="stack" aria-hidden="true">${ks.map((k, i) => `<i style="flex:${k.c};background:${CMP_COLORS[i % CMP_COLORS.length]};opacity:${1 - Math.floor(i / CMP_COLORS.length) * 0.45}"></i>`).join('')}</div>`
-        + ks.map((k, i) => row(k.k, `평가 ${compact(k.v)}원`, `${compact(k.c)}원 <small>${(k.c / T.cost * 100).toFixed(1)}%</small>`, '', k.c / T.cost, CMP_COLORS[i % CMP_COLORS.length])).join('');
+        + ks.map((k, i) => row(k.k, `평가 ${compact(k.v)}원`, `${compact(k.c)}원 <small>${(k.c / T.cost * 100).toFixed(1)}%</small>`, '', k.c / T.cost, CMP_COLORS[i % CMP_COLORS.length], `data-kind="${esc(k.k)}"`)).join('');
     } else {
       const ks = [...groupBy(D.assets, a => a.kind)];
       hero = { t: '자산 수', v: `${D.assets.length}개`, s: `${ks.length}개 종류`, c: 'neutral' };
@@ -229,7 +231,29 @@
       <div class="pop-list">${list}</div>
       <button class="btn pop-close" data-close>닫기</button>`, 'pop');
     const g = $('#goYears'); if (g) g.onclick = () => { closeSheet(); state.year = y; renderYears(); go('years'); };
-    $$('#sheetBody .stat-chip').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
+    $$('#sheetBody .stat-chip, #sheetBody .stat-row[data-asset]').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
+    $$('#sheetBody .stat-row[data-kind]').forEach(b => b.onclick = () => openKind(b.dataset.kind));
+    $$('#sheetBody [data-rz]').forEach(b => b.onclick = () => openRzList(b.dataset.rz === 'gain' ? r => r.amount > 0 : r => r.amount < 0, b.dataset.rz === 'gain' ? '익절' : '손절'));
+    $$('#sheetBody [data-rzkind]').forEach(b => b.onclick = () => openRzList(r => r.kind === b.dataset.rzkind, b.dataset.rzkind));
+  }
+
+  // 실현손익 거래 목록 (올해)
+  function openRzList(filter, title) {
+    const D = state.data, y = new Date().getFullYear();
+    const list = D.realized.filter(r => r.year === y && filter(r)).sort((a, b) => b.date - a.date);
+    const sum = list.reduce((t, r) => t + r.amount, 0);
+    const bySub = [...groupBy(list, r => String(r.sub || r.asset))].map(([k, l]) => ({ k, amt: l.reduce((t, r) => t + r.amount, 0), n: l.length })).sort((a, b) => b.amt - a.amt);
+    openSheet(`
+      <div class="pop-hero ${sum >= 0 ? 'gain' : 'loss'}">
+        <div><button class="hero-back" id="rzBack">‹ ${y}년 실현손익</button>
+          <div class="pop-kind">${esc(title)}</div><h2 id="sheetTitle" class="num">${signWon(sum)}</h2><div class="pop-sub num">${list.length}건</div></div>
+      </div>
+      <div class="pop-list">
+        ${bySub.length > 1 ? `<div class="sub-chips">${bySub.map(x => `<span class="sub-chip num">${esc(x.k)} <b class="${cls(x.amt)}">${compactSigned(x.amt)}</b></span>`).join('')}</div>` : ''}
+        ${list.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('') || '<p class="empty">거래가 없어요.</p>'}
+      </div>
+      <button class="btn pop-close" data-close>닫기</button>`, 'pop');
+    $('#rzBack').onclick = () => openStat('rz');
   }
 
   function drawPlan() {
@@ -599,11 +623,11 @@
     const valFmt = opt.valFmt || fmt;
     const info = {
       W, L, R, n: pts.length, xs: pts.map((_, i) => +X(i).toFixed(1)), labels: pts.map(p => p.label),
-      series: series.map(s => ({ key: s.key, label: s.label, color: s.color, vals: pts.map(p => p[s.key]), ys: pts.map(p => Number.isFinite(p[s.key]) ? +Y(p[s.key]).toFixed(1) : null), fmt: pts.map(p => Number.isFinite(p[s.key]) ? valFmt(p[s.key]) : '—') })),
+      series: series.map(s => ({ key: s.key, label: s.label, color: s.color, meta: (opt.meta || {})[s.key] || null, vals: pts.map(p => p[s.key]), ys: pts.map(p => Number.isFinite(p[s.key]) ? +Y(p[s.key]).toFixed(1) : null), fmt: pts.map(p => Number.isFinite(p[s.key]) ? valFmt(p[s.key]) : '—') })),
     };
     const hits = series.map(s => `<polyline class="hit" data-k="${s.key}" points="${ptsOf(s)}" fill="none" stroke="transparent" stroke-width="20" stroke-linejoin="round"/>`).join('');
     return `<div class="line-wrap" data-info='${esc(JSON.stringify(info))}'>
-      <div class="line-readout num">선을 누르면 이름과 금액이 나와요</div>
+      <div class="line-readout num">선을 누르면 자세한 내용이 나와요</div>
       <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="비교 그래프. 선을 누르면 이름과 금액이 나와요">${grid}${zero}${lines}${dot}${xl}${hits}
         <circle class="pick-dot" r="5" stroke="var(--card)" stroke-width="2" style="display:none" cx="0" cy="0"/></svg>
     </div>`;
@@ -708,27 +732,20 @@
             <button data-mode="sub" class="${state.cmpMode === 'sub' ? 'on' : ''}">종목</button>
           </div>
         </div>
-        <div class="pick">
-          ${sel.map(n => `<span class="pick-chip on" style="--c:${color(n)}"><i></i>${esc(n)}</span>`).join('')}
-          <button class="pick-add" id="cmpPick">${sel.length ? '변경' : '+ 비교할 자산 고르기'}</button>
-        </div>
         ${sel.length ? `
           <div class="cmp-label">${yearLabel} 누적 실현손익</div>
-          ${lineChart(pts, series, { L: 46, fmt: v => compactSigned(v), noDot: true, interactive: true, valFmt: v => `${compactSigned(v)}원` })}
-          <div class="cmp-list num">
-            ${sel.map(n => {
-              const m = M[n];
-              const cells = y === 'all'
-                ? [['누적 실현', m.amt, compactSigned(m.amt)], [`${ty}년`, m.thisYear, m.thisYear ? compactSigned(m.thisYear) : '—'], ['지금 수익률', m.ret, m.value > 0 ? pct(m.ret, 1) : '보유 없음']]
-                : [[`${y}년 실현`, m.amt, m.amt ? compactSigned(m.amt) : '—'], ['기준원금 대비', m.baseRet, pct(m.baseRet, 1)], ['지금 수익률', m.ret, m.value > 0 ? pct(m.ret, 1) : '보유 없음']];
-              return `<div class="cmp-row" style="--c:${color(n)}">
-                <div class="cmp-name"><i class="dot" style="background:${color(n)}"></i>${esc(n)}</div>
-                <div class="cmp-cells">${cells.map(([l, v, t]) => `<div><small>${l}</small><b class="${cls(v)}">${t}</b></div>`).join('')}</div>
-              </div>`;
-            }).join('')}
+          ${lineChart(pts, series, { L: 46, fmt: v => compactSigned(v), noDot: true, interactive: true, valFmt: v => `${compactSigned(v)}원`,
+            meta: Object.fromEntries(sel.map((n, i) => { const m = M[n]; return [`c${i}`, y === 'all'
+              ? [['누적 실현', compactSigned(m.amt), cls(m.amt)], [`${ty}년`, m.thisYear ? compactSigned(m.thisYear) : '—', cls(m.thisYear)], ['지금 수익률', m.value > 0 ? pct(m.ret, 1) : '보유 없음', cls(m.ret)]]
+              : [[`${y}년 실현`, m.amt ? compactSigned(m.amt) : '—', cls(m.amt)], ['기준원금 대비', pct(m.baseRet, 1), cls(m.baseRet)], ['지금 수익률', m.value > 0 ? pct(m.ret, 1) : '보유 없음', cls(m.ret)]]]; })) })}
+          <div class="pick small">
+            <span class="pick-title">비교 중</span>
+            ${sel.map(n => `<span class="pick-chip on" style="--c:${color(n)}"><i></i>${esc(n)}</span>`).join('')}
+            <button class="pick-add" id="cmpPick">변경</button>
           </div>
           <p class="note">위의 연도를 바꾸면 그 해 기준으로 비교해요. 지금 수익률 = 보유 중인 평가금 기준${state.cmpMode === 'sub' ? '(종목은 평단 대비)' : ''}.</p>`
-        : `<p class="empty">${yearLabel}에 비교할 기록이 없어요.</p>`}
+        : `<p class="empty">${yearLabel}에 비교할 기록이 없어요.</p>
+          <div class="pick small"><button class="pick-add" id="cmpPick">+ 비교할 자산 고르기</button></div>`}
       </div>`;
   }
 
@@ -794,14 +811,16 @@
         $$('.ln', svg).forEach(l => l.classList.toggle('dim', l.dataset.k !== k));
         const dot = $('.pick-dot', svg);
         dot.setAttribute('cx', info.xs[i]); dot.setAttribute('cy', s.ys[i]); dot.setAttribute('fill', s.color); dot.style.display = '';
-        ro.innerHTML = `<i style="background:${s.color}"></i><b>${esc(s.label)}</b><span>${esc(info.labels[i])}</span><b class="${cls(v)}">${esc(s.fmt[i])}</b>`;
+        ro.innerHTML = `<div class="ro-top"><i style="background:${s.color}"></i><b>${esc(s.label)}</b><span>${esc(info.labels[i])}</span><b class="${cls(v)}">${esc(s.fmt[i])}</b></div>
+          ${s.meta ? `<div class="ro-cells">${s.meta.map(([l, t, c]) => `<div><small>${esc(l)}</small><b class="${c}">${esc(t)}</b></div>`).join('')}</div>` : ''}`;
+        ro.style.setProperty('--c', s.color);
         ro.classList.add('on');
       });
       svg.addEventListener('click', e => {
         if (e.target.classList.contains('hit')) return;
         $$('.ln', svg).forEach(l => l.classList.remove('dim'));
         $('.pick-dot', svg).style.display = 'none';
-        ro.classList.remove('on'); ro.innerHTML = '선을 누르면 이름과 금액이 나와요';
+        ro.classList.remove('on'); ro.innerHTML = '선을 누르면 자세한 내용이 나와요';
       });
     });
   }

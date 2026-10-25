@@ -482,3 +482,31 @@ button.mini::after { content: ""; position: absolute; right: 12px; top: 14px; wi
 .cmp-cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .cmp-cells small { display: block; font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
 .cmp-cells b { font-size: 15px; font-weight: 750; }
+
+/* ── 팝업 안 누르는 줄 ── */
+button.stat-row { display: block; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--fill); color: inherit; padding: 12px 0; cursor: pointer; }
+button.stat-row:first-child { border-top: 0; }
+button.stat-row:active { opacity: .7; }
+.stat-row.tap .stat-row-name::after { content: " ›"; color: var(--ink-4); }
+.hero-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.hero-btn { border: 0; background: rgba(255,255,255,.2); color: #fff; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; }
+.hero-btn:active { background: rgba(255,255,255,.32); }
+.hero-back { border: 0; background: none; color: #fff; opacity: .85; font-size: 13px; font-weight: 700; padding: 0 0 6px; }
+.sub-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0 6px; }
+.sub-chip { background: var(--fill); border-radius: 10px; padding: 6px 10px; font-size: 13px; font-weight: 600; }
+.sub-chip b { font-weight: 800; margin-left: 2px; }
+
+/* ── 자산별 비교: 아래 작은 칩, 선 누르면 상세 ── */
+.pick.small { margin: 10px 0 0; gap: 5px; }
+.pick.small .pick-title { font-size: 12px; font-weight: 700; color: var(--ink-3); margin-right: 2px; }
+.pick.small .pick-chip { padding: 3px 9px; font-size: 12px; border-width: 1px; }
+.pick.small .pick-chip i { width: 6px; height: 6px; }
+.pick.small .pick-add { padding: 3px 10px; font-size: 12px; border-width: 1px; }
+.line-readout { min-height: 34px; align-items: stretch; }
+.line-readout.on { display: block; background: var(--fill); border-radius: 14px; padding: 10px 12px; border-left: 4px solid var(--c); margin-bottom: 6px; }
+.ro-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.ro-top i { width: 10px; height: 10px; border-radius: 50%; }
+.ro-cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.ro-cells small { display: block; font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+.ro-cells b { font-size: 15px; font-weight: 800; color: var(--ink); }
+.ro-cells b.up { color: var(--up); } .ro-cells b.down { color: var(--down); }
