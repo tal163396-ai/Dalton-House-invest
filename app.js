@@ -231,8 +231,9 @@
       pager.style.height = `${pages[i].offsetHeight}px`;
       if (i !== last) { const first = last < 0; last = i; if (onChange) onChange(i, first); }
     };
-    let t;
-    pager.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(fit, 60); }, { passive: true });
+    // 스와이프 중 화면이 절반 넘게 넘어가는 순간 바로 표시를 바꿈 (멈출 때까지 기다리지 않음)
+    let raf = 0;
+    pager.addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; fit(); }); }, { passive: true });
     tabs.forEach(d => d.onclick = () => pager.scrollTo({ left: Number(d.dataset.p) * pager.clientWidth, behavior: 'smooth' }));
     if ('ResizeObserver' in window) { const ro = new ResizeObserver(() => fit()); pages.forEach(pg => ro.observe(pg)); }
     const align = (i = start) => { if (!pager.clientWidth) return; pager.scrollLeft = i * pager.clientWidth; fit(); };
