@@ -2,7 +2,7 @@
   'use strict';
 
   const API = (window.DH_CONFIG || {}).API_URL;
-  const LS = { pw: 'dh_pw', name: 'dh_name', cache: 'dh_cache', mode: 'dh_mode', sort: 'dh_sort' };
+  const LS = { pw: 'dh_pw', name: 'dh_name', cache: 'dh_cache', mode: 'dh_mode', sort: 'dh_sort', fx: 'dh_fx' };
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
@@ -17,10 +17,10 @@
     view: 'home',
     mode: store.get(LS.mode) || 'weight',
     sort: store.get(LS.sort) || 'value',
+    fx: store.get(LS.fx) === '1',
     year: null,
     openKinds: new Set(),
     form: { type: '매수', asset: '', sub: '' },
-    busy: false,
   };
 
   /* ───────────── 숫자 표시 ───────────── */
@@ -36,6 +36,7 @@
     if (a >= 1e4) return `${s}${Math.round(a / 1e4).toLocaleString('ko-KR')}만`;
     return `${s}${Math.round(a).toLocaleString('ko-KR')}`;
   }
+  const compactSigned = v => `${v > 0 ? '+' : ''}${compact(v)}`;
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   /* ───────────── 서버 ───────────── */
@@ -63,7 +64,7 @@
     } catch (e) {
       if (e.code === 'auth') { logout('비밀번호가 바뀌었거나 틀렸습니다. 다시 입력해 주세요.'); return; }
       toast(state.data ? `새로고침 실패: ${e.message}` : `불러오기 실패: ${e.message}`, true);
-      if (!state.data) $('#view-home').innerHTML = `<p class="empty">데이터를 불러오지 못했습니다.<br>${esc(e.message)}<br><br>인터넷 연결을 확인하고 새로고침을 눌러 주세요.</p>`;
+      if (!state.data) $('#view-home').innerHTML = `<div class="card"><p class="empty">데이터를 불러오지 못했습니다.<br>${esc(e.message)}<br><br>인터넷 연결을 확인하고 새로고침을 눌러 주세요.</p></div>`;
     } finally {
       btn.classList.remove('spin');
     }
@@ -74,13 +75,11 @@
     const rate = num(d.rate) || 1400;
     const bad = [];
     const rows = (d.holdings || []).map(h => {
-      const value = num(h['평가금(원)']);
       if (!isNum(h['평가금(원)']) && h['평가금(원)'] !== '') bad.push(`${h['자산']} ${h['세부종목']}`);
       return {
         asset: String(h['자산']).trim(), kind: String(h['종류'] || '').trim(), sub: String(h['세부종목'] || h['자산']).trim(),
         ticker: h['티커'], cur: h['통화'] || 'KRW', qty: num(h['수량']), avg: num(h['평단가']),
-        cost: num(h['원금(원)']), price: num(h['현재가']), manual: isNum(h['직접평가(원)']) && h['직접평가(원)'] !== '',
-        value, method: String(h['시세방식'] || ''),
+        cost: num(h['원금(원)']), price: num(h['현재가']), value: num(h['평가금(원)']), method: String(h['시세방식'] || ''),
       };
     });
 
@@ -100,8 +99,7 @@
 
     const comp = new Map();
     (d.composition || []).forEach(c => {
-      const y = num(c['연도']);
-      comp.set(`${y}|${String(c['자산']).trim()}`, { kind: String(c['종류']).trim(), base: isNum(c['기준원금(원)']) ? num(c['기준원금(원)']) : null });
+      comp.set(`${num(c['연도'])}|${String(c['자산']).trim()}`, { kind: String(c['종류']).trim(), base: isNum(c['기준원금(원)']) ? num(c['기준원금(원)']) : null });
     });
     const realized = (d.realized || []).map(r => {
       const date = new Date(r['날짜']);
@@ -117,9 +115,9 @@
       .filter(Boolean).sort((a, b) => a - b);
 
     return {
-      raw: d, rate, rows, assets, total: { ...total, pl: total.value - total.cost, ret: total.cost > 0 ? (total.value - total.cost) / total.cost : null },
-      comp, realized, years, bad, monthly: d.monthly || [], trades: (d.trades || []).slice().reverse(),
-      updatedAt: d.updatedAt,
+      rate, rows, assets, comp, realized, years, bad,
+      total: { ...total, pl: total.value - total.cost, ret: total.cost > 0 ? (total.value - total.cost) / total.cost : null },
+      monthly: d.monthly || [], trades: (d.trades || []).slice().reverse(), index: d.index || null, updatedAt: d.updatedAt,
     };
   }
 
@@ -127,38 +125,44 @@
   function render() {
     const D = state.data;
     if (!D) return;
-    $('#updated').textContent = D.updatedAt ? `${D.updatedAt.slice(5).replace('-', '/')} 기준 · 환율 ${D.rate.toFixed(1)}` : '';
+    $('#updated').textContent = D.updatedAt ? `${D.updatedAt.slice(5).replace('-', '/')} 기준 · 환율 ${D.rate.toFixed(1)}원` : '';
     const banner = $('#banner');
     if (D.bad.length) { banner.hidden = false; banner.textContent = `시세를 못 불러온 종목이 있어요: ${D.bad.join(', ')}. 잠시 후 새로고침해 주세요.`; }
     else banner.hidden = true;
-    renderHome(); renderAssets(); renderYears(); renderRecord();
+    renderHome(); renderRecord(); renderYears(); renderAssets();
   }
 
-  /* 홈 — 총액 + 평면도 */
+  /* ── 포트폴리오 ── */
   function renderHome() {
     const D = state.data, T = D.total;
+    const thisYear = new Date().getFullYear();
+    const rzYear = D.realized.filter(r => r.year === thisYear).reduce((s, r) => s + r.amount, 0);
     $('#view-home').innerHTML = `
-      <div class="total">
-        <div class="total-label">총 평가금</div>
+      <div class="card">
+        <div class="total-label">총 자산</div>
         <div class="total-value num">${won(T.value)}</div>
-        <div class="total-sub num">
-          <span>원금 <b>${won(T.cost)}</b></span>
-          <span class="${cls(T.pl)}">${signWon(T.pl)} (${pct(T.ret)})</span>
+        <div class="total-grid num">
+          <div class="mini"><div class="mini-label">평가손익</div><div class="mini-value ${cls(T.pl)}">${compactSigned(T.pl)} <small>(${pct(T.ret, 1)})</small></div></div>
+          <div class="mini"><div class="mini-label">${thisYear}년 실현손익</div><div class="mini-value ${cls(rzYear)}">${compactSigned(rzYear)}</div></div>
+          <div class="mini"><div class="mini-label">투자원금</div><div class="mini-value">${compact(T.cost)}</div></div>
+          <div class="mini"><div class="mini-label">자산 수</div><div class="mini-value">${D.assets.length}개</div></div>
         </div>
       </div>
-      <div class="plan-head">
-        <h2 class="plan-title">우리 집 자산 배치</h2>
-        <div class="seg" role="group" aria-label="표시 방식">
-          <button data-mode="weight" class="${state.mode === 'weight' ? 'on' : ''}">비중</button>
-          <button data-mode="return" class="${state.mode === 'return' ? 'on' : ''}">수익률</button>
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">자산 구성</h2>
+          <div class="seg" role="group" aria-label="표시 방식">
+            <button data-mode="weight" class="${state.mode === 'weight' ? 'on' : ''}">비중</button>
+            <button data-mode="return" class="${state.mode === 'return' ? 'on' : ''}">수익률</button>
+          </div>
         </div>
-      </div>
-      <div class="plan" id="plan" role="group" aria-label="자산 트리맵"></div>
-      <div class="plan-legend">
-        <span>방은 종류, 칸 크기는 평가금</span>
-        ${state.mode === 'return'
-          ? `<span class="scale" aria-hidden="true">−30%<i style="background:${retColor(-0.3)}"></i><i style="background:${retColor(-0.1)}"></i><i style="background:${retColor(0)}"></i><i style="background:${retColor(0.1)}"></i><i style="background:${retColor(0.3)}"></i>+30%</span>`
-          : `<span>칸을 누르면 자세히</span>`}
+        <div class="plan" id="plan" role="group" aria-label="자산 트리맵"></div>
+        <div class="plan-legend">
+          <span>크기는 평가금, 칸을 누르면 자세히</span>
+          ${state.mode === 'return'
+            ? `<span class="scale" aria-hidden="true">−30%<i style="background:${retColor(-0.3)}"></i><i style="background:${retColor(-0.1)}"></i><i style="background:${retColor(0)}"></i><i style="background:${retColor(0.1)}"></i><i style="background:${retColor(0.3)}"></i>+30%</span>`
+            : ''}
+        </div>
       </div>`;
     $$('#view-home .seg button').forEach(b => b.onclick = () => {
       state.mode = b.dataset.mode; store.set(LS.mode, state.mode); renderHome();
@@ -168,39 +172,36 @@
 
   function drawPlan() {
     const el = $('#plan');
-    if (!el) return;
+    if (!el || !el.clientWidth) return;
     const D = state.data;
-    const W = el.clientWidth || 340;
-    const H = Math.round(Math.min(W * 1.1, 560));
-    el.style.height = `${H + 6}px`;
-    const kinds = groupBy(D.assets.filter(a => a.value > 0), a => a.kind);
-    const kindItems = [...kinds].map(([k, list]) => ({ k, list, v: list.reduce((s, a) => s + a.value, 0) }))
+    const W = el.clientWidth;
+    const H = Math.round(Math.min(W * 1.08, 560));
+    el.style.height = `${H}px`;
+    const kindItems = [...groupBy(D.assets.filter(a => a.value > 0), a => a.kind)]
+      .map(([k, list]) => ({ k, list, v: list.reduce((s, a) => s + a.value, 0) }))
       .sort((a, b) => b.v - a.v);
     const rooms = squarify(kindItems, { x: 0, y: 0, w: W, h: H });
     const maxW = Math.max(...D.assets.map(a => a.weight));
+    const GAP = 3;
     let html = '';
-    const GAP = 2;
     rooms.forEach(room => {
-      const showLabel = room.h > 52 && room.w > 58;
-      const top = showLabel ? 17 : 0;
+      const showLabel = room.h > 58 && room.w > 64;
+      const top = showLabel ? 20 : 0;
       const kv = room.list.reduce((s, a) => ({ c: s.c + a.cost, v: s.v + a.value }), { c: 0, v: 0 });
       const kindTip = state.mode === 'weight' ? `${(kv.v / D.total.value * 100).toFixed(1)}%` : pct(kv.c > 0 ? (kv.v - kv.c) / kv.c : null, 1);
       html += `<div class="room" style="left:${room.x}px;top:${room.y}px;width:${room.w}px;height:${room.h}px">`;
-      if (showLabel) html += `<div class="room-label">${esc(room.k)} <span style="font-weight:500">${kindTip}</span></div>`;
-      const inner = { x: GAP / 2, y: top + GAP / 2, w: room.w - GAP, h: room.h - top - GAP };
-      const tiles = squarify(room.list.map(a => ({ a, v: a.value })).sort((p, q) => q.v - p.v), inner);
-      tiles.forEach(t => {
+      if (showLabel) html += `<div class="room-label">${esc(room.k)}<span>${kindTip}</span></div>`;
+      const inner = { x: 0, y: top, w: room.w, h: room.h - top };
+      squarify(room.list.map(a => ({ a, v: a.value })).sort((p, q) => q.v - p.v), inner).forEach(t => {
         const a = t.a;
         const w = Math.max(t.w - GAP, 0), h = Math.max(t.h - GAP, 0);
         const bg = state.mode === 'weight' ? weightColor(a.weight / (maxW || 1)) : retColor(a.ret ?? 0);
-        const fs = Math.max(10, Math.min(22, Math.sqrt(w * h) / 6.2));
+        const fs = Math.max(10, Math.min(22, Math.sqrt(w * h) / 6.4));
         const label = state.mode === 'weight' ? `${(a.weight * 100).toFixed(1)}%` : pct(a.ret, 1);
-        const showName = w > 30 && h > 20;
-        const showVal = w > 40 && h > 36;
         html += `<button class="tile" data-asset="${esc(a.name)}" aria-label="${esc(a.name)} ${label}"
           style="left:${t.x + GAP / 2}px;top:${t.y + GAP / 2}px;width:${w}px;height:${h}px;background:${bg}">
-          ${showName ? `<span class="tile-name" style="font-size:${fs}px">${esc(shortName(a.name, w, fs))}</span>` : ''}
-          ${showVal ? `<span class="tile-val num" style="font-size:${Math.max(10, fs * 0.72)}px">${label}</span>` : ''}
+          ${w > 30 && h > 20 ? `<span class="tile-name" style="font-size:${fs}px">${esc(shortName(a.name, w, fs))}</span>` : ''}
+          ${w > 40 && h > 38 ? `<span class="tile-val num" style="font-size:${Math.max(10, fs * 0.7)}px">${label}</span>` : ''}
         </button>`;
       });
       html += `</div>`;
@@ -212,18 +213,17 @@
   function shortName(name, w, fs) {
     const max = Math.max(2, Math.floor(w / (fs * 0.62)));
     if (name.length <= max) return name;
-    const m = name.match(/^(TIGER|KODEX)\s/);
-    const n = m ? name.replace(/\(.*?\)/g, '').trim() : name;
+    const n = name.replace(/\(.*?\)/g, '').replace(/미국나스닥100레버리지/, '나스닥').trim();
     return n.length <= max ? n : `${n.slice(0, Math.max(1, max - 1))}…`;
   }
 
   function mix(a, b, t) { return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',')})`; }
   function retColor(r) {
-    if (!Number.isFinite(r) || Math.abs(r) < 0.0005) return 'rgb(70,78,90)';
+    if (!Number.isFinite(r) || Math.abs(r) < 0.0005) return 'rgb(176,184,193)';
     const t = Math.min(Math.abs(r) / 0.3, 1);
-    return r > 0 ? mix([60, 92, 74], [34, 168, 92], 0.25 + 0.75 * t) : mix([96, 60, 60], [214, 58, 46], 0.25 + 0.75 * t);
+    return r > 0 ? mix([108, 196, 145], [14, 150, 82], t) : mix([246, 145, 152], [222, 48, 66], t);
   }
-  function weightColor(t) { return mix([44, 104, 78], [40, 150, 100], Math.sqrt(t)); }
+  function weightColor(t) { return mix([112, 196, 148], [18, 150, 84], Math.sqrt(t)); }
 
   function squarify(items, rect) {
     const total = items.reduce((s, i) => s + i.v, 0);
@@ -268,7 +268,7 @@
     return m;
   }
 
-  /* 자산별 */
+  /* ── 자산별 ── */
   function renderAssets() {
     const D = state.data;
     const sorters = { value: (a, b) => b.value - a.value, ret: (a, b) => (b.ret ?? -9) - (a.ret ?? -9) };
@@ -286,16 +286,16 @@
         </div>
       </div>
       ${kinds.map(g => `
-        <div class="group">
+        <div class="card">
           <div class="group-head">
             <span class="group-name">${esc(g.k)}</span>
-            <span class="group-meta num">${compact(g.v)} · <span class="${cls(g.ret)}">${pct(g.ret)}</span></span>
+            <span class="group-meta num">${compact(g.v)}원 · <span class="${cls(g.ret)}">${pct(g.ret)}</span></span>
           </div>
           ${g.list.map(a => `
             <button class="row" data-asset="${esc(a.name)}">
               <span>
                 <span class="row-name">${esc(a.name)}</span><br>
-                <span class="row-sub num">원금 ${compact(a.cost)} → 평가 ${compact(a.value)}</span>
+                <span class="row-sub num">${compact(a.value)}원 · 원금 ${compact(a.cost)}원</span>
               </span>
               <span class="row-right">
                 <span class="row-value num ${cls(a.ret)}">${pct(a.ret)}</span><br>
@@ -322,13 +322,14 @@
       const isCash = /예수금/.test(r.sub) || r.method.startsWith('수동');
       const unitRet = r.avg > 0 && r.price > 0 ? (r.price - r.avg) / r.avg : null;
       const money = r.cur === 'USD' ? v => `$${v.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : v => won(v);
+      const unit = r.ticker === 'ETH' || r.ticker === 'BMB' ? '개' : '주';
       return `
         <div class="holding">
           <div class="holding-top"><span>${esc(r.sub)}</span><span class="num">${won(r.value)}</span></div>
-          ${isCash ? (r.cur === 'USD' && r.qty ? `<div class="holding-sub num"><span>${money(r.qty)}</span><span></span></div>` : '') : `
+          ${isCash ? (r.cur === 'USD' && r.qty ? `<div class="holding-sub num"><span>${money(r.qty)}</span></div>` : '') : `
           <div class="holding-sub num">
-            <span>${r.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${r.ticker === 'ETH' || r.ticker === 'BMB' ? '개' : '주'}${r.avg ? ` · 평단 ${money(r.avg)}` : ''} · 현재 ${money(r.price)}</span>
-            <span class="${cls(unitRet)}">${unitRet === null ? '' : `평단 대비 ${pct(unitRet, 1)}`}</span>
+            <span>${r.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${r.avg ? ` · 평단 ${money(r.avg)}` : ''} · 현재 ${money(r.price)}</span>
+            <span class="${cls(unitRet)}">${unitRet === null ? '' : pct(unitRet, 1)}</span>
           </div>`}
         </div>`;
     }).join('');
@@ -341,13 +342,13 @@
         <div><div class="stat-label">원금</div><div class="stat-value">${won(a.cost)}</div></div>
         <div><div class="stat-label">평가손익</div><div class="stat-value ${cls(a.pl)}">${signWon(a.pl)}</div></div>
         <div><div class="stat-label">수익률</div><div class="stat-value ${cls(a.ret)}">${pct(a.ret)}</div></div>
-        <div><div class="stat-label">전체 자산 중 비중</div><div class="stat-value">${(a.weight * 100).toFixed(1)}%</div></div>
+        <div><div class="stat-label">전체 중 비중</div><div class="stat-value">${(a.weight * 100).toFixed(1)}%</div></div>
         <div><div class="stat-label">${thisYear}년 실현손익</div><div class="stat-value ${cls(rzYear)}">${signWon(rzYear)}</div></div>
       </div>
       <h3 class="section-title">보유 내역</h3>
       ${holdings}
       ${rz.length ? `
-        <h3 class="section-title">최근 익절·손절 <span class="note">누적 <span class="${cls(rzAll)}">${signWon(rzAll)}</span></span></h3>
+        <h3 class="section-title">최근 익절·손절<span class="note">누적 <span class="${cls(rzAll)}">${signWon(rzAll)}</span></span></h3>
         ${recent.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}` : ''}
       <div class="sheet-actions">
         <button class="btn primary" id="goRecord">이 자산 거래 기록하기</button>
@@ -356,21 +357,24 @@
       closeSheet();
       state.form.asset = name; state.form.sub = '';
       if (!['매수', '매도'].includes(state.form.type)) state.form.type = '매수';
+      renderRecord();
       go('record');
     };
   }
 
-  /* 월별·연도별 */
+  /* ── 월별·연도별 ── */
   function renderYears() {
     const D = state.data;
     if (!state.year) state.year = D.years.includes(new Date().getFullYear()) ? new Date().getFullYear() : (D.years.at(-1) || 'all');
-    const chips = [...D.years.map(y => [y, `${y}`]), ['all', '전체']];
+    const chips = [...D.years.map(y => [y, `${y}년`]), ['all', '전체']];
     const el = $('#view-years');
     el.innerHTML = `
+      ${cumulativeCard()}
       <div class="year-chips" role="group" aria-label="연도 선택">
         ${chips.map(([y, l]) => `<button class="chip ${state.year === y ? 'on' : ''}" data-year="${y}">${l}</button>`).join('')}
       </div>
       <div id="yearBody"></div>`;
+    $$('#fxSeg button', el).forEach(b => b.onclick = () => { state.fx = b.dataset.fx === '1'; store.set(LS.fx, state.fx ? '1' : '0'); renderYears(); });
     $$('.year-chips .chip', el).forEach(b => b.onclick = () => {
       state.year = b.dataset.year === 'all' ? 'all' : Number(b.dataset.year);
       state.openKinds.clear();
@@ -379,14 +383,109 @@
     if (state.year === 'all') renderAllYears(); else renderOneYear(state.year);
   }
 
+  /* 누적 수익률 vs 주요 지수 */
+  const SERIES = [
+    { key: 'mine', label: '내 투자', color: 'var(--up)' },
+    { key: 'kospi', label: '코스피', color: 'var(--c-kospi)' },
+    { key: 'sp500', label: 'S&P500', color: 'var(--c-sp)', usd: true },
+    { key: 'nasdaq', label: '나스닥', color: 'var(--c-nasdaq)', usd: true },
+  ];
+
+  function cumulativeSeries() {
+    const D = state.data;
+    if (!D.realized.length) return null;
+    const first = D.realized.reduce((m, r) => (r.date < m ? r.date : m), D.realized[0].date);
+    const now = new Date();
+    const pts = [];
+    // 시작점: 첫 기록 달의 직전 달 말일
+    let cur = new Date(first.getFullYear(), first.getMonth(), 0);
+    pts.push({ date: cur, label: `${String(cur.getFullYear()).slice(2)}.${cur.getMonth() + 1}` });
+    let y = first.getFullYear(), m = first.getMonth();
+    while (new Date(y, m, 1) <= now) {
+      const end = new Date(y, m + 1, 0, 23, 59, 59);
+      pts.push({ date: end > now ? now : end, label: `${String(y).slice(2)}.${m + 1}`, y, m: m + 1 });
+      m++; if (m > 11) { m = 0; y++; }
+    }
+    const base = D.total.cost || 1;
+    pts.forEach(p => {
+      const cum = D.realized.filter(r => r.date <= p.date).reduce((s, r) => s + r.amount, 0);
+      p.mine = cum / base;
+    });
+    const idx = D.index || {};
+    const fxArr = idx.usdkrw || [];
+    const at = (arr, date) => {
+      const ds = date.toISOString().slice(0, 10);
+      let v = null;
+      for (const [d, x] of arr) { if (d <= ds) v = x; else break; }
+      return v ?? (arr[0] ? arr[0][1] : null);
+    };
+    const avail = new Set(['mine']);
+    SERIES.filter(s => s.key !== 'mine').forEach(s => {
+      const arr = idx[s.key] || [];
+      if (arr.length < 2) return;
+      avail.add(s.key);
+      const v0 = at(arr, pts[0].date) * (s.usd && state.fx ? at(fxArr, pts[0].date) || 1 : 1);
+      pts.forEach(p => {
+        const v = at(arr, p.date) * (s.usd && state.fx ? at(fxArr, p.date) || 1 : 1);
+        p[s.key] = v0 ? v / v0 - 1 : null;
+      });
+    });
+    return { pts, avail };
+  }
+
+  function cumulativeCard() {
+    const C = cumulativeSeries();
+    if (!C) return '';
+    const series = SERIES.filter(s => C.avail.has(s.key));
+    const last = C.pts.at(-1);
+    return `
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">누적 수익률</h2>
+          ${C.avail.size > 1 ? `<div class="seg" id="fxSeg" role="group" aria-label="환율 반영">
+            <button data-fx="0" class="${state.fx ? '' : 'on'}">기본</button><button data-fx="1" class="${state.fx ? 'on' : ''}">환율</button></div>` : '<span class="card-aside">vs 주요 지수</span>'}
+        </div>
+        <div class="legend">${series.map(s => `<span><i class="${s.key === 'mine' ? '' : 'dash'}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
+        ${lineChart(C.pts, series)}
+        <div class="compare num">
+          ${SERIES.map(s => `<div><small>${s.label === '내 투자' ? '내 투자' : s.label}</small><b style="color:${C.avail.has(s.key) ? s.color : 'var(--ink-4)'}">${C.avail.has(s.key) ? pct(last[s.key], 1) : '—'}</b></div>`).join('')}
+        </div>
+        <p class="note">내 투자 = ${C.pts[1]?.label.replace('.', '년 ')}월부터 쌓인 실현손익 ÷ 현재 투자원금. 지수는 대표 ETF(KODEX 200·SPY·QQQ) 주간 종가로 비교${state.fx ? ', 미국 지수는 원화 환산' : ''}.
+        ${C.avail.size > 1 ? '' : '<br>지수 선은 Apps Script를 새 버전으로 바꾸면 나타나요.'}</p>
+      </div>`;
+  }
+
+  function lineChart(pts, series) {
+    const W = 340, H = 210, L = 38, R = 8, T = 10, B = 22;
+    const vals = pts.flatMap(p => series.map(s => p[s.key]).filter(v => Number.isFinite(v)));
+    let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+    const padV = (hi - lo) * 0.08 || 0.05; lo -= padV; hi += padV;
+    const X = i => L + (W - L - R) * (pts.length > 1 ? i / (pts.length - 1) : 0);
+    const Y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+    const ticks = [0, 1, 2, 3].map(i => lo + (hi - lo) * i / 3);
+    const grid = ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-dasharray="3 4"/>
+      <text x="${L - 6}" y="${Y(v) + 3}" text-anchor="end">${Math.round(v * 100)}%</text>`).join('');
+    const zero = `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--ink-4)" stroke-width="1"/>`;
+    const step = Math.max(1, Math.ceil(pts.length / 6));
+    const xl = pts.map((p, i) => (i % step === 0 || i === pts.length - 1) && !(i !== pts.length - 1 && pts.length - 1 - i < step / 2)
+      ? `<text x="${X(i)}" y="${H - 4}" text-anchor="middle">${p.label}</text>` : '').join('');
+    const lines = series.slice().reverse().map(s => {
+      const d = pts.map((p, i) => Number.isFinite(p[s.key]) ? `${X(i).toFixed(1)},${Y(p[s.key]).toFixed(1)}` : null).filter(Boolean).join(' ');
+      return s.key === 'mine'
+        ? `<polyline points="${d}" fill="none" stroke="${s.color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`
+        : `<polyline points="${d}" fill="none" stroke="${s.color}" stroke-width="1.7" stroke-dasharray="5 4" stroke-linejoin="round"/>`;
+    }).join('');
+    const lastMine = pts.at(-1);
+    const dot = Number.isFinite(lastMine.mine) ? `<circle cx="${X(pts.length - 1)}" cy="${Y(lastMine.mine)}" r="3.5" fill="var(--up)" stroke="#fff" stroke-width="1.5"/>` : '';
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="누적 수익률 비교 그래프">${grid}${zero}${lines}${dot}${xl}</svg>`;
+  }
+
   function renderOneYear(y) {
     const D = state.data;
     const list = D.realized.filter(r => r.year === y);
     const sum = list.reduce((s, r) => s + r.amount, 0);
     const gains = list.filter(r => r.amount > 0), losses = list.filter(r => r.amount < 0);
-    const byMonth = Array.from({ length: 12 }, (_, i) => list.filter(r => r.month === i + 1).reduce((s, r) => s + r.amount, 0));
+    const byMonth = byMonthOf(list);
 
-    // 그 해 구성에 있는 자산·종류 (손익 없는 자산도 표시)
     const compAssets = [...D.comp].filter(([k]) => k.startsWith(`${y}|`)).map(([k, v]) => ({ asset: k.split('|')[1], ...v }));
     const kindOrder = [];
     compAssets.forEach(c => { if (!kindOrder.includes(c.kind)) kindOrder.push(c.kind); });
@@ -396,7 +495,7 @@
       const rows = assets.map(a => {
         const amt = list.filter(r => r.asset === a).reduce((s, r) => s + r.amount, 0);
         const base = D.comp.get(`${y}|${a}`)?.base ?? null;
-        return { a, amt, base, ret: base ? amt / base : null, months: byMonthOf(list.filter(r => r.asset === a)) };
+        return { a, amt, base, ret: base ? amt / base : null };
       }).sort((p, q) => q.amt - p.amt);
       const amt = rows.reduce((s, r) => s + r.amt, 0);
       const baseRows = rows.filter(r => r.base);
@@ -406,48 +505,54 @@
     const totalBase = kinds.flatMap(k => k.rows).filter(r => r.base).reduce((s, r) => s + r.base, 0);
     const totalRet = totalBase ? sum / totalBase : null;
     const activeMonths = byMonth.map((v, i) => [i + 1, v]).filter(([, v], i) => v !== 0 || kinds.some(k => k.months[i] !== 0));
+    const shownKinds = kinds.filter(k => k.months.some(v => v !== 0));
 
     $('#yearBody').innerHTML = `
-      <div class="kpi">
+      <div class="card">
         <div class="kpi-label">${y}년 실현손익</div>
         <div class="kpi-value num ${cls(sum)}">${signWon(sum)}</div>
         <div class="kpi-sub num">
-          <span>익절 ${gains.length}건 <span class="up">${signWon(gains.reduce((s, r) => s + r.amount, 0))}</span></span>
-          <span>손절 ${losses.length}건 <span class="down">${signWon(losses.reduce((s, r) => s + r.amount, 0))}</span></span>
+          <span>익절 ${gains.length}건 <span class="up">${compactSigned(gains.reduce((s, r) => s + r.amount, 0))}</span></span>
+          <span>손절 ${losses.length}건 <span class="down">${compactSigned(losses.reduce((s, r) => s + r.amount, 0))}</span></span>
           ${totalRet !== null ? `<span>기준원금 대비 <span class="${cls(totalRet)}">${pct(totalRet)}</span></span>` : ''}
         </div>
+        ${barChart(byMonth.map((v, i) => [`${i + 1}월`, v]))}
       </div>
-      ${monthChart(byMonth)}
-      <h3 class="section-title">종류별</h3>
-      <div class="table-wrap">
-        <table class="grid num kinds">
-          <thead><tr><th>종류 / 자산</th><th>수익금</th><th>수익률</th></tr></thead>
-          <tbody>
-            ${kinds.map(k => `
-              <tr class="kind-row" data-kind="${esc(k.k)}">
-                <td><span class="caret">${state.openKinds.has(k.k) ? '▾' : '▸'}</span>${esc(k.k)}</td>
-                <td class="${cls(k.amt)}">${signWon(k.amt)}</td>
-                <td class="${cls(k.ret)}">${pct(k.ret)}</td>
-              </tr>
-              ${state.openKinds.has(k.k) ? k.rows.map(r => `
-                <tr class="sub"><td>${esc(r.a)}</td><td class="${cls(r.amt)}">${signWon(r.amt)}</td><td class="${cls(r.ret)}">${pct(r.ret)}</td></tr>`).join('') : ''}`).join('')}
-            <tr class="total"><td>합계</td><td class="${cls(sum)}">${signWon(sum)}</td><td class="${cls(totalRet)}">${pct(totalRet)}</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="note">수익률 = 실현손익 ÷ 기준원금(연도별구성 탭). 합계는 그 해 전체 실현손익을 기준원금 합계로 나눈 값이고, 기준원금이 없는 자산은 수익금만 표시합니다.</p>
 
-      <h3 class="section-title">월별 × 종류</h3>
-      ${activeMonths.length ? `
-      <div class="table-wrap">
-        <table class="grid num">
-          <thead><tr><th>월</th><th>합계</th>${kinds.filter(k => k.amt !== 0).map(k => `<th>${esc(k.k)}</th>`).join('')}</tr></thead>
-          <tbody>
-            ${activeMonths.map(([m, v]) => `<tr><td>${m}월</td><td class="${cls(v)}">${compactSigned(v)}</td>${kinds.filter(k => k.amt !== 0).map(k => `<td class="${cls(k.months[m - 1])}">${k.months[m - 1] ? compactSigned(k.months[m - 1]) : ''}</td>`).join('')}</tr>`).join('')}
-          </tbody>
-        </table>
-      </div>` : `<p class="empty">${y}년 실현손익 기록이 아직 없어요.</p>`}
-      ${monthlyEvalSection(y)}`;
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">종류별</h2><span class="card-aside">누르면 자산별로</span></div>
+        <div class="table-wrap">
+          <table class="grid num kinds">
+            <thead><tr><th>종류</th><th>수익금</th><th>수익률</th></tr></thead>
+            <tbody>
+              ${kinds.map(k => `
+                <tr class="kind-row" data-kind="${esc(k.k)}">
+                  <td><span class="caret">${state.openKinds.has(k.k) ? '▼' : '▶'}</span>${esc(k.k)}</td>
+                  <td class="${cls(k.amt)}">${signWon(k.amt)}</td>
+                  <td class="${cls(k.ret)}">${pct(k.ret)}</td>
+                </tr>
+                ${state.openKinds.has(k.k) ? k.rows.map(r => `
+                  <tr class="sub"><td>${esc(r.a)}</td><td class="${cls(r.amt)}">${signWon(r.amt)}</td><td class="${cls(r.ret)}">${pct(r.ret)}</td></tr>`).join('') : ''}`).join('')}
+              <tr class="total"><td>합계</td><td class="${cls(sum)}">${signWon(sum)}</td><td class="${cls(totalRet)}">${pct(totalRet)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">수익률 = 실현손익 ÷ 기준원금(시트의 연도별구성 탭). 기준원금이 없는 자산은 수익금만 보여요.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">월별 상세</h2></div>
+        ${activeMonths.length ? `
+        <div class="table-wrap">
+          <table class="grid num">
+            <thead><tr><th>월</th><th>합계</th>${shownKinds.map(k => `<th>${esc(k.k)}</th>`).join('')}</tr></thead>
+            <tbody>
+              ${activeMonths.map(([m, v]) => `<tr><td>${m}월</td><td class="${cls(v)}"><b>${compactSigned(v)}</b></td>${shownKinds.map(k => `<td class="${cls(k.months[m - 1])}">${k.months[m - 1] ? compactSigned(k.months[m - 1]) : ''}</td>`).join('')}</tr>`).join('')}
+            </tbody>
+          </table>
+        </div>` : `<p class="empty">${y}년 실현손익 기록이 아직 없어요.</p>`}
+      </div>
+      ${monthlyEvalCard(y)}`;
 
     $$('#yearBody .kind-row').forEach(tr => tr.onclick = () => {
       const k = tr.dataset.kind;
@@ -457,20 +562,19 @@
   }
 
   function byMonthOf(list) { return Array.from({ length: 12 }, (_, i) => list.filter(r => r.month === i + 1).reduce((s, r) => s + r.amount, 0)); }
-  const compactSigned = v => `${v > 0 ? '+' : ''}${compact(v)}`;
 
-  function monthlyEvalSection(y) {
+  function monthlyEvalCard(y) {
     const rows = state.data.monthly.filter(m => String(m['월']).startsWith(String(y)));
-    if (!rows.length) return `<h3 class="section-title">월말 평가금</h3><p class="note">매달 말일 밤에 자산별 평가금이 자동으로 저장됩니다. 저장이 시작되면 여기에 월별 추이가 나와요.</p>`;
+    if (!rows.length) return `<div class="card"><div class="card-head"><h2 class="card-title">월말 평가금</h2></div><p class="note" style="margin:0">매달 말일 밤 자산별 평가금이 자동 저장돼요. 쌓이기 시작하면 여기에 달마다 나옵니다.</p></div>`;
     const months = [...groupBy(rows, r => String(r['월']).slice(0, 7))].map(([m, list]) => {
       const c = list.reduce((s, r) => s + num(r['원금(원)']), 0), v = list.reduce((s, r) => s + num(r['평가금(원)']), 0);
       return { m, c, v, ret: c ? (v - c) / c : null };
     });
-    return `<h3 class="section-title">월말 평가금</h3>
+    return `<div class="card"><div class="card-head"><h2 class="card-title">월말 평가금</h2></div>
       <div class="table-wrap"><table class="grid num">
         <thead><tr><th>월</th><th>원금</th><th>평가금</th><th>평가수익률</th></tr></thead>
-        <tbody>${months.map(r => `<tr><td>${r.m.slice(5)}월</td><td>${compact(r.c)}</td><td>${compact(r.v)}</td><td class="${cls(r.ret)}">${pct(r.ret)}</td></tr>`).join('')}</tbody>
-      </table></div>`;
+        <tbody>${months.map(r => `<tr><td>${Number(r.m.slice(5))}월</td><td>${compact(r.c)}</td><td>${compact(r.v)}</td><td class="${cls(r.ret)}">${pct(r.ret)}</td></tr>`).join('')}</tbody>
+      </table></div></div>`;
   }
 
   function renderAllYears() {
@@ -483,40 +587,49 @@
     });
     const total = rows.reduce((s, r) => s + r.amt, 0);
     $('#yearBody').innerHTML = `
-      <div class="kpi">
+      <div class="card">
         <div class="kpi-label">전체 기간 실현손익</div>
         <div class="kpi-value num ${cls(total)}">${signWon(total)}</div>
         <div class="kpi-sub"><span>${D.realized.length}건 기록</span></div>
+        ${barChart(rows.map(r => [`${r.y}`, r.amt]))}
       </div>
-      ${barChart(rows.map(r => [`${r.y}`, r.amt]))}
-      <h3 class="section-title">연도별</h3>
-      <div class="table-wrap"><table class="grid num">
-        <thead><tr><th>연도</th><th>수익금</th><th>누적</th></tr></thead>
-        <tbody>${rows.map(r => `<tr><td>${r.y}</td><td class="${cls(r.amt)}">${signWon(r.amt)}</td><td class="${cls(r.cum)}">${signWon(r.cum)}</td></tr>`).join('')}</tbody>
-      </table></div>
-      <p class="note">연도를 누르면 그 해의 자산 구성과 월별 수익이 나와요.</p>`;
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">연도별</h2></div>
+        <div class="table-wrap"><table class="grid num">
+          <thead><tr><th>연도</th><th>수익금</th><th>누적</th></tr></thead>
+          <tbody>${rows.map(r => `<tr><td>${r.y}년</td><td class="${cls(r.amt)}">${signWon(r.amt)}</td><td class="${cls(r.cum)}">${signWon(r.cum)}</td></tr>`).join('')}</tbody>
+        </table></div>
+        <p class="note">연도를 누르면 그 해의 자산 구성과 월별 수익이 나와요.</p>
+      </div>`;
   }
-
-  function monthChart(vals) { return barChart(vals.map((v, i) => [`${i + 1}`, v])); }
 
   function barChart(pairs) {
-    const W = 340, H = 150, padB = 16, padT = 8;
-    const max = Math.max(1, ...pairs.map(([, v]) => Math.abs(v)));
-    const hasNeg = pairs.some(([, v]) => v < 0), hasPos = pairs.some(([, v]) => v > 0);
-    const zeroY = hasNeg && hasPos ? padT + (H - padT - padB) / 2 : (hasNeg ? padT : H - padB);
-    const span = hasNeg && hasPos ? (H - padT - padB) / 2 : (H - padT - padB);
+    const W = 340, H = 150, padB = 18, padT = 10;
+    const posMax = Math.max(0, ...pairs.map(([, v]) => v)), negMax = Math.max(0, ...pairs.map(([, v]) => -v));
+    const span = H - padT - padB;
+    const zy = padT + span * (posMax / ((posMax + negMax) || 1));
+    const scale = span / ((posMax + negMax) || 1);
     const bw = W / pairs.length;
     const bars = pairs.map(([l, v], i) => {
-      const h = Math.abs(v) / max * span;
-      const y = v >= 0 ? zeroY - h : zeroY;
-      return `<rect x="${i * bw + bw * 0.18}" y="${y}" width="${bw * 0.64}" height="${Math.max(h, v ? 1 : 0)}" rx="1.5" fill="${v >= 0 ? 'var(--up)' : 'var(--down)'}"><title>${l}: ${signWon(v)}</title></rect>
-        <text x="${i * bw + bw / 2}" y="${H - 3}" text-anchor="middle">${l}</text>`;
+      const h = Math.abs(v) * scale;
+      const y = v >= 0 ? zy - h : zy;
+      const short = l.replace('월', '');
+      return `<rect x="${i * bw + bw * 0.2}" y="${y}" width="${bw * 0.6}" height="${Math.max(h, v ? 1.5 : 0)}" rx="3" fill="${v >= 0 ? 'var(--up)' : 'var(--down)'}"><title>${l}: ${signWon(v)}</title></rect>
+        <text x="${i * bw + bw / 2}" y="${H - 4}" text-anchor="middle">${short}</text>`;
     }).join('');
-    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="실현손익 막대 그래프">
-      <line x1="0" x2="${W}" y1="${zeroY}" y2="${zeroY}" stroke="var(--wall)" stroke-width="1"/>${bars}</svg>`;
+    return `<svg class="chart bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="실현손익 막대 그래프" style="margin-top:16px">
+      <line x1="0" x2="${W}" y1="${zy}" y2="${zy}" stroke="var(--line)" stroke-width="1"/>${bars}</svg>`;
   }
 
-  /* 기록 */
+  /* ── 기록 ── */
+  const TYPE_HELP = {
+    '매수': '주식·코인을 샀을 때. 수량과 평단이 바뀌고, 연결된 예수금에서 돈이 빠져요.',
+    '매도': '팔았을 때. 실현손익(익절·손절)이 자동 계산되어 월별 수익에 들어가요.',
+    '입금': '계좌에 새 돈을 넣었을 때 (예: 월급에서 ISA로 이체). 원금과 예수금이 같이 늘어서 수익으로 잘못 잡히지 않아요.',
+    '출금': '계좌에서 돈을 뺐을 때. 원금과 예수금이 같이 줄어요.',
+    '금액 수정': '예수금·금·현용주화처럼 직접 관리하는 금액을 지금 값으로 맞출 때.',
+  };
+
   function renderRecord() {
     const D = state.data, F = state.form;
     const el = $('#view-record');
@@ -535,10 +648,10 @@
         <label class="field"><span>무엇을 고칠까요?</span>
           <select id="fManual">${manualRows.map(r => `<option value="${esc(r.asset)}|${esc(r.sub)}" ${`${r.asset}|${r.sub}` === key ? 'selected' : ''}>${esc(r.asset === r.sub ? r.asset : `${r.asset} / ${r.sub}`)}</option>`).join('')}</select>
         </label>
-        <label class="field"><span>${usd ? '현재 금액 (달러)' : '현재 금액 (원)'}</span>
+        <label class="field"><span>${usd ? '지금 금액 (달러)' : '지금 금액 (원)'}</span>
           <input id="fValue" type="number" inputmode="decimal" step="any" placeholder="${cur ? (usd ? cur.qty : Math.round(cur.value)) : ''}">
         </label>
-        <p class="preview">${cur ? `지금 기록된 값: ${usd ? `$${cur.qty.toLocaleString('en-US')}` : won(cur.value)}` : ''}</p>
+        <p class="preview">${cur ? `기록된 값 ${usd ? `$${cur.qty.toLocaleString('en-US')}` : won(cur.value)}` : ''}</p>
         <p class="form-error" id="fErr" role="alert"></p>
         <button class="btn primary" id="fSubmit">금액 저장하기</button>`;
     } else {
@@ -549,17 +662,18 @@
       if (!isMoney && F.sub !== '__new' && !subs.some(s => s.sub === F.sub)) F.sub = subs[0]?.sub || '__new';
       const subRow = subs.find(s => s.sub === F.sub);
       const curr = F.sub === '__new' ? (F.newCur || 'KRW') : (subRow?.cur || 'KRW');
+      const singleSub = subs.length === 1 && subs[0].sub === F.asset && F.type !== '매수';
       body = `
         <label class="field"><span>자산</span>
           <select id="fAsset">${assetList.map(a => `<option ${a === F.asset ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select>
         </label>
         ${isMoney ? '' : `
-        <label class="field"><span>종목</span>
+        ${singleSub ? '' : `<label class="field"><span>종목</span>
           <select id="fSub">
             ${subs.map(s => `<option ${s.sub === F.sub ? 'selected' : ''}>${esc(s.sub)}</option>`).join('')}
-            ${F.type === '매수' ? `<option value="__new" ${F.sub === '__new' ? 'selected' : ''}>새 종목 추가</option>` : ''}
+            ${F.type === '매수' ? `<option value="__new" ${F.sub === '__new' ? 'selected' : ''}>+ 새 종목 추가</option>` : ''}
           </select>
-        </label>
+        </label>`}
         ${F.sub === '__new' ? `
           <div class="two">
             <label class="field"><span>종목 이름</span><input id="fNewName" placeholder="예: NAVER" value="${esc(F.newName || '')}"></label>
@@ -569,8 +683,8 @@
             <select id="fNewCur"><option ${curr === 'KRW' ? 'selected' : ''}>KRW</option><option ${curr === 'USD' ? 'selected' : ''}>USD</option></select>
           </label>` : ''}
         <div class="two">
-          <label class="field"><span>수량</span><input id="fQty" type="number" inputmode="decimal" step="any" min="0"></label>
-          <label class="field"><span>단가 (${curr === 'USD' ? '달러' : '원'})</span><input id="fPrice" type="number" inputmode="decimal" step="any" min="0" placeholder="${subRow && subRow.price ? subRow.price : ''}"></label>
+          <label class="field"><span>수량</span><input id="fQty" type="number" inputmode="decimal" step="any" min="0" placeholder="${subRow ? `보유 ${subRow.qty.toLocaleString('ko-KR')}` : ''}"></label>
+          <label class="field"><span>단가 (${curr === 'USD' ? '달러' : '원'})</span><input id="fPrice" type="number" inputmode="decimal" step="any" min="0" placeholder="${subRow && subRow.price ? `현재 ${subRow.price.toLocaleString('ko-KR')}` : ''}"></label>
         </div>
         <p class="preview num" id="fPreview"></p>`}
         <label class="field"><span>${isMoney ? '금액 (원)' : '실제 원화 금액 (선택)'}</span>
@@ -585,20 +699,23 @@
     }
 
     el.innerHTML = `
-      <div class="form">
-        <div class="type-seg" role="group" aria-label="거래 종류">
-          ${types.map(t => `<button data-type="${t}" class="${F.type === t ? 'on' : ''}">${t === '금액 수정' ? '금액수정' : t}</button>`).join('')}
+      <div class="card">
+        <div class="form">
+          <div class="type-seg" role="group" aria-label="거래 종류">
+            ${types.map(t => `<button data-type="${t}" class="${F.type === t ? 'on' : ''}">${t === '금액 수정' ? '금액수정' : t}</button>`).join('')}
+          </div>
+          <p class="help">${TYPE_HELP[F.type]}</p>
+          ${body}
         </div>
-        ${body}
       </div>
-      <div class="recent">
-        <h3 class="section-title">최근 기록</h3>
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">최근 기록</h2></div>
         ${D.trades.length ? D.trades.slice(0, 15).map(t => `
           <div class="trade">
             <span><span class="tag ${t['구분'] === '매수' ? 'buy' : t['구분'] === '매도' ? 'sell' : ''}">${esc(t['구분'])}</span>${esc(t['세부종목'] || t['자산'])}${t['수량'] ? ` ${esc(t['수량'])}주` : ''}<br>
               <small>${fmtDate(new Date(t['날짜']))}${t['입력자'] ? ` · ${esc(t['입력자'])}` : ''}${t['메모'] ? ` · ${esc(t['메모'])}` : ''}</small></span>
             <span class="num" style="text-align:right">${won(num(t['금액(원)']))}${isNum(t['실현손익(원)']) && t['실현손익(원)'] !== '' ? `<br><small class="${cls(num(t['실현손익(원)']))}">${signWon(num(t['실현손익(원)']))}</small>` : ''}</span>
-          </div>`).join('') : `<p class="empty">아직 앱에서 기록한 거래가 없어요.<br>매수·매도할 때마다 여기 남기면 보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
+          </div>`).join('') : `<p class="empty">아직 앱에서 기록한 거래가 없어요.<br>매수·매도를 기록하면 보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
       </div>`;
 
     $$('.type-seg button', el).forEach(b => b.onclick = () => { F.type = b.dataset.type; F.sub = ''; renderRecord(); });
@@ -611,7 +728,7 @@
       const p = $('#fPreview', el); if (!p) return;
       const q = num($('#fQty').value), pr = num($('#fPrice').value);
       const usd = (F.sub === '__new' ? (F.newCur || 'KRW') : (D.rows.find(r => r.asset === F.asset && r.sub === F.sub)?.cur)) === 'USD';
-      p.textContent = q && pr ? `${usd ? `$${(q * pr).toLocaleString('en-US', { maximumFractionDigits: 2 })} → ` : ''}약 ${won(q * pr * (usd ? D.rate : 1))}` : '';
+      p.textContent = q && pr ? `${usd ? `$${(q * pr).toLocaleString('en-US', { maximumFractionDigits: 2 })} · ` : ''}약 ${won(q * pr * (usd ? D.rate : 1))}` : '';
     };
     on('#fQty', 'input', upd); on('#fPrice', 'input', upd);
     on('#fSubmit', 'click', submitForm);
@@ -656,7 +773,7 @@
     try {
       const r = await api(action, payload);
       const msg = r.realized !== null && r.realized !== undefined ? `${r.message} (${r.realized >= 0 ? '익절' : '손절'} ${signWon(r.realized)})` : r.message;
-      F.sub = F.type === '금액 수정' ? F.sub : '';
+      if (F.type !== '금액 수정') F.sub = '';
       await load({ quiet: true });
       toast(msg);
     } catch (e) {
@@ -680,13 +797,11 @@
     $('#sheetBody').innerHTML = html;
     s.hidden = false;
     requestAnimationFrame(() => s.classList.add('open'));
-    const focusable = $('#sheetBody button, #sheetBody [href]');
-    if (focusable) focusable.focus({ preventScroll: true });
   }
   function closeSheet() {
     const s = $('#sheet');
     s.classList.remove('open');
-    setTimeout(() => { s.hidden = true; }, 230);
+    setTimeout(() => { s.hidden = true; }, 240);
   }
 
   let toastTimer;
@@ -707,7 +822,7 @@
       <p class="kind">${name ? `${esc(name)} 님으로 사용 중` : ''}</p>
       <button class="menu-item" id="mName">이름 바꾸기</button>
       <button class="menu-item" id="mLogout">로그아웃 (이 기기에서 비밀번호 지우기)</button>
-      <p class="note" style="margin-top:14px">숫자는 구글 시트에서 직접 고쳐도 됩니다. 고친 뒤 새로고침을 누르면 반영돼요.</p>`);
+      <p class="note">숫자는 구글 시트에서 직접 고쳐도 됩니다. 고친 뒤 새로고침을 누르면 반영돼요.</p>`);
     $('#mName').onclick = () => { closeSheet(); showLogin('', true); };
     $('#mLogout').onclick = () => { closeSheet(); logout(); };
   }
@@ -719,7 +834,6 @@
     const name = store.get(LS.name);
     $$('#nameChips .chip').forEach(c => c.classList.toggle('on', c.dataset.name === name));
     if (keepPw && store.get(LS.pw)) $('#pwInput').value = store.get(LS.pw);
-    setTimeout(() => $('#pwInput').focus(), 50);
   }
 
   function logout(msg = '') {
@@ -735,7 +849,7 @@
     if (cached && !state.data) {
       try { state.data = prepare(JSON.parse(cached)); render(); } catch { /* 캐시 손상 무시 */ }
     }
-    if (!state.data) $('#view-home').innerHTML = '<div class="skeleton"></div><div class="skeleton" style="height:340px"></div>';
+    if (!state.data) $('#view-home').innerHTML = '<div class="skeleton"></div><div class="skeleton" style="height:380px"></div>';
     go(state.view);
     load({ quiet: true });
   }
@@ -757,8 +871,8 @@
         const j = await api('data');
         state.data = prepare(j.data);
         store.set(LS.cache, JSON.stringify(j.data));
-        render();
-        startApp();
+        $('#login').hidden = true; $('#app').hidden = false;
+        render(); go(state.view);
       } catch (err) {
         if (err.code === 'auth') store.del(LS.pw);
         $('#loginError').textContent = err.code === 'auth' ? '비밀번호가 틀렸습니다.' : `연결 실패: ${err.message}`;

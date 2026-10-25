@@ -37,6 +37,7 @@ function onOpen() {
     .addSeparator()
     .addItem('모빅 시세 지금 업데이트', '모빅시세_메뉴')
     .addItem('이번 달 월말기록 지금 저장', '이번달기록_메뉴')
+    .addItem('지수 비교 탭 만들기', '지수탭_메뉴')
     .addItem('비밀번호 바꾸기', '비밀번호설정')
     .addToUi();
 }
@@ -123,7 +124,52 @@ function readAll_() {
     realized: rowsAsObjects_('실현손익', o => !o['날짜']),
     monthly: rowsAsObjects_('월말평가', o => !o['월']),
     trades: rowsAsObjects_('거래기록', o => !o['날짜']).slice(-200),
+    index: readIndex_(),
   };
+}
+
+/* ───────────────────────── 지수 비교 (누적 수익률 그래프용) ───────────────────────── */
+
+// 지수는 구글 시세가 안정적으로 주는 대표 ETF로 대신함
+const INDEX_SERIES = [
+  { key: 'kospi',  label: '코스피(KODEX 200)', formula: '=GOOGLEFINANCE("KRX:069500","close",DATE(2025,8,1),TODAY(),"WEEKLY")' },
+  { key: 'sp500',  label: 'S&P500(SPY)',       formula: '=GOOGLEFINANCE("SPY","close",DATE(2025,8,1),TODAY(),"WEEKLY")' },
+  { key: 'nasdaq', label: '나스닥(QQQ)',        formula: '=GOOGLEFINANCE("QQQ","close",DATE(2025,8,1),TODAY(),"WEEKLY")' },
+  { key: 'usdkrw', label: '환율(USD/KRW)',      formula: '=GOOGLEFINANCE("CURRENCY:USDKRW","price",DATE(2025,8,1),TODAY(),"WEEKLY")' },
+];
+
+function ensureIndexSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName('지수');
+  if (sh) return sh;
+  sh = ss.insertSheet('지수');
+  INDEX_SERIES.forEach((s, i) => {
+    sh.getRange(1, i * 2 + 1).setValue(s.label).setFontWeight('bold');
+    sh.getRange(2, i * 2 + 1).setFormula(s.formula);
+  });
+  sh.getRange(1, 10).setValue('자동으로 채워지는 탭입니다. 고치지 마세요. (2025-08부터 주간 종가)');
+  return sh;
+}
+
+function readIndex_() {
+  let sh;
+  try { sh = ensureIndexSheet_(); } catch (e) { return null; }
+  const v = sh.getDataRange().getValues();
+  const out = {};
+  INDEX_SERIES.forEach((s, i) => {
+    const c = i * 2, pts = [];
+    for (let r = 1; r < v.length; r++) {
+      const d = v[r][c], x = v[r][c + 1];
+      if (d instanceof Date && typeof x === 'number' && isFinite(x)) pts.push([Utilities.formatDate(d, TZ, 'yyyy-MM-dd'), x]);
+    }
+    out[s.key] = pts;
+  });
+  return out;
+}
+
+function 지수탭_메뉴() {
+  ensureIndexSheet_();
+  SpreadsheetApp.getUi().alert('지수 탭을 만들었습니다. 몇 초 뒤 숫자가 채워집니다.');
 }
 
 /* ───────────────────────── 거래 기록 ───────────────────────── */
