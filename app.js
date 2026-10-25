@@ -771,7 +771,7 @@
     const unreal = D.total.pl;
     const series = [
       { key: 'nw', label: '순자산', color: 'var(--up)', solid: true },
-      { key: 'save', label: '저축만 했을 때', color: 'var(--ink-4)' },
+      { key: 'save', label: '저축만 했을 경우', color: 'var(--ink-4)' },
     ];
     const meta = {
       nw: [['시작', compact(start)], ['늘어난 돈', won0(last.nw - start), cls(last.nw - start)], ['그중 투자', won0(last.pnlCum), cls(last.pnlCum)]],
