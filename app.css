@@ -662,3 +662,15 @@ button.nw-card { display: block; width: 100%; text-align: left; border: 0; color
 .sim-row b { display: inline-flex; align-items: baseline; gap: 8px; }
 .sim-row em { font-size: 15px; font-weight: 800; }
 .sim-sub { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+
+/* v20: 그래프 태그, 변경 버튼 위치 */
+.nw-sub { flex-direction: column; gap: 2px; }
+.chart .tag { transition: opacity .2s ease; }
+.chart .tag.dim { opacity: .2; }
+.chart .tag-t { fill: #fff; font-size: 10.5px; font-weight: 800; font-family: inherit; }
+.chart .tag-t.soft { fill: var(--ink); }
+.ro-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.ro-row .line-readout { flex: 1 1 auto; margin-top: 0; min-width: 0; }
+.ro-row .line-readout.on { flex-basis: 100%; order: 2; }
+.ro-row .pick-edit { flex: none; padding: 7px 13px; font-size: 13.5px; }
+.ro-row .line-readout.on + .pick-edit { order: 1; margin-left: auto; }

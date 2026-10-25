@@ -176,7 +176,6 @@
           </div>
         </div>
         <div class="plan-tools">
-          <span class="plan-tools-label">색</span>
           <div class="seg sm" id="modeSeg" role="group" aria-label="색 기준">
             <button data-mode="weight" class="${state.mode === 'weight' ? 'on' : ''}">비중</button>
             <button data-mode="return" class="${state.mode === 'return' ? 'on' : ''}">수익률</button>
@@ -752,7 +751,7 @@
           <span><i style="background:${last.pnlCum >= 0 ? 'var(--up)' : 'var(--down)'}"></i>투자 손익 (실현) <b class="${cls(last.pnlCum)}">${won0(last.pnlCum)}</b></span>
         </div>
         <div class="legend">${series.map(s => `<span><i class="${s.key === 'inv' || s.key === 'save' ? 'dash' : ''}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
-        ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, areaKey: 'nw', valFmt: v => `${compact(v)}원`, meta })}
+        ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, areaKey: 'nw', tagFmt: v => compact(v), valFmt: v => `${compact(v)}원`, meta })}
         <p class="note">편한가계부 장부 기준(산 가격). 아직 안 판 종목의 평가손익 <b class="${cls(unreal)}">${won0(unreal)}원</b>은 빠져 있어요 → 반영하면 순자산 약 ${compact(last.nw + unreal)}원.</p>
       </div>`;
   }
@@ -791,7 +790,7 @@
     const last = pts.at(-1);
     const series = [
       { key: 'mine', label: '내 투자', color: 'var(--up)', solid: true },
-      ...IDX.map(s => ({ key: s.key, label: s.label, color: s.color, solid: true })),
+      ...IDX.map(s => ({ key: s.key, label: s.label, color: s.color, dash: true })),
     ];
     const meta = {};
     series.forEach(s => {
@@ -803,8 +802,8 @@
     return `
       <div class="card">
         <div class="card-head"><h2 class="card-title">지수별 비교</h2><span class="card-aside">${pts[0].label} 이후 등락률</span></div>
-        <div class="legend">${series.map(s => `<span><i style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
-        ${lineChart(pts, series, { L: 42, fmt: v => `${Math.round(v * 100)}%`, noDot: true, interactive: true, valFmt: v => pct(v, 1), meta })}
+        <div class="legend">${series.map(s => `<span><i class="${s.dash ? 'dash' : ''}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
+        ${lineChart(pts, series, { L: 42, fmt: v => `${Math.round(v * 100)}%`, tagFmt: v => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`, noDot: true, interactive: true, valFmt: v => pct(v, 1), meta })}
         <div class="sim-list num">
           ${rows.map(({ s, v }) => `<div class="sim-row ${s.key === 'mine' ? 'me' : ''}"><span><i style="background:${s.color}"></i>${s.key === 'mine' ? '내 투자' : s.label}</span>
             <b>${s.key === 'mine' ? `<small class="sim-sub">${compact(last.val)}원 / 넣은 돈 ${compact(last.inv)}원</small>` : ''}<em class="${cls(v)}">${pct(v, 1)}</em></b></div>`).join('')}
@@ -852,8 +851,12 @@
   }
   let chartSeq = 0;
 
+  const linePath = P => P.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join('');
+
+  // 선 그래프: 직선 + 그라데이션 + 오른쪽 끝 값 표시(태그)
   function lineChart(pts, series, opt = {}) {
-    const W = 340, H = 210, L = opt.L || 38, R = 10, T = 12, B = 24;
+    const tags = opt.tagFmt !== undefined ? opt.tagFmt : null;
+    const W = 340, H = 210, L = opt.L || 38, R = tags ? 60 : 10, T = 12, B = 24;
     const fmt = opt.fmt || (v => `${Math.round(v * 100)}%`);
     const vals = pts.flatMap(p => series.map(s => p[s.key]).filter(v => Number.isFinite(v)));
     let lo = opt.noZero ? Math.min(...vals) : Math.min(0, ...vals), hi = opt.noZero ? Math.max(...vals) : Math.max(0, ...vals);
@@ -869,40 +872,60 @@
       ? `<text x="${X(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${p.label}</text>` : '').join('');
     const id = `lc${++chartSeq}`;
     const ptsArr = s => pts.map((p, i) => (Number.isFinite(p[s.key]) ? [X(i), Y(p[s.key])] : null)).filter(Boolean);
-    const isMain = s => s.key === 'mine' || s.solid;
-    const isRef = s => !isMain(s) && (s.key === 'inv' || s.key === 'save');
+    const isRef = s => s.key === 'inv' || s.key === 'save';
+    const isDash = s => isRef(s) || s.dash;
+    const isBold = s => s.key === 'mine' || s.key === 'nw';
     const mainKey = opt.areaKey || (series.find(s => s.key === 'mine') || (opt.interactive ? null : series[0]) || {}).key;
     const base = Math.min(H - B, Math.max(T, opt.noZero ? H - B : Y(Math.max(lo, Math.min(0, hi)))));
     const defs = series.map(s => `<linearGradient id="${id}-${s.key}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" style="stop-color:${s.color};stop-opacity:.28"/><stop offset="1" style="stop-color:${s.color};stop-opacity:0"/></linearGradient>`).join('');
+        <stop offset="0" style="stop-color:${s.color};stop-opacity:.32"/><stop offset=".75" style="stop-color:${s.color};stop-opacity:.04"/><stop offset="1" style="stop-color:${s.color};stop-opacity:0"/></linearGradient>`).join('');
     const areas = series.map(s => {
       const P = ptsArr(s); if (P.length < 2) return '';
-      return `<path class="area ${s.key === mainKey ? 'on' : ''}" data-k="${s.key}" d="${smoothPath(P)}L${P.at(-1)[0].toFixed(1)},${base.toFixed(1)}L${P[0][0].toFixed(1)},${base.toFixed(1)}Z" fill="url(#${id}-${s.key})"/>`;
+      return `<path class="area ${s.key === mainKey ? 'on' : ''}" data-k="${s.key}" d="${linePath(P)}L${P.at(-1)[0].toFixed(1)},${base.toFixed(1)}L${P[0][0].toFixed(1)},${base.toFixed(1)}Z" fill="url(#${id}-${s.key})"/>`;
     }).join('');
-    const lines = series.slice().reverse().map(s => {
-      const d = smoothPath(ptsArr(s));
-      const w = s.key === 'mine' || s.key === 'nw' ? 2.8 : isRef(s) ? 1.5 : 2.1;
-      return `<path class="ln ${isRef(s) ? 'ref' : 'draw'}" data-k="${s.key}" d="${d}" fill="none" stroke="${s.color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round" ${isRef(s) ? 'stroke-dasharray="4 5"' : 'pathLength="1"'}/>`;
+    // 굵은 선(내 투자)이 맨 위에 오도록
+    const order = series.slice().sort((p, q) => (isBold(p) ? 1 : 0) - (isBold(q) ? 1 : 0) || (isDash(q) ? 1 : 0) - (isDash(p) ? 1 : 0));
+    const lines = order.map(s => {
+      const d = linePath(ptsArr(s));
+      const w = isBold(s) ? 3 : isDash(s) ? 1.8 : 2.2;
+      return `<path class="ln ${isDash(s) ? 'ref' : 'draw'}" data-k="${s.key}" d="${d}" fill="none" stroke="${s.color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round" ${isDash(s) ? `stroke-dasharray="${isRef(s) ? '3 5' : '6 5'}"` : 'pathLength="1"'}/>`;
     }).join('');
     const lastP = pts.at(-1);
-    const dots = series.filter(s => !isRef(s) && Number.isFinite(lastP[s.key])).map(s => {
+    const ends = series.filter(s => !isRef(s) && Number.isFinite(lastP[s.key]));
+    const dots = ends.map(s => {
       const cx = X(pts.length - 1).toFixed(1), cy = Y(lastP[s.key]).toFixed(1);
-      return `<g class="end" data-k="${s.key}"><circle cx="${cx}" cy="${cy}" r="7" fill="${s.color}" opacity=".18"/><circle cx="${cx}" cy="${cy}" r="3.4" fill="${s.color}" stroke="var(--card)" stroke-width="1.6"/></g>`;
+      return `<g class="end" data-k="${s.key}"><circle cx="${cx}" cy="${cy}" r="${isBold(s) ? 7 : 5}" fill="${s.color}" opacity=".18"/><circle cx="${cx}" cy="${cy}" r="${isBold(s) ? 3.6 : 2.8}" fill="${s.color}" stroke="var(--card)" stroke-width="1.5"/></g>`;
     }).join('');
-    const svgInner = `<defs>${defs}</defs>${grid}${zero}${areas}${lines}${dots}${xl}`;
+    // 오른쪽 끝 값 태그 (겹치지 않게 위아래로 밀기)
+    let tagSvg = '';
+    if (tags) {
+      const items = ends.map(s => ({ s, y: Y(lastP[s.key]), t: tags(lastP[s.key]) })).sort((p, q) => p.y - q.y);
+      const gap = 17;
+      items.forEach((it, i) => { if (i && it.y - items[i - 1].y < gap) it.y = items[i - 1].y + gap; });
+      const over = items.length ? items.at(-1).y - (H - B + 4) : 0;
+      if (over > 0) items.forEach(it => { it.y -= over; });
+      for (let i = items.length - 2; i >= 0; i--) if (items[i + 1].y - items[i].y < gap) items[i].y = items[i + 1].y - gap;
+      const x0 = X(pts.length - 1) + 9;
+      tagSvg = items.map(({ s, y, t }) => {
+        const w = Math.max(30, String(t).length * 6.1 + 12);
+        return `<g class="tag" data-k="${s.key}"><rect x="${x0.toFixed(1)}" y="${(y - 8.5).toFixed(1)}" width="${w.toFixed(1)}" height="17" rx="8.5" fill="${s.color}" ${isDash(s) ? 'fill-opacity=".22" stroke="' + s.color + '" stroke-width="1"' : ''}/>
+          <text x="${(x0 + w / 2).toFixed(1)}" y="${(y + 3.6).toFixed(1)}" text-anchor="middle" class="tag-t ${isDash(s) ? 'soft' : ''}">${esc(t)}</text></g>`;
+      }).join('');
+    }
+    const svgInner = `<defs>${defs}</defs>${grid}${zero}${areas}${lines}${dots}${tagSvg}${xl}`;
     if (!opt.interactive) return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="수익률 비교 그래프">${svgInner}</svg>`;
     const valFmt = opt.valFmt || fmt;
     const info = {
       areaKey: mainKey || null, W, L, R, n: pts.length, xs: pts.map((_, i) => +X(i).toFixed(1)), labels: pts.map(p => p.label),
       series: series.map(s => ({ key: s.key, label: s.label, color: s.color, meta: (opt.meta || {})[s.key] || null, vals: pts.map(p => p[s.key]), ys: pts.map(p => Number.isFinite(p[s.key]) ? +Y(p[s.key]).toFixed(1) : null), fmt: pts.map(p => Number.isFinite(p[s.key]) ? valFmt(p[s.key]) : '—') })),
     };
-    const hits = series.map(s => `<path class="hit" data-k="${s.key}" d="${smoothPath(ptsArr(s))}" fill="none" stroke="transparent" stroke-width="22" stroke-linejoin="round"/>`).join('');
+    const hits = series.map(s => `<path class="hit" data-k="${s.key}" d="${linePath(ptsArr(s))}" fill="none" stroke="transparent" stroke-width="22" stroke-linejoin="round"/>`).join('');
     return `<div class="line-wrap" ${opt.detail ? 'data-detail="1"' : ''} data-info='${esc(JSON.stringify(info))}'>
       <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="비교 그래프. 선을 누르면 이름과 금액이 나와요">${svgInner}
         <line class="guide" x1="0" x2="0" y1="${T}" y2="${H - B}" style="display:none"/>${hits}
         <circle class="pick-halo" r="9" style="display:none" cx="0" cy="0"/>
         <circle class="pick-dot" r="4.5" stroke="var(--card)" stroke-width="2" style="display:none" cx="0" cy="0"/></svg>
-      <div class="line-readout num">선을 누르면 자세한 내용이 나와요</div>
+      <div class="ro-row"><div class="line-readout num">선을 누르면 자세한 내용이 나와요</div>${opt.action || ''}</div>
     </div>`;
   }
 
@@ -1007,13 +1030,11 @@
         </div>
         ${sel.length ? `
           <div class="cmp-label">${yearLabel} 누적 실현손익</div>
-          ${lineChart(pts, series, { L: 46, fmt: v => compactSigned(v), noDot: true, interactive: true, detail: true, valFmt: v => `${compactSigned(v)}원`,
+          ${lineChart(pts, series, { L: 46, fmt: v => compactSigned(v), tagFmt: v => compactSigned(v), action: `<button class="pick-edit" id="cmpPick" aria-label="비교할 항목 바꾸기"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>변경</button>`, noDot: true, interactive: true, detail: true, valFmt: v => `${compactSigned(v)}원`,
             meta: Object.fromEntries(sel.map((n, i) => { const m = M[n]; return [`c${i}`, y === 'all'
               ? [['누적 실현', compactSigned(m.amt), cls(m.amt)], [`${ty}년`, m.thisYear ? compactSigned(m.thisYear) : '—', cls(m.thisYear)], ['지금 수익률', m.value > 0 ? pct(m.ret, 1) : '보유 없음', cls(m.ret)]]
               : [[`${y}년 실현`, m.amt ? compactSigned(m.amt) : '—', cls(m.amt)], ['기준원금 대비', pct(m.baseRet, 1), cls(m.baseRet)], ['지금 수익률', m.value > 0 ? pct(m.ret, 1) : '보유 없음', cls(m.ret)]]]; })) })}
           <div class="pick small">
-            <button class="pick-edit" id="cmpPick" aria-label="비교할 항목 바꾸기"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>변경</button>
-            <span class="pick-break" aria-hidden="true"></span>
             ${sel.map(n => `<span class="pick-chip on" style="--c:${color(n)}"><i></i>${esc(n)}</span>`).join('')}
           </div>
           <p class="note">위의 연도를 바꾸면 그 해 기준으로 비교해요.<br>지금 수익률 = 보유 중인 평가금 기준${state.cmpMode === 'sub' ? '(종목은 평단 대비)' : ''}.</p>`
@@ -1081,7 +1102,7 @@
         let i = Math.round((vx - info.L) / ((info.W - info.L - info.R) / Math.max(1, info.n - 1)));
         i = Math.max(0, Math.min(info.n - 1, i));
         const v = s.vals[i];
-        $$('.ln, .end', svg).forEach(l => l.classList.toggle('dim', l.dataset.k !== k));
+        $$('.ln, .end, .tag', svg).forEach(l => l.classList.toggle('dim', l.dataset.k !== k));
         $$('.area', svg).forEach(a => a.classList.toggle('on', a.dataset.k === k));
         const dot = $('.pick-dot', svg), halo = $('.pick-halo', svg), guide = $('.guide', svg);
         dot.setAttribute('cx', info.xs[i]); dot.setAttribute('cy', s.ys[i]); dot.setAttribute('fill', s.color); dot.style.display = '';
@@ -1100,7 +1121,7 @@
       });
       svg.addEventListener('click', e => {
         if (e.target.classList.contains('hit')) return;
-        $$('.ln, .end', svg).forEach(l => l.classList.remove('dim'));
+        $$('.ln, .end, .tag', svg).forEach(l => l.classList.remove('dim'));
         $$('.area', svg).forEach(a => a.classList.toggle('on', a.dataset.k === info.areaKey));
         ['.pick-dot', '.pick-halo', '.guide'].forEach(q => { $(q, svg).style.display = 'none'; });
         ro.classList.remove('on', 'tap'); ro.onclick = null; ro.onkeydown = null; ro.removeAttribute('role'); ro.removeAttribute('tabindex');
