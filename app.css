@@ -800,3 +800,10 @@ body { word-break: keep-all; overflow-wrap: anywhere; }
 .nwc-row.loan { border-top: 0; padding-top: 0; }
 .nwc-row.net { border-top: 2px solid var(--line); padding-top: 6px; font-weight: 800; color: var(--ink); }
 .nwc-row.net b { font-size: 15px; }
+.nwc-row.total { border-top: 0; margin-top: 4px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.nwc-row.total b, .nwc-row.total span { color: var(--accent); }
+.nwc-row.loan { padding: 2px 10px; }
+.nwc-row.net { border-top: 0; margin-top: 2px; padding: 10px; border-radius: 10px; background: color-mix(in srgb, var(--up) 16%, transparent); }
+.nwc-row.net b, .nwc-row.net span { color: var(--up); }
+.nwc-row.net b { font-size: 16px; }
+.nwc-row { padding-left: 10px; padding-right: 10px; }
