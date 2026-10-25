@@ -768,3 +768,8 @@ body { word-break: keep-all; overflow-wrap: anywhere; }
 .yt b { font-size: 13.5px; font-weight: 800; }
 .yt small { font-size: 11px; font-weight: 600; opacity: .75; }
 #yTabs button.on { background: var(--fill); color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
+#yTabs button[data-p="0"] { --tc: #3182F6; }
+#yTabs button[data-p="1"] { --tc: #F5A524; }
+#yTabs button[data-p="2"] { --tc: #12A15A; }
+#yTabs button.on { background: color-mix(in srgb, var(--tc) 16%, transparent); box-shadow: inset 0 -2px 0 var(--tc); }
+#yTabs button.on .yt b { color: var(--tc); }
