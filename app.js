@@ -541,7 +541,7 @@
         ${g.list.map(a => `<div class="kasset">
           <button class="row" data-asset="${esc(a.name)}">
             <span>
-              <span class="row-name">${esc(a.name)}</span><br>
+              <span class="row-name"><span class="rn">${esc(a.name)}</span><span class="row-go">상세 보기 ›</span></span>
               <span class="row-sub num">평가금 ${compact(a.value)}원</span><br>
               <span class="row-sub num">원금 ${compact(a.cost)}원</span>
             </span>

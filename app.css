@@ -755,3 +755,6 @@ body { word-break: keep-all; overflow-wrap: anywhere; }
 .kasset .row-name + br { display: none; }
 .note .one-line { display: block; white-space: nowrap; letter-spacing: -0.02em; }
 .page { min-width: 0; max-width: 100%; } .page > .card { min-width: 0; overflow: hidden; } .note:has(.one-line) { overflow: hidden; }
+.kasset .row-name { display: flex; align-items: center; gap: 8px; overflow: visible; }
+.kasset .rn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-go { flex: none; font-size: 11.5px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 999px; padding: 2px 8px; }
