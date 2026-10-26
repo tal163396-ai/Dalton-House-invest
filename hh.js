@@ -38,11 +38,9 @@
     if (a >= 1e4) return `${s}${fmt(a / 1e4)}만`;
     return `${s}${fmt(a)}`;
   }
-  const cellAmt = v => (v >= 1e6 ? `${fmt(v / 1e4)}만` : fmt(v));
   const chars = s => Array.from(String(s || ''));
   const clip = (s, n) => { const c = chars(s); return c.length > n ? c.slice(0, n).join('') + '…' : c.join(''); };
   const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const isFixed = t => /고정/.test(t.cat + ' ' + t.sub);
   const ico = {
     back: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>',
     left: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
@@ -55,6 +53,8 @@
     rep: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11V9a3 3 0 0 1 3-3h12l-3-3M20 13v2a3 3 0 0 1-3 3H5l3 3"/></svg>',
     trash: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
     copy: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
+    eye: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+    eyeOff: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a9.8 9.8 0 0 0 5.4-1.6"/></svg>',
     chev: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
   };
 
@@ -66,9 +66,10 @@
     cats: { 수입: [], 지출: [] }, assets: [], rules: [], memos: [],
     pending: new Map(),
     view: pick(sess.get('dh_hview'), ['book', 'stats', 'assets', 'more'], 'book'),
-    btab: pick(sess.get('dh_hbtab'), ['daily', 'cal', 'month', 'close', 'memo'], 'daily'),
+    btab: pick(sess.get('dh_hbtab'), ['daily', 'month', 'close', 'memo'], 'daily'),
     ym: /^\d{4}-\d{2}$/.test(sess.get('dh_hym') || '') ? sess.get('dh_hym') : ymOf(new Date()),
-    calDay: null,
+    budgets: new Map(), link: new Map(),
+    budClosed: new Set((() => { try { return JSON.parse(store.get('dh_hbud_closed') || '[]'); } catch { return []; } })()),
     openMonths: new Set(), openInit: new Set(),
     st: {
       period: pick(store.get('dh_hst_p'), ['week', 'month', 'year', 'range'], 'month'),
@@ -96,7 +97,9 @@
   const toRule = a => ({ id: String(a[0]), day: Number(a[2]) || 1, type: String(a[3] || ''), cat: String(a[4] || ''), sub: String(a[5] || ''), text: String(a[6] || ''), amt: Number(a[7]) || 0, asset: String(a[8] || ''), to: String(a[9] || ''), memo: String(a[10] || ''), start: String(a[11] || ''), end: String(a[12] || ''), last: String(a[13] || '') });
   const toMemo = a => ({ id: String(a[0]), date: String(a[1] || ''), text: String(a[2] || ''), by: String(a[3] || '') });
   const catsArr = () => ['수입', '지출'].flatMap(t => H.cats[t].map(c => [t, c.name, c.subs.join(' | ')]));
-  const assetsArr = () => H.assets.map(a => [a.group, a.name, a.hidden ? 'Y' : '', a.memo]);
+  const assetsArr = () => H.assets.map(a => [a.group, a.name, a.hidden ? 'Y' : '', a.memo, a.link || '']);
+  const BK = (c, s) => `${c}\u0001${s || ''}`;
+  const budgetsArr = () => [...H.budgets].filter(([, v]) => v > 0).map(([k, v]) => [...k.split('\u0001'), v]);
 
   function ingest(hh) {
     H.tx = (hh.tx || []).map(toTx).filter(t => /^\d{4}-\d{2}-\d{2}/.test(t.ts));
@@ -105,7 +108,8 @@
       const t = String(r[0] || '').trim();
       if (H.cats[t] && String(r[1] || '').trim()) H.cats[t].push({ name: String(r[1]).trim(), subs: String(r[2] || '').split('|').map(s => s.trim()).filter(Boolean) });
     });
-    H.assets = (hh.assets || []).map(r => ({ group: String(r[0] || '기타').trim() || '기타', name: String(r[1] || '').trim(), hidden: String(r[2] || '').trim().toUpperCase() === 'Y', memo: String(r[3] || '') })).filter(a => a.name);
+    H.assets = (hh.assets || []).map(r => ({ group: String(r[0] || '기타').trim() || '기타', name: String(r[1] || '').trim(), hidden: String(r[2] || '').trim().toUpperCase() === 'Y', memo: String(r[3] || ''), link: String(r[4] || '').trim() })).filter(a => a.name);
+    H.budgets = new Map((hh.budgets || []).filter(r => String(r[0] || '').trim() && Number(r[2]) > 0).map(r => [BK(String(r[0]).trim(), String(r[1] || '').trim()), Number(r[2])]));
     H.rules = (hh.rules || []).map(toRule).filter(r => r.id);
     H.memos = (hh.memos || []).map(toMemo).filter(m => m.id);
     H.pending.forEach((t, id) => { if (!H.tx.some(x => x.id === id)) H.tx.push(t); });
@@ -117,22 +121,27 @@
     H.byId = new Map(H.tx.map(t => [t.id, t]));
     H.byYm = new Map();
     H.tx.forEach(t => { let l = H.byYm.get(t.ym); if (!l) H.byYm.set(t.ym, (l = [])); l.push(t); });
+    const names = new Set(H.assets.map(a => a.name));
+    H.link = new Map(H.assets.filter(a => a.link && a.link !== a.name && names.has(a.link)).map(a => [a.name, a.link]));
     H.bal = new Map();
     H.tx.forEach(t => applyBal(H.bal, t));
   }
+  // 체크카드처럼 결제 계좌가 연결된 자산은 그 계좌의 잔액으로 계산
+  const eff = a => H.link.get(a) || a;
   function applyBal(m, t) {
-    const add = (a, v) => m.set(a, (m.get(a) || 0) + v);
+    const add = (a, v) => { a = eff(a); m.set(a, (m.get(a) || 0) + v); };
     if (t.type === '수입') add(t.asset, t.amt);
     else if (t.type === '지출') add(t.asset, -t.amt);
     else if (t.type === '이체') { add(t.asset, -t.amt); add(t.to, t.amt); }
     else add(t.asset, t.amt);
   }
   // 이 자산 기준으로 들어오면 +, 나가면 −
-  function flowFor(t, a) {
-    if (t.type === '수입') return t.asset === a ? t.amt : 0;
-    if (t.type === '지출') return t.asset === a ? -t.amt : 0;
-    if (t.type === '이체') return (t.to === a ? t.amt : 0) - (t.asset === a ? t.amt : 0);
-    return t.asset === a ? t.amt : 0;
+  function flowFor(t, a, raw = false) {
+    const A = raw ? t.asset : eff(t.asset), T = raw ? t.to : eff(t.to);
+    if (t.type === '수입') return A === a ? t.amt : 0;
+    if (t.type === '지출') return A === a ? -t.amt : 0;
+    if (t.type === '이체') return (T === a ? t.amt : 0) - (A === a ? t.amt : 0);
+    return A === a ? t.amt : 0;
   }
   const nwDelta = t => (t.type === '수입' ? t.amt : t.type === '지출' ? -t.amt : t.type === '수정' ? t.amt : 0);
   const monthTx = ym => H.byYm.get(ym) || [];
@@ -149,7 +158,7 @@
     clearTimeout(cacheT);
     cacheT = setTimeout(() => {
       try {
-        store.set(CACHE, JSON.stringify({ tx: H.tx.filter(t => !H.pending.has(t.id)).map(txArr), cats: catsArr(), assets: assetsArr(), rules: H.rules.map(ruleArr), memos: H.memos.map(m => [m.id, m.date, m.text, m.by]) }));
+        store.set(CACHE, JSON.stringify({ tx: H.tx.filter(t => !H.pending.has(t.id)).map(txArr), cats: catsArr(), assets: assetsArr(), rules: H.rules.map(ruleArr), memos: H.memos.map(m => [m.id, m.date, m.text, m.by]), budgets: budgetsArr() }));
       } catch { /* 저장 공간 부족 등은 무시 */ }
     }, 400);
   }
@@ -227,7 +236,7 @@
     else if (p === 'week') H.st.anchor = addDays(a, 7 * k);
     window.scrollTo({ top: 0 }); render();
   }
-  function setYm(ym) { H.ym = ym; sess.set('dh_hym', ym); H.calDay = null; window.scrollTo({ top: 0 }); render(); }
+  function setYm(ym) { H.ym = ym; sess.set('dh_hym', ym); window.scrollTo({ top: 0 }); render(); }
   function goView(v) {
     H.view = v; sess.set('dh_hview', v);
     window.scrollTo({ top: 0 }); render();
@@ -243,7 +252,7 @@
     </div>`;
   }
   function renderBook() {
-    const tabs = [['daily', '일일'], ['cal', '달력'], ['month', '월별'], ['close', '결산'], ['memo', '메모']];
+    const tabs = [['daily', '일일'], ['month', '월별'], ['close', '결산'], ['memo', '메모']];
     const list = monthTx(H.ym);
     let body = '', sum = '';
     if (H.btab === 'month') {
@@ -253,24 +262,24 @@
     } else if (H.btab === 'memo') body = memoHtml(H.ym);
     else {
       sum = sumBar(sums(list));
-      body = H.btab === 'daily' ? dailyHtml(list) : H.btab === 'cal' ? calHtml(H.ym, list) : closeHtml(H.ym);
+      body = H.btab === 'daily' ? dailyHtml(list) : closeHtml(H.ym);
     }
     $('#hh-book').innerHTML = `
       <div class="hh-sticky">
-        <div class="hh-tabs five" role="tablist">${tabs.map(([k, n]) => `<button role="tab" data-bt="${k}" class="${H.btab === k ? 'on' : ''}" aria-selected="${H.btab === k}">${n}</button>`).join('')}</div>
+        <div class="hh-tabs" role="tablist">${tabs.map(([k, n]) => `<button role="tab" data-bt="${k}" class="${H.btab === k ? 'on' : ''}" aria-selected="${H.btab === k}">${n}</button>`).join('')}</div>
         ${sum}
       </div>
       <div class="hh-body">${body}</div>`;
     $$('#hh-book [data-bt]').forEach(b => b.onclick = () => { H.btab = b.dataset.bt; sess.set('dh_hbtab', H.btab); window.scrollTo({ top: 0 }); render(); });
     bindRows($('#hh-book'));
-    if (H.btab === 'cal') {
-      $$('#hh-book .hc-cell[data-d]').forEach(c => c.onclick = () => {
-        if (c.dataset.d.slice(0, 7) !== H.ym) { H.ym = c.dataset.d.slice(0, 7); sess.set('dh_hym', H.ym); }
-        H.calDay = c.dataset.d;
-        render();
-        const sel = $('#hhCalDay'); if (sel) sel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (H.btab === 'close') {
+      $$('#hh-book [data-bcat]').forEach(r => r.onclick = () => {
+        const k = r.dataset.bcat;
+        H.budClosed.has(k) ? H.budClosed.delete(k) : H.budClosed.add(k);
+        store.set('dh_hbud_closed', JSON.stringify([...H.budClosed]));
+        const y = window.scrollY; render(); window.scrollTo({ top: y });
       });
-      const add = $('#hhCalAdd'); if (add) add.onclick = () => openForm({ date: H.calDay });
+      const bs = $('#hhBudSet'); if (bs) bs.onclick = () => openBudgetSettings();
     }
     if (H.btab === 'month') {
       $$('#hh-book .hm-row').forEach(r => r.onclick = () => { const k = r.dataset.ym; H.openMonths.has(k) ? H.openMonths.delete(k) : H.openMonths.add(k); render(); });
@@ -281,13 +290,13 @@
 
   function emptyHtml(a, b = '') { return `<div class="card"><p class="empty">${a}${b ? `<br><span class="sub">${b}</span>` : ''}</p></div>`; }
 
-  function rowHtml(t, { balAfter = null, forAsset = null, showDate = false } = {}) {
+  function rowHtml(t, { balAfter = null, forAsset = null, showDate = false, raw = false } = {}) {
     let left, cls = '', amtTxt;
     if (t.type === '이체') { left = '<span class="hr-cat">이체</span>'; cls = 'tr'; }
     else if (t.type === '수정') { left = '<span class="hr-cat">잔액수정</span>'; cls = 'adj'; }
     else { left = `<span class="hr-cat">${esc(t.cat || '미분류')}</span>${t.sub ? `<small>${esc(t.sub)}</small>` : ''}`; cls = t.type === '수입' ? 'inc' : 'exp'; }
     if (forAsset) {
-      const f = flowFor(t, forAsset);
+      const f = flowFor(t, forAsset, raw);
       amtTxt = swon(f); cls = f > 0 ? 'inc' : f < 0 ? 'exp' : '';
     } else if (t.cur && t.famt !== '') amtTxt = `${t.cur === 'USD' ? 'US$' : t.cur} ${Number(t.famt).toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     else if (t.type === '수정') amtTxt = swon(t.amt);
@@ -319,36 +328,6 @@
   }
   function bindRows(root) {
     $$('.hr[data-tx]', root).forEach(r => r.onclick = () => { const t = H.byId.get(r.dataset.tx); if (t) openForm({ tx: t }); });
-  }
-
-  function calHtml(ym, list) {
-    const per = new Map();
-    list.forEach(t => {
-      if (t.type !== '수입' && t.type !== '지출') return;
-      const p = per.get(t.d) || { inc: 0, exp: 0 };
-      if (t.type === '수입') p.inc += t.amt; else p.exp += t.amt;
-      per.set(t.d, p);
-    });
-    const first = parseD(ym + '-01'), lead = first.getDay(), n = daysIn(ym), td = today();
-    if (!H.calDay) H.calDay = td.startsWith(ym) ? td : null;
-    const cells = [];
-    for (let i = 0; i < lead; i++) cells.push(`<span class="hc-cell out"></span>`);
-    for (let d = 1; d <= n; d++) {
-      const ds = `${ym}-${pad(d)}`, p = per.get(ds), w = (lead + d - 1) % 7;
-      cells.push(`<button class="hc-cell w${w} ${ds === td ? 'today' : ''} ${ds === H.calDay ? 'sel' : ''}" data-d="${ds}" aria-label="${+ym.slice(5)}월 ${d}일">
-        <span class="hc-d">${d}</span>${p && p.inc ? `<span class="hc-i num">${cellAmt(p.inc)}</span>` : ''}${p && p.exp ? `<span class="hc-e num">${cellAmt(p.exp)}</span>` : ''}</button>`);
-    }
-    while (cells.length % 7) cells.push(`<span class="hc-cell out"></span>`);
-    let day = '';
-    if (H.calDay && H.calDay.startsWith(ym)) {
-      const l = list.filter(t => t.d === H.calDay);
-      day = `<section class="card hd" id="hhCalDay">${dayHead(H.calDay, l)}${l.map(t => rowHtml(t)).join('') || '<p class="empty">이 날은 내역이 없습니다.</p>'}
-        <button class="hh-addday" id="hhCalAdd">${ico.plus}<span>${+H.calDay.slice(5, 7)}월 ${+H.calDay.slice(8)}일 내역 입력</span></button></section>`;
-    }
-    return `<div class="card hc">
-      <div class="hc-wd">${WD.map((w, i) => `<span class="w${i}">${w}</span>`).join('')}</div>
-      <div class="hc-grid">${cells.join('')}</div>
-    </div>${day}`;
   }
 
   function weeksOf(ym) {
@@ -390,43 +369,64 @@
     return rows.map(r => `<div class="hb-row"><div class="hb-top"><span>${esc(r.k)}${r.n ? ` <small>${r.n}건</small>` : ''}</span><b class="num">${won(r.v)}${total ? ` <small>${Math.round(r.v / total * 100)}%</small>` : ''}</b></div>
       <div class="hb-meter"><i style="width:${Math.max(1.5, Math.abs(r.v) / mx * 100)}%;background:${r.c || color}"></i></div></div>`).join('');
   }
+  // 결산 = 예산 대비 지출 (편한가계부와 같은 모양) + 자산별 수입·지출
+  function budgetOf(cat, sub) { return H.budgets.get(BK(cat, sub)) || 0; }
+  function catBudget(c) {
+    const own = budgetOf(c.name, '');
+    return own > 0 ? own : c.subs.reduce((a, s) => a + budgetOf(c.name, s), 0);
+  }
+  function budRow(name, b, spent, { kind = 'cat', marker = null, toggle = null, open = true } = {}) {
+    const pct = b > 0 ? spent / b : Infinity, over = spent > b, rem = b - spent;
+    const pTxt = !Number.isFinite(pct) || pct > 9.99 ? '-' : `${Math.round(pct * 100)}%`;
+    const fill = Math.min(100, (Number.isFinite(pct) ? pct : 1) * 100);
+    const tg = toggle ? `data-bcat="${esc(toggle)}" role="button" tabindex="0" aria-expanded="${open}"` : '';
+    return `<div class="bud ${kind}" ${tg}>
+      <div class="bud-l"><span class="bud-n"><span>${esc(name)}</span>${toggle ? `<i class="bud-chev ${open ? 'open' : ''}">${ico.chev}</i>` : ''}</span><b class="num">${won(b)}</b></div>
+      <div class="bud-r">
+        <div class="bud-bar ${over ? 'over' : ''}"><i style="width:${fill.toFixed(1)}%"></i>${marker !== null ? `<s style="left:${(marker * 100).toFixed(1)}%"></s>${kind === 'top' ? `<span class="bud-today" style="left:${(marker * 100).toFixed(1)}%">오늘</span>` : ''}` : ''}<em class="num ${fill >= 96 ? 'in' : ''}">${pTxt}</em></div>
+        <div class="bud-v num"><span class="${over ? 'exp' : 'inc'}">${won(spent)}</span><span>${rem < 0 ? `초과 −${fmt(-rem)}원` : won(rem)}</span></div>
+      </div>
+    </div>`;
+  }
   function closeHtml(ym) {
-    const list = monthTx(ym), s = sums(list);
-    if (!list.length) return emptyHtml('이 달에는 내역이 없습니다.');
-    const prev = sums(monthTx(addMonths(ym, -1)));
-    const exp = list.filter(t => t.type === '지출');
-    const byAsset = new Map(); exp.forEach(t => { const r = byAsset.get(t.asset) || { k: t.asset, v: 0, n: 0 }; r.v += t.amt; r.n++; byAsset.set(t.asset, r); });
-    const fixed = exp.filter(isFixed).reduce((a, t) => a + t.amt, 0), vari = s.exp - fixed;
-    const catNow = new Map(), catPrev = new Map();
-    exp.forEach(t => catNow.set(t.cat, (catNow.get(t.cat) || 0) + t.amt));
-    monthTx(addMonths(ym, -1)).filter(t => t.type === '지출').forEach(t => catPrev.set(t.cat, (catPrev.get(t.cat) || 0) + t.amt));
-    const diffs = [...new Set([...catNow.keys(), ...catPrev.keys()])].map(k => ({ k, now: catNow.get(k) || 0, d: (catNow.get(k) || 0) - (catPrev.get(k) || 0) }))
-      .filter(x => x.d !== 0).sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 6);
-    const rate = s.inc > 0 ? s.net / s.inc : null;
+    const list = monthTx(ym), exp = list.filter(t => t.type === '지출');
+    const byCat = new Map(), bySub = new Map();
+    exp.forEach(t => { byCat.set(t.cat, (byCat.get(t.cat) || 0) + t.amt); bySub.set(BK(t.cat, t.sub), (bySub.get(BK(t.cat, t.sub)) || 0) + t.amt); });
+    const total = exp.reduce((a, t) => a + t.amt, 0);
+    const cur = ymOf(new Date());
+    const marker = ym === cur ? new Date().getDate() / daysIn(ym) : null;
+    const rows = [];
+    let tb = 0;
+    H.cats['지출'].forEach(c => {
+      const b = catBudget(c);
+      if (!(b > 0)) return;
+      tb += b;
+      const subs = c.subs.filter(s => budgetOf(c.name, s) > 0);
+      const open = !H.budClosed.has(c.name);
+      rows.push(budRow(c.name, b, byCat.get(c.name) || 0, { kind: 'cat', marker, toggle: subs.length ? c.name : null, open }));
+      if (subs.length && open) subs.forEach(s => rows.push(budRow(s, budgetOf(c.name, s), bySub.get(BK(c.name, s)) || 0, { kind: 'sub', marker })));
+    });
+    const budget = rows.length
+      ? budRow('전체예산', tb, total, { kind: 'top', marker }) + rows.join('')
+      : `<p class="empty">예산이 없습니다.<br><span class="sub">예산설정에서 분류별 한 달 예산을 넣으십시오.</span></p>`;
+    // 자산별 수입·지출 (체크카드는 카드 이름 그대로)
+    const byAsset = new Map();
+    list.forEach(t => {
+      if (t.type !== '수입' && t.type !== '지출') return;
+      const r = byAsset.get(t.asset) || { k: t.asset, inc: 0, exp: 0 };
+      if (t.type === '수입') r.inc += t.amt; else r.exp += t.amt;
+      byAsset.set(t.asset, r);
+    });
+    const as = [...byAsset.values()].sort((a, b) => b.exp - a.exp || b.inc - a.inc);
     return `
-      <section class="card hcl">
-        <h3 class="hh-h3">${+ym.slice(5)}월 결산</h3>
-        <div class="hcl-net num ${s.net >= 0 ? 'inc' : 'exp'}">${swon(s.net)}</div>
-        <p class="hcl-sub">${s.net >= 0 ? '수입에서 지출을 빼고 남은 돈입니다.' : '지출이 수입보다 많았습니다.'}${rate !== null ? ` 저축률 ${Math.round(rate * 100)}%` : ''}</p>
-        <div class="hcl-split"><i class="exp-bg" style="flex:${Math.max(s.exp, 0)}"></i><i class="inc-bg" style="flex:${Math.max(s.net, 0)}"></i></div>
-        <div class="hcl-legend num"><span><i class="exp-bg"></i>지출 ${won(s.exp)}</span><span><i class="inc-bg"></i>남은 돈 ${won(Math.max(s.net, 0))}</span></div>
-        <div class="hcl-prev num">지난달: 수입 ${won(prev.inc)} · 지출 ${won(prev.exp)}</div>
+      <section class="card hbud">
+        <div class="hbud-head"><b>예산</b><button class="hbud-set" id="hhBudSet">예산설정 ${ico.chev}</button></div>
+        ${budget}
       </section>
-      <section class="card">
-        <h3 class="hh-h3">고정 지출 · 변동 지출</h3>
-        <div class="hcl-two num">
-          <div><span>고정 지출</span><b>${won(fixed)}</b><small>분류·소분류에 '고정'이 들어간 내역</small></div>
-          <div><span>변동 지출</span><b>${won(vari)}</b><small>그 밖의 지출</small></div>
-        </div>
-      </section>
-      <section class="card">
-        <h3 class="hh-h3">자산별 지출</h3>
-        ${barRows([...byAsset.values()].sort((a, b) => b.v - a.v), s.exp, 'var(--exp)')}
-      </section>
-      ${diffs.length ? `<section class="card">
-        <h3 class="hh-h3">지난달보다 많이·적게 쓴 분류</h3>
-        ${diffs.map(x => `<div class="hcl-diff"><span>${esc(x.k)}</span><span class="num">${won(x.now)}</span><b class="num ${x.d > 0 ? 'exp' : 'inc'}">${x.d > 0 ? '▲' : '▼'} ${fmt(Math.abs(x.d))}</b></div>`).join('')}
-      </section>` : ''}`;
+      <section class="card hbud-as">
+        <div class="hbud-head"><b>자산</b><span class="num">${ym.slice(2, 4)}.${+ym.slice(5)}.1 ~ ${ym.slice(2, 4)}.${+ym.slice(5)}.${daysIn(ym)}</span></div>
+        ${as.length ? `<div class="has-row head"><span>자산</span><span>수입</span><span>지출</span></div>${as.map(r => `<div class="has-row"><span>${esc(r.k)}</span><b class="num inc">${fmt(r.inc)}</b><b class="num exp">${fmt(r.exp)}</b></div>`).join('')}` : '<p class="empty">이 달에는 수입·지출이 없습니다.</p>'}
+      </section>`;
   }
 
   function memoHtml(ym) {
@@ -571,14 +571,24 @@
         <div><span>부채</span><b class="exp">${fmt(-neg)}</b></div>
         <div><span>합계</span><b>${nw < 0 ? '−' : ''}${fmt(Math.abs(nw))}</b></div>
       </div>
+      <div class="ha-tools"><button class="hbud-set" id="hhAAdd">${ico.plus}<span>자산 추가</span></button><button class="hbud-set" id="hhAEdit">${ico.pen}<span>표시·숨김 · 순서 · 삭제</span></button></div>
       <button class="card ha-total" id="hhTotalBtn">
         <span class="ha-tl">누적잔액 추이 <em>전체통계 ›</em></span>
         ${sparkSvg(ms.map(m => cum.get(m)))}
       </button>
       ${[...groups].map(([g, list]) => {
-        const gs = list.reduce((a, x) => a + (H.bal.get(x.name) || 0), 0);
-        return `<section class="card ha-group"><div class="ha-gh"><b>${esc(g)}</b><span class="num ${gs < 0 ? 'exp' : ''}">${won(gs)}</span></div>
-          ${list.map(a => { const v = H.bal.get(a.name) || 0; return `<button class="ha-row" data-asset="${esc(a.name)}"><span>${esc(a.name)}</span><b class="num ${v < 0 ? 'exp' : v > 0 ? 'inc' : ''}">${won(v)}</b></button>`; }).join('')}
+        const own = list.filter(x => !H.link.has(x.name));
+        const gs = own.reduce((a, x) => a + (H.bal.get(x.name) || 0), 0);
+        const cm = ymOf(new Date());
+        return `<section class="card ha-group"><div class="ha-gh"><b>${esc(g)}</b>${own.length ? `<span class="num ${gs < 0 ? 'exp' : ''}">${won(gs)}</span>` : ''}</div>
+          ${list.map(a => {
+            if (H.link.has(a.name)) {
+              const used = monthTx(cm).filter(t => t.asset === a.name && t.type === '지출').reduce((x, t) => x + t.amt, 0);
+              return `<button class="ha-row" data-asset="${esc(a.name)}"><span>${esc(a.name)}<small>${esc(H.link.get(a.name))} 연결</small></span><b class="num ha-use">이번 달 ${won(used)}</b></button>`;
+            }
+            const v = H.bal.get(a.name) || 0;
+            return `<button class="ha-row" data-asset="${esc(a.name)}"><span>${esc(a.name)}</span><b class="num ${v < 0 ? 'exp' : v > 0 ? 'inc' : ''}">${won(v)}</b></button>`;
+          }).join('')}
         </section>`;
       }).join('')}
       ${orphan.length ? `<section class="card ha-group"><div class="ha-gh"><b>목록에 없는 자산</b></div>${orphan.map(([k, v]) => `<button class="ha-row" data-asset="${esc(k)}"><span>${esc(k)}</span><b class="num ${v < 0 ? 'exp' : 'inc'}">${won(v)}</b></button>`).join('')}
@@ -586,7 +596,10 @@
       <p class="note ha-note">숨긴 자산은 목록에서 빠지지만 합계에는 들어갑니다.</p>`;
     $$('#hh-assets .ha-row').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
     $('#hhTotalBtn').onclick = () => openTotal(ymOf(new Date()));
+    $('#hhAAdd').onclick = () => openAssetEdit(newAsset());
+    $('#hhAEdit').onclick = () => openAssetSettings();
   }
+  const newAsset = () => ({ name: '', group: H.assets.at(-1)?.group || '현금', hidden: false, memo: '', link: '', isNew: true });
   function cumByMonth() {
     const per = new Map();
     H.tx.forEach(t => per.set(t.ym, (per.get(t.ym) || 0) + nwDelta(t)));
@@ -654,36 +667,40 @@
 
   function openAsset(name) {
     let ym = ymOf(new Date());
+    const card = H.link.get(name) || null;   // 결제 계좌가 연결된 체크카드
     const build = () => {
-      const all = H.tx.filter(t => t.asset === name || t.to === name).slice().reverse();
+      const hit = t => (card ? t.asset === name || t.to === name : eff(t.asset) === name || eff(t.to) === name);
+      const all = H.tx.filter(hit).slice().reverse();
       const after = new Map(); let run = 0;
-      all.forEach(t => { run += flowFor(t, name); after.set(t.id, run); });
-      const list = monthTx(ym).filter(t => t.asset === name || t.to === name);
-      let inn = 0, out = 0; list.forEach(t => { const f = flowFor(t, name); if (f > 0) inn += f; else out -= f; });
+      all.forEach(t => { run += flowFor(t, name, !!card); after.set(t.id, run); });
+      const list = monthTx(ym).filter(hit);
+      let inn = 0, out = 0; list.forEach(t => { const f = flowFor(t, name, !!card); if (f > 0) inn += f; else out -= f; });
       const endBal = (() => { let b = 0; all.forEach(t => { if (t.ym <= ym) b = after.get(t.id); }); return b; })();
       const a = H.assets.find(x => x.name === name);
       const bal = H.bal.get(name) || 0;
+      const linked = H.assets.filter(x => H.link.get(x.name) === name).map(x => x.name);
       return `
         <section class="card hp-asset">
           <span class="hp-ag">${esc(a ? a.group : '목록에 없는 자산')}${a && a.hidden ? ' · 숨김' : ''}</span>
-          <div class="hp-bal num ${bal < 0 ? 'exp' : ''}">${won(bal)}</div>
+          ${card ? `<div class="hp-bal num">${won(out - inn)}</div><p class="note">${ymLabel(ym)} 사용 금액입니다. 결제 계좌 <b>${esc(card)}</b> 잔액에서 바로 빠집니다.</p>`
+            : `<div class="hp-bal num ${bal < 0 ? 'exp' : ''}">${won(bal)}</div>${linked.length ? `<p class="note">${linked.map(esc).join(', ')} 사용 금액이 이 잔액에 들어 있습니다.</p>` : ''}`}
           ${a && a.memo ? `<p class="note">${esc(a.memo)}</p>` : ''}
-          <div class="hp-btns"><button class="btn sm" id="aAdj">잔액 수정</button><button class="btn sm" id="aSet">자산 설정</button></div>
+          <div class="hp-btns">${card ? '' : '<button class="btn sm" id="aAdj">잔액 수정</button>'}<button class="btn sm" id="aSet">자산 설정</button></div>
         </section>
         <div class="hp-nav"><button class="hh-arrow" data-am="-1" aria-label="이전 달">${ico.left}</button><b>${ymLabel(ym)}</b><button class="hh-arrow" data-am="1" aria-label="다음 달">${ico.right}</button></div>
         <div class="card ha-sum num sm">
           <div><span>들어옴</span><b class="inc">${fmt(inn)}</b></div>
           <div><span>나감</span><b class="exp">${fmt(out)}</b></div>
-          <div><span>월말 잔액</span><b>${endBal < 0 ? '−' : ''}${fmt(Math.abs(endBal))}</b></div>
+          ${card ? `<div><span>사용</span><b>${fmt(out - inn)}</b></div>` : `<div><span>월말 잔액</span><b>${endBal < 0 ? '−' : ''}${fmt(Math.abs(endBal))}</b></div>`}
         </div>
-        ${list.length ? [...groupByDay(list)].map(([ds, l]) => `<section class="card hd">${dayHead(ds, null)}${l.map(t => rowHtml(t, { forAsset: name, balAfter: after.get(t.id) })).join('')}</section>`).join('')
+        ${list.length ? [...groupByDay(list)].map(([ds, l]) => `<section class="card hd">${dayHead(ds, null)}${l.map(t => rowHtml(t, { forAsset: name, raw: !!card, balAfter: card ? null : after.get(t.id) })).join('')}</section>`).join('')
           : emptyHtml('이 달에는 이 자산의 내역이 없습니다.')}`;
     };
     const bind = pg => {
       bindRows(pg);
       $$('[data-am]', pg).forEach(b => b.onclick = () => { ym = addMonths(ym, Number(b.dataset.am)); $('.hh-pbody', pg).innerHTML = build(); bind(pg); });
-      $('#aAdj', pg).onclick = () => adjustBalance(name);
-      $('#aSet', pg).onclick = () => { const a = H.assets.find(x => x.name === name); if (a) openAssetEdit(a); else openAssetEdit({ name, group: '기타', hidden: false, memo: '', isNew: true }); };
+      const adj = $('#aAdj', pg); if (adj) adj.onclick = () => adjustBalance(name);
+      $('#aSet', pg).onclick = () => { const a = H.assets.find(x => x.name === name); openAssetEdit(a || { ...newAsset(), name, group: '기타' }); };
     };
     pushPage({ title: esc(name), body: build(), onMount: bind, refresh: pg => { $('.hh-pbody', pg).innerHTML = build(); bind(pg); } });
   }
@@ -710,6 +727,7 @@
         <button class="hmo-row" data-go="cat-지출"><span>지출 분류 설정</span><small>${H.cats['지출'].length}개</small>${ico.chev}</button>
         <button class="hmo-row" data-go="assets"><span>자산 설정</span><small>${H.assets.length}개</small>${ico.chev}</button>
         <button class="hmo-row" data-go="rules"><span>매월 반복 내역</span><small>${H.rules.length}개</small>${ico.chev}</button>
+        <button class="hmo-row" data-go="budget"><span>예산 설정</span><small>${H.budgets.size ? `월 ${won(H.cats['지출'].reduce((a, c) => a + catBudget(c), 0))}` : '없음'}</small>${ico.chev}</button>
       </div>
       <div class="card hmo">
         <button class="hmo-row" data-go="search"><span>내역 검색</span>${ico.chev}</button>
@@ -717,13 +735,16 @@
         <button class="hmo-row" data-go="reload"><span>가계부 새로 불러오기</span>${ico.chev}</button>
         <button class="hmo-row" data-go="inv"><span>투자 화면으로</span>${ico.chev}</button>
       </div>
-      <p class="note hmo-note">가계부는 구글 시트의 '가계부' 탭들에 저장됩니다. 시트에서 직접 고친 뒤 새로 불러오면 앱에 반영됩니다.<br>
+      <p class="note hmo-note">가계부는 구글 시트의 '가계부' 탭들에 저장되어 두 사람 휴대폰에 바로 같이 보입니다(동기화). 시트에서 직접 고친 뒤 새로 불러오면 앱에 반영됩니다.<br>
+      백업·복원: 구글 시트의 '버전 기록'으로 예전 상태로 되돌릴 수 있고, CSV로도 내려받을 수 있습니다.<br>
+      PC에서도 같은 주소를 브라우저로 열면 그대로 쓸 수 있습니다.<br>
       매월 반복 내역은 그 날짜가 지난 뒤 앱을 처음 열 때 자동으로 들어갑니다.</p>`;
     $$('#hh-more [data-go]').forEach(b => b.onclick = () => {
       const g = b.dataset.go;
       if (g.startsWith('cat-')) openCatSettings(g.slice(4));
       else if (g === 'assets') openAssetSettings();
       else if (g === 'rules') openRules();
+      else if (g === 'budget') openBudgetSettings();
       else if (g === 'search') openSearch();
       else if (g === 'csv') exportCsv();
       else if (g === 'reload') load({ quiet: false });
@@ -1190,7 +1211,17 @@
         if (rn.what === 'sub' && o.cat === rn.cat && o.sub === rn.from) o.sub = rn.to;
       }
     };
-    H.tx.forEach(fix); H.rules.forEach(fix); reindex();
+    H.tx.forEach(fix); H.rules.forEach(fix);
+    if (rn.what === 'asset') H.assets.forEach(a => { if (a.link === rn.from) a.link = rn.to; });
+    if (rn.type === '지출' && (rn.what === 'cat' || rn.what === 'sub')) {
+      H.budgets = new Map([...H.budgets].map(([k, v]) => {
+        const [c, sb] = k.split('\u0001');
+        if (rn.what === 'cat' && c === rn.from) return [BK(rn.to, sb), v];
+        if (rn.what === 'sub' && c === rn.cat && sb === rn.from) return [BK(c, rn.to), v];
+        return [k, v];
+      }));
+    }
+    reindex();
   }
   function listEditor(pg, { items, label, sub, onOpen, onRename, onDelete, onMove }) {
     const body = $('.hh-pbody', pg);
@@ -1254,7 +1285,7 @@
           if (list.some(x => x.name === v)) { toast('같은 이름의 분류가 있습니다', true); return; }
           const rn = { what: 'cat', type, from: c.name, to: v };
           c.name = v; renameLocal(rn); draw(); rerender();
-          saveSettings({ renames: [rn], cats: catsArr() }, '이름을 바꿨습니다');
+          saveSettings({ renames: [rn], cats: catsArr(), budgets: budgetsArr() }, '이름을 바꿨습니다');
         },
         onDelete: async i => {
           const c = list[i];
@@ -1283,7 +1314,7 @@
           if (cat.subs.includes(v)) { toast('같은 이름이 있습니다', true); return; }
           const rn = { what: 'sub', type, cat: cat.name, from: s, to: v };
           cat.subs[i] = v; renameLocal(rn); draw(); rerender();
-          saveSettings({ renames: [rn], cats: catsArr() }, '이름을 바꿨습니다');
+          saveSettings({ renames: [rn], cats: catsArr(), budgets: budgetsArr() }, '이름을 바꿨습니다');
         },
         onDelete: async i => {
           if (!(await askConfirm(`'${cat.subs[i]}' 소분류를 지울까요?`, '지난 내역은 그대로 남습니다.', '삭제'))) return;
@@ -1303,14 +1334,25 @@
 
   /* ───────────── 설정: 자산 ───────────── */
   function openAssetSettings() {
-    const pg = pushPage({ title: '자산 설정', actions: `<button class="icon-btn" id="aAdd" aria-label="자산 추가">${ico.plus}</button>`, body: '', refresh: p => draw(p) });
+    const pg = pushPage({ title: '자산 편집', actions: `<button class="icon-btn" id="aAdd" aria-label="자산 추가">${ico.plus}</button>`, body: '', refresh: p => draw(p) });
+    let saveT = 0;
+    const saveLater = () => { clearTimeout(saveT); saveT = setTimeout(() => saveSettings({ assets: assetsArr() }), 600); };
     function draw(p = pg) {
       const groups = [...new Set(H.assets.map(a => a.group))];
       $('.hh-pbody', p).innerHTML = groups.map(g => `<h3 class="se-gh">${esc(g)}</h3><div class="card se-list" data-g="${esc(g)}">${H.assets.filter(a => a.group === g).map(a => `
-        <div class="se-row nodel ${a.hidden ? 'hid' : ''}"><button class="se-name" data-edit="${esc(a.name)}"><span>${esc(a.name)}</span><small class="num">${won(H.bal.get(a.name) || 0)}${a.hidden ? ' · 숨김' : ''}</small></button>
-        <button class="se-ed" data-edit="${esc(a.name)}" aria-label="고치기">${ico.pen}</button><span class="se-drag" aria-label="끌어서 순서 바꾸기">${ico.drag}</span></div>`).join('')}</div>`).join('')
-        + '<p class="note">회색은 숨긴 자산입니다. 숨긴 자산은 입력할 때 목록에 나오지 않지만 합계에는 들어갑니다.</p>';
+        <div class="se-row eye ${a.hidden ? 'hid' : ''}">
+          <button class="se-del" data-del="${esc(a.name)}" aria-label="${esc(a.name)} 삭제">${ico.del}</button>
+          <button class="se-name" data-edit="${esc(a.name)}"><span>${esc(a.name)}</span><small class="num">${H.link.has(a.name) ? `${esc(H.link.get(a.name))} 연결` : won(H.bal.get(a.name) || 0)}${a.hidden ? ' · 숨김' : ''}</small></button>
+          <button class="se-ed se-eye ${a.hidden ? '' : 'on'}" data-eye="${esc(a.name)}" aria-pressed="${!a.hidden}" aria-label="${esc(a.name)} ${a.hidden ? '보이기' : '숨기기'}">${a.hidden ? ico.eyeOff : ico.eye}</button>
+          <span class="se-drag" aria-label="끌어서 순서 바꾸기">${ico.drag}</span>
+        </div>`).join('')}</div>`).join('')
+        + '<p class="note">눈 아이콘으로 표시·숨김을 바꿉니다. 숨긴 자산은 입력할 때 목록에 나오지 않지만 합계에는 들어갑니다. ≡ 를 끌어 순서를 바꾸고, 이름을 누르면 이름·그룹·결제 계좌를 고칩니다.</p>';
       $$('[data-edit]', p).forEach(b => b.onclick = () => openAssetEdit(H.assets.find(a => a.name === b.dataset.edit)));
+      $$('[data-eye]', p).forEach(b => b.onclick = () => {
+        const a = H.assets.find(x => x.name === b.dataset.eye); if (!a) return;
+        a.hidden = !a.hidden; draw(); rerender(); saveLater();
+      });
+      $$('[data-del]', p).forEach(b => b.onclick = () => deleteAsset(H.assets.find(x => x.name === b.dataset.del)));
       $$('.se-list[data-g]', p).forEach(list => dragSort(list, (a, b) => {
         const g = list.dataset.g, idx = H.assets.map((x, i) => (x.group === g ? i : -1)).filter(i => i >= 0);
         const item = H.assets[idx[a]];
@@ -1318,16 +1360,27 @@
         const idx2 = H.assets.map((x, i) => (x.group === g ? i : -1)).filter(i => i >= 0);
         const at = b >= idx2.length ? idx2.at(-1) + 1 : idx2[b];
         H.assets.splice(at, 0, item);
-        draw(); saveSettings({ assets: assetsArr() });
+        draw(); rerender(); saveSettings({ assets: assetsArr() });
       }));
     }
     draw();
-    $('#aAdd', pg).onclick = () => openAssetEdit({ name: '', group: H.assets.at(-1)?.group || '현금', hidden: false, memo: '', isNew: true });
+    $('#aAdd', pg).onclick = () => openAssetEdit(newAsset());
+  }
+  async function deleteAsset(a, after) {
+    if (!a) return false;
+    if (H.tx.some(t => t.asset === a.name || t.to === a.name)) { toast('내역이 있는 자산은 지울 수 없습니다. 눈 아이콘으로 숨기십시오.', true); return false; }
+    if (!(await askConfirm(`'${a.name}' 자산을 지울까요?`, '', '삭제'))) return false;
+    H.assets.splice(H.assets.indexOf(a), 1);
+    H.assets.forEach(x => { if (x.link === a.name) x.link = ''; });
+    reindex();
+    const ok = await saveSettings({ assets: assetsArr() }, '자산을 지웠습니다');
+    rerender();
+    if (ok && after) after();
+    return ok;
   }
   function openAssetEdit(a) {
     const isNew = !!a.isNew;
     const groups = [...new Set(H.assets.map(x => x.group))];
-    const used = !isNew && H.tx.some(t => t.asset === a.name || t.to === a.name);
     const pg = pushPage({
       title: isNew ? '자산 추가' : '자산 고치기', cls: 'hf-page',
       actions: !isNew ? `<button class="icon-btn" id="eDel" aria-label="자산 삭제">${ico.trash}</button>` : '',
@@ -1336,6 +1389,8 @@
         <div class="hf-row"><span class="hf-l">그룹</span><div class="hf-v"><select id="eGroup" class="hf-sel wide">${groups.map(g => `<option ${g === a.group ? 'selected' : ''}>${esc(g)}</option>`).join('')}<option value="__new">+ 새 그룹</option></select></div></div>
         ${isNew ? `<div class="hf-row"><span class="hf-l">시작 잔액</span><div class="hf-v"><input id="eBal" inputmode="numeric" placeholder="0" autocomplete="off"><span class="hf-unit">원</span></div></div>
           <p class="hf-info">대출처럼 갚을 돈은 앞에 −를 붙입니다.</p>` : ''}
+        <div class="hf-row"><span class="hf-l">결제 계좌</span><div class="hf-v"><select id="eLink" class="hf-sel wide"><option value="">없음</option>${H.assets.filter(x => x !== a && x.name !== a.name && !x.link).map(x => `<option ${x.name === a.link ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div></div>
+        <p class="hf-info">체크카드처럼 쓰는 즉시 통장에서 빠지는 자산은 그 통장을 고르십시오. 사용 금액이 통장 잔액에서 빠지고, 이 자산은 이번 달 사용 금액만 보입니다.</p>
         <label class="hf-switch"><span>숨기기</span><input type="checkbox" id="eHide" ${a.hidden ? 'checked' : ''}><i></i></label>
         <textarea id="eMemo" class="hf-memo" rows="2" placeholder="메모">${esc(a.memo || '')}</textarea>
         <p class="form-error" id="eErr" role="alert"></p>
@@ -1350,7 +1405,7 @@
       const o = document.createElement('option'); o.textContent = g; sel.insertBefore(o, sel.lastElementChild); sel.value = g;
     };
     $('#eSave', pg).onclick = async () => {
-      const name = $('#eName', pg).value.trim(), group = $('#eGroup', pg).value, hidden = $('#eHide', pg).checked, memo = $('#eMemo', pg).value.trim();
+      const name = $('#eName', pg).value.trim(), group = $('#eGroup', pg).value, hidden = $('#eHide', pg).checked, memo = $('#eMemo', pg).value.trim(), link = $('#eLink', pg).value;
       const err = $('#eErr', pg);
       if (!name) { err.textContent = '이름을 입력하십시오.'; return; }
       if (group === '__new') { err.textContent = '그룹을 고르십시오.'; return; }
@@ -1360,7 +1415,7 @@
         const exists = H.assets.some(x => x.name === name);
         if (!exists) {
           const lastIdx = H.assets.map(x => x.group).lastIndexOf(group);
-          const item = { group, name, hidden, memo };
+          const item = { group, name, hidden, memo, link };
           if (lastIdx >= 0) H.assets.splice(lastIdx + 1, 0, item); else H.assets.push(item);
         }
       } else {
@@ -1370,8 +1425,9 @@
           const lastIdx = H.assets.map(x => x.group).lastIndexOf(group);
           if (lastIdx >= 0) H.assets.splice(lastIdx + 1, 0, a); else H.assets.push(a);
         }
-        Object.assign(a, { name, group, hidden, memo });
+        Object.assign(a, { name, group, hidden, memo, link });
       }
+      reindex();
       payload.assets = assetsArr();
       const btn = $('#eSave', pg); btn.disabled = true; btn.textContent = '저장 중…';
       const ok = await saveSettings(payload, isNew ? '자산을 추가했습니다' : '자산을 고쳤습니다');
@@ -1384,13 +1440,50 @@
       }
     };
     const del = $('#eDel', pg);
-    if (del) del.onclick = async () => {
-      if (used) { toast('내역이 있는 자산은 지울 수 없습니다. 숨기기를 켜십시오.', true); return; }
-      if (!(await askConfirm(`'${a.name}' 자산을 지울까요?`, '', '삭제'))) return;
-      H.assets.splice(H.assets.indexOf(a), 1);
-      if (await saveSettings({ assets: assetsArr() }, '자산을 지웠습니다')) { back(); rerender(); }
-    };
+    if (del) del.onclick = () => deleteAsset(a, () => back());
     if (isNew) setTimeout(() => $('#eName', pg).focus(), 280);
+  }
+
+  /* ───────────── 설정: 예산 ───────────── */
+  function openBudgetSettings() {
+    const pg = pushPage({ title: '예산 설정', body: '', refresh: p => draw(p) });
+    function draw(p = pg) {
+      const list = H.cats['지출'];
+      const tot = list.reduce((a, c) => a + catBudget(c), 0);
+      $('.hh-pbody', p).innerHTML = `
+        <div class="card ha-sum num one"><div><span>한 달 전체 예산</span><b>${won(tot)}</b></div></div>
+        <div class="card hmo">${list.map((c, i) => {
+          const n = c.subs.filter(s => budgetOf(c.name, s) > 0).length, b = catBudget(c);
+          return `<button class="hmo-row" data-bi="${i}"><span>${esc(c.name)}${n ? `<small class="bs-sub">소분류 ${n}개</small>` : ''}</span><small class="num ${b ? 'bs-on' : ''}">${won(b)}</small>${ico.chev}</button>`;
+        }).join('')}</div>
+        <p class="note">분류를 누르면 분류 전체 예산과 소분류 예산을 정합니다. 예산이 0원인 분류는 결산에 나오지 않습니다. 예산은 매달 똑같이 적용됩니다.</p>`;
+      $$('[data-bi]', p).forEach(b => b.onclick = () => openBudgetEdit(list[Number(b.dataset.bi)]));
+    }
+    draw();
+  }
+  function openBudgetEdit(c) {
+    const own = budgetOf(c.name, '');
+    const pg = pushPage({
+      title: `${esc(c.name)} 예산`, cls: 'hf-page',
+      body: `<div class="hf">
+        <div class="hf-row wide"><span class="hf-l">분류 전체</span><div class="hf-v"><input id="bAll" inputmode="numeric" autocomplete="off" placeholder="소분류 합계" value="${own ? fmt(own) : ''}"><span class="hf-unit">원</span></div></div>
+        <p class="hf-info">비워 두면 아래 소분류 예산의 합을 분류 예산으로 씁니다.</p>
+        ${c.subs.length ? `<h3 class="se-gh">소분류</h3>${c.subs.map((s, i) => `<div class="hf-row wide"><span class="hf-l">${esc(s)}</span><div class="hf-v"><input data-bs="${i}" inputmode="numeric" autocomplete="off" placeholder="없음" value="${budgetOf(c.name, s) ? fmt(budgetOf(c.name, s)) : ''}"><span class="hf-unit">원</span></div></div>`).join('')}` : ''}
+        <p class="form-error" id="bErr" role="alert"></p>
+        <div class="hf-btns"><button class="btn hf-save memo" id="bSave">저장하기</button></div></div>`,
+    });
+    $$('input', pg).forEach(i => bindMoneyInput(i));
+    $('#bSave', pg).onclick = async () => {
+      const val = i => { const v = moneyVal(i.value); return Number.isFinite(v) && v > 0 ? v : 0; };
+      const next = new Map(H.budgets);
+      const setB = (k, v) => { if (v > 0) next.set(k, v); else next.delete(k); };
+      setB(BK(c.name, ''), val($('#bAll', pg)));
+      $$('[data-bs]', pg).forEach(i => setB(BK(c.name, c.subs[Number(i.dataset.bs)]), val(i)));
+      const btn = $('#bSave', pg); btn.disabled = true; btn.textContent = '저장 중…';
+      const prev = H.budgets; H.budgets = next;
+      if (await saveSettings({ budgets: budgetsArr() }, '예산을 저장했습니다')) { back(); rerender(); }
+      else { H.budgets = prev; btn.disabled = false; btn.textContent = '저장하기'; }
+    };
   }
 
   /* ───────────── 설정: 매월 반복 ───────────── */
@@ -1427,7 +1520,7 @@
   function leave() { H.active = false; closeAllPages(); $('#hhFab').hidden = true; }
   function bindOnce() {
     $$('#hhTabs .htab').forEach(t => t.onclick = () => goView(t.dataset.hv));
-    $('#hhFab').onclick = () => { if (H.btab === 'memo') openMemo(null); else openForm({ date: H.btab === 'cal' && H.calDay ? H.calDay : (H.ym === ymOf(new Date()) ? today() : `${H.ym}-01`) }); };
+    $('#hhFab').onclick = () => { if (H.btab === 'memo') openMemo(null); else openForm({ date: H.ym === ymOf(new Date()) ? today() : `${H.ym}-01` }); };
     $('#hhSearchBtn').onclick = () => openSearch();
     window.addEventListener('resize', setTopH);
   }

@@ -912,21 +912,6 @@ body.hh-mode .app-switch .ic-inv { display: block; }
 .hr-r b { font-size: 15px; font-weight: 700; white-space: nowrap; }
 .hr-r small { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
 
-/* 달력 */
-.hc { padding: 12px 6px 8px; }
-.hc-wd, .hc-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.hc-wd span { text-align: center; font-size: 12px; font-weight: 700; color: var(--ink-3); padding-bottom: 6px; }
-.hc-wd .w0, .hc-cell.w0 .hc-d { color: var(--exp); }
-.hc-wd .w6, .hc-cell.w6 .hc-d { color: var(--inc); }
-.hc-cell { min-height: 60px; min-width: 0; border: 0; background: none; border-top: 1px solid var(--fill); display: flex; flex-direction: column; align-items: stretch; padding: 4px 2px 3px; gap: 0; color: inherit; text-align: right; border-radius: 0; }
-.hc-d { font-size: 12.5px; font-weight: 700; text-align: left; padding-left: 3px; height: 21px; line-height: 21px; }
-.hc-i, .hc-e { font-size: 10.5px; font-weight: 650; letter-spacing: -0.04em; white-space: nowrap; overflow: hidden; padding-right: 2px; }
-.hc-i { color: var(--inc); }
-.hc-e { color: var(--exp); }
-.hc-cell.today .hc-d { background: var(--hh); color: #fff !important; border-radius: 999px; width: 21px; text-align: center; padding: 0; margin-left: 1px; }
-.hc-cell.sel { background: var(--fill); border-radius: 10px; border-top-color: transparent; }
-.hh-addday { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-top: 1px solid var(--fill); background: none; color: var(--hh); font-weight: 700; font-size: 14.5px; padding: 12px 0 10px; }
-
 /* 월별 */
 .hm { padding: 2px 14px; }
 .hm-row { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, auto); gap: 9px; align-items: center; width: 100%; border: 0; background: none; color: inherit; padding: 12px 0; border-top: 1px solid var(--fill); text-align: right; }
@@ -940,26 +925,9 @@ body.hh-mode .app-switch .ic-inv { display: block; }
 .hm-week span:first-child { text-align: left; color: var(--ink-2); white-space: nowrap; }
 .hm-week .num { font-weight: 650; }
 
-/* 결산 */
+/* 결산 (예산) */
 .hh-h3 { margin: 0 0 10px; font-size: 16px; font-weight: 750; }
 .hh-h3 small { font-size: 12.5px; color: var(--ink-3); font-weight: 600; margin-left: 6px; }
-.hcl-net { font-size: 28px; font-weight: 800; line-height: 1.25; }
-.hcl-sub { margin: 4px 0 12px; font-size: 13.5px; color: var(--ink-2); }
-.hcl-split { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: var(--fill); gap: 2px; }
-.exp-bg { background: var(--exp); }
-.inc-bg { background: var(--inc); }
-.hcl-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); margin-top: 8px; }
-.hcl-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
-.hcl-prev { font-size: 12.5px; color: var(--ink-3); margin-top: 6px; }
-.hcl-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.hcl-two div { background: var(--fill); border-radius: 14px; padding: 12px; display: grid; gap: 2px; }
-.hcl-two span { font-size: 12.5px; color: var(--ink-3); font-weight: 600; }
-.hcl-two b { font-size: 17px; font-weight: 750; }
-.hcl-two small { font-size: 11.5px; color: var(--ink-3); line-height: 1.4; }
-.hcl-diff { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; padding: 9px 0; border-top: 1px solid var(--fill); font-size: 14px; }
-.hcl-diff:nth-of-type(1) { border-top: 0; }
-.hcl-diff span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hcl-diff b { font-size: 13px; min-width: 88px; text-align: right; }
 .hb-row { padding: 7px 0; }
 .hb-top { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
 .hb-top > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1145,3 +1113,55 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .se-name small { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .se-drag { padding: 12px 10px; color: var(--ink-4); touch-action: none; cursor: grab; display: grid; place-items: center; }
 .se-gh { font-size: 13px; color: var(--ink-3); margin: 16px 8px 8px; font-weight: 700; }
+
+/* 결산: 예산 대비 지출 */
+.hbud, .hbud-as { padding: 0 0 4px; overflow: hidden; }
+.hbud-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px 8px; }
+.hbud-head b { font-size: 16px; font-weight: 750; }
+.hbud-head > span { font-size: 12.5px; color: var(--ink-3); font-weight: 600; }
+.hbud-set { display: inline-flex; align-items: center; gap: 4px; border: 0; background: var(--fill); border-radius: 10px; padding: 7px 10px 7px 12px; font-size: 13px; font-weight: 650; color: var(--ink-2); }
+.hbud-set svg { width: 15px; height: 15px; }
+.bud { display: grid; grid-template-columns: minmax(0, 37%) minmax(0, 1fr); gap: 12px; align-items: center; padding: 11px 16px; border-top: 1px solid var(--fill); }
+.bud.top { padding-top: 30px; border-top: 0; }
+.bud.cat[data-bcat] { cursor: pointer; }
+.bud.sub { background: color-mix(in srgb, var(--fill) 60%, transparent); }
+.bud-l { min-width: 0; display: grid; }
+.bud-n { display: flex; align-items: center; gap: 2px; min-width: 0; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.bud-n > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bud.sub .bud-n { color: var(--ink-3); }
+.bud-l b { font-size: 15px; font-weight: 750; white-space: nowrap; }
+.bud-chev { display: inline-grid; flex: none; color: var(--ink-3); transform: rotate(90deg); transition: transform .15s; }
+.bud-chev svg { width: 15px; height: 15px; }
+.bud-chev.open { transform: rotate(-90deg); }
+.bud-r { min-width: 0; display: grid; gap: 5px; }
+.bud-bar { position: relative; height: 20px; border-radius: 6px; background: var(--fill); }
+.bud.sub .bud-bar { background: var(--card); }
+.bud-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: var(--inc); }
+.bud-bar.over i { background: var(--exp); }
+.bud-bar s { position: absolute; top: -3px; bottom: -3px; width: 1.5px; margin-left: -0.75px; background: var(--ink); opacity: .45; text-decoration: none; }
+.bud-bar em { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); font-style: normal; font-size: 12px; font-weight: 750; color: var(--ink); }
+.bud-bar em.in { color: #fff; }
+.bud-today { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); font-size: 11px; font-weight: 700; line-height: 1; background: var(--ink-3); color: var(--card); padding: 4px 7px; border-radius: 8px; white-space: nowrap; }
+.bud-today::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -4px; border: 4px solid transparent; border-top-color: var(--ink-3); }
+.bud-v { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 650; }
+.bud-v span { white-space: nowrap; }
+.bud-v span:last-child { color: var(--ink); }
+.has-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; padding: 10px 16px; border-top: 1px solid var(--fill); font-size: 14px; }
+.has-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.has-row b { font-weight: 700; min-width: 74px; text-align: right; }
+.has-row.head { font-size: 12px; color: var(--ink-3); font-weight: 600; padding-top: 4px; padding-bottom: 6px; border-top: 0; }
+.has-row.head span:not(:first-child) { min-width: 74px; text-align: right; }
+
+/* 자산 탭: 추가·편집, 연결된 카드 */
+.ha-tools { display: flex; gap: 8px; margin: -2px 0 12px; flex-wrap: wrap; }
+.ha-tools .hbud-set { padding: 8px 12px; }
+.ha-row span small { display: block; font-size: 12px; color: var(--ink-3); font-weight: 600; }
+.ha-row .ha-use { color: var(--ink-2); font-weight: 650; font-size: 14px; align-self: center; }
+.ha-sum.one { grid-template-columns: 1fr; }
+.se-row.eye { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.se-eye { color: var(--ink-4); }
+.se-eye.on { color: var(--ink-2); }
+.hf-row.wide { grid-template-columns: minmax(0, 44%) minmax(0, 1fr) auto; }
+.hf-row.wide .hf-l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14.5px; }
+.bs-sub { display: block; font-size: 12px; color: var(--ink-3); font-weight: 600; }
+.hmo-row .bs-on { color: var(--ink); font-weight: 700; }

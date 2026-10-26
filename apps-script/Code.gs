@@ -565,7 +565,8 @@ function ensureHeaders_(name, headers) {
 /* ───────────────────────── 가계부 (편한가계부 대신) ─────────────────────────
  * 가계부        : 내역 한 줄 = 수입·지출·이체·수정(잔액 수정). 금액은 원화. 수정은 +늘림 / −줄임
  * 가계부분류    : 구분(수입/지출) · 분류 · 소분류(' | '로 구분)
- * 가계부자산    : 그룹 · 자산 · 숨김(Y) · 메모   (위에서부터 화면 순서)
+ * 가계부자산    : 그룹 · 자산 · 숨김(Y) · 메모 · 연결(체크카드의 결제 계좌)   (위에서부터 화면 순서)
+ * 가계부예산    : 분류 · 소분류(비우면 분류 전체) · 금액   (매달 같은 예산)
  * 가계부반복    : 매월 같은 날 자동으로 들어가는 내역 (앱을 열 때 밀린 달까지 채움)
  * 가계부메모    : 날짜별 메모
  * 일시·ID 칸은 글자 서식(구글 시트가 날짜로 바꾸지 않게) */
@@ -573,9 +574,10 @@ function ensureHeaders_(name, headers) {
 const HH_TABS = {
   '가계부':     ['ID', '일시', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '화폐', '외화금액', '반복', '입력자'],
   '가계부분류': ['구분', '분류', '소분류'],
-  '가계부자산': ['그룹', '자산', '숨김', '메모'],
+  '가계부자산': ['그룹', '자산', '숨김', '메모', '연결'],
   '가계부반복': ['ID', '주기', '일', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '시작', '종료', '마지막생성'],
   '가계부메모': ['ID', '날짜', '내용', '입력자'],
+  '가계부예산': ['분류', '소분류', '금액'],
 };
 const HH_TEXT = { '가계부': ['ID', '일시'], '가계부반복': ['ID', '시작', '종료', '마지막생성'], '가계부메모': ['ID', '날짜'] };
 const HH_KIND = { tx: '가계부', rule: '가계부반복', memo: '가계부메모' };
@@ -587,6 +589,7 @@ function readHH_() {
   return {
     ready: true, made,
     tx: read('가계부'), cats: read('가계부분류'), assets: read('가계부자산'), rules: read('가계부반복'), memos: read('가계부메모'),
+    budgets: read('가계부예산'),
   };
 }
 
@@ -731,12 +734,13 @@ function hhDel_(req) {
   return { ok: true };
 }
 
-/** req = { renames?: [{what:'asset'|'cat'|'sub', type, cat, from, to}], cats?: [[구분,분류,소분류]], assets?: [[그룹,자산,숨김,메모]] } */
+/** req = { renames?: [{what:'asset'|'cat'|'sub', type, cat, from, to}], cats?: [[구분,분류,소분류]], assets?: [[그룹,자산,숨김,메모,연결]], budgets?: [[분류,소분류,금액]] } */
 function hhSettings_(req) {
   hhEnsure_();
   (req.renames || []).forEach(hhRename_);
   if (req.cats) hhRewrite_('가계부분류', req.cats.map(r => [hhStr_(r[0], 4), hhStr_(r[1], 60), hhStr_(r[2], 2000)]).filter(r => r[1]));
-  if (req.assets) hhRewrite_('가계부자산', req.assets.map(r => [hhStr_(r[0], 30), hhStr_(r[1], 80), r[2] ? 'Y' : '', hhStr_(r[3], 200)]).filter(r => r[1]));
+  if (req.assets) hhRewrite_('가계부자산', req.assets.map(r => [hhStr_(r[0], 30), hhStr_(r[1], 80), r[2] ? 'Y' : '', hhStr_(r[3], 200), hhStr_(r[4], 80)]).filter(r => r[1]));
+  if (req.budgets) hhRewrite_('가계부예산', req.budgets.map(r => [hhStr_(r[0], 60), hhStr_(r[1], 60), Math.round(Number(r[2])) || 0]).filter(r => r[0] && r[2] > 0));
   return { ok: true };
 }
 
