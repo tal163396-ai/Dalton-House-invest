@@ -1653,7 +1653,8 @@
         <button class="btn primary" id="fSubmit">${F.type} 기록하기</button>`;
     } else {
       const trad = D.rows.filter(isTradable).filter(r => F.type === '매수' || r.qty > 0);
-      const kinds = kindsOf(trad);
+      // 매수는 모든 구성(현금 제외)에 새 종목을 넣을 수 있음 — 예: 기타 구성에 새 계좌
+      const kinds = F.type === '매수' ? [...new Set([...kindsOf(trad), ...D.rows.filter(r => r.kind && r.kind !== '현금').map(r => r.kind)])] : kindsOf(trad);
       if (!kinds.includes(F.kind)) F.kind = kinds[0] || '';
       const inKind = trad.filter(r => r.kind === F.kind);
       if (F.key !== '__new' && !inKind.some(r => rowKey(r) === F.key)) F.key = inKind[0] ? rowKey(inKind[0]) : '__new';
@@ -1676,9 +1677,13 @@
             <label class="field"><span>종목 이름</span><input id="fNewName" placeholder="예: NAVER" value="${esc(F.newName || '')}"></label>
             <label class="field"><span>티커</span><input id="fNewTicker" placeholder="예: KRX:035420" value="${esc(F.newTicker || '')}" autocapitalize="characters"></label>
           </div>
-          <label class="field"><span>통화</span>
-            <select id="fNewCur"><option ${curr === 'KRW' ? 'selected' : ''}>KRW</option><option ${curr === 'USD' ? 'selected' : ''}>USD</option></select>
-          </label>` : `
+          <div class="two">
+            <label class="field"><span>통화</span>
+              <select id="fNewCur"><option ${curr === 'KRW' ? 'selected' : ''}>KRW</option><option ${curr === 'USD' ? 'selected' : ''}>USD</option></select>
+            </label>
+            <label class="field"><span>자산(계좌) 이름</span><input id="fNewAsset" placeholder="선택" value="${esc(F.newAsset || '')}"></label>
+          </div>
+          <p class="help">자산 이름을 비우면 ${inKind.length && new Set(inKind.map(r => r.asset)).size === 1 ? `'${esc(inKind[0].asset)}' 안에` : '종목 이름으로 새 자산을 만들어'} 넣습니다. 새 계좌면 이름을 적으십시오. 예: 나예 주식(NH증권)</p>` : `
           <p class="preview num">${row ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''}</p>`}
         <div class="two">
           <label class="field"><span>수량</span><input id="fQty" type="number" inputmode="decimal" step="any" min="0"></label>
@@ -1729,7 +1734,7 @@
     on('#fRow', 'change', e => { F.key = e.target.value; renderRecord(); });
     on('#fManual', 'change', e => { F.key = e.target.value; renderRecord(); });
     on('#fCash', 'change', e => { F.cashAsset = e.target.value; });
-    on('#fNewCur', 'change', e => { F.newCur = e.target.value; F.newName = $('#fNewName').value; F.newTicker = $('#fNewTicker').value; renderRecord(); });
+    on('#fNewCur', 'change', e => { F.newCur = e.target.value; F.newName = $('#fNewName').value; F.newTicker = $('#fNewTicker').value; F.newAsset = $('#fNewAsset').value; renderRecord(); });
     const upd = () => {
       const p = $('#fPreview', el); if (!p) return;
       const q = num($('#fQty').value), pr = num($('#fPrice').value);
@@ -1867,7 +1872,8 @@
         if (!t.sub) { err.textContent = '새 종목 이름을 입력하십시오.'; return; }
         // 그 구성에 자산이 하나뿐이면(예: ISA) 그 자산 안에, 여러 개면(예: 메인투자) 새 자산으로
         const assets = [...new Set(D.rows.filter(r => r.kind === F.kind && isTradable(r)).map(r => r.asset))];
-        t.asset = assets.length === 1 && assets[0] !== D.rows.find(r => r.asset === assets[0]).sub ? assets[0] : t.sub;
+        const named = $('#fNewAsset').value.trim();
+        t.asset = named || (assets.length === 1 && assets[0] !== D.rows.find(r => r.asset === assets[0]).sub ? assets[0] : t.sub);
       } else {
         const row = findRow(F.key);
         if (!row) { err.textContent = '종목을 선택하십시오.'; return; }
@@ -1880,7 +1886,7 @@
     try {
       const r = await api(action, payload);
       const msg = r.realized !== null && r.realized !== undefined ? `${r.message} (${r.realized >= 0 ? '익절' : '손절'} ${signWon(r.realized)})` : r.message;
-      if (F.key === '__new') { F.key = ''; F.newName = ''; F.newTicker = ''; }
+      if (F.key === '__new') { F.key = ''; F.newName = ''; F.newTicker = ''; F.newAsset = ''; }
       await load({ quiet: true });
       toast(msg);
     } catch (e) {

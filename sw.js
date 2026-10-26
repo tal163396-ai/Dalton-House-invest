@@ -1,6 +1,6 @@
 // 앱 화면 파일만 저장 (자산 데이터는 저장하지 않음)
-const CACHE = 'dalton-house-v68';
-const SHELL = ['./', 'index.html', 'app.css?v=51', 'app.js?v=56', 'hh.js?v=4', 'config.js?v=1', 'manifest.webmanifest',
+const CACHE = 'dalton-house-v69';
+const SHELL = ['./', 'index.html', 'app.css?v=51', 'app.js?v=57', 'hh.js?v=4', 'config.js?v=1', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
