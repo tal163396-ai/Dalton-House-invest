@@ -674,7 +674,7 @@
           <div class="holding-top"><span>${esc(r.sub)}</span><span class="num">${won(r.value)}</span></div>
           ${isCash ? (r.cur === 'USD' && r.qty ? `<div class="holding-sub num"><span>${money(r.qty)}</span></div>` : '') : `
           <div class="holding-sub num">
-            <span>${r.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${r.avg ? ` · 평단 ${money(r.avg)}` : ''} · 현재 ${money(r.price)}${r.src ? ` <small class="live">● ${esc(r.src)}</small>` : ''}</span>
+            <span>${r.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${r.avg ? ` · 평단 ${money(r.avg)}` : ''} · 현재 ${money(r.price)}${r.src ? ` <small class="live" title="${esc(r.src)}"><i class="live-src">${esc(r.src.trim().charAt(0) === '네' ? 'N' : r.src.trim().charAt(0) === '업' ? 'U' : r.src.trim().charAt(0))}</i>실시간</small>` : ''}</span>
             <span class="${cls(unitRet)}">${unitRet === null ? '' : pct(unitRet, 1)}</span>
           </div>
           ${r.cost > 0 ? `<div class="holding-pl num"><span>원금 ${compact(r.cost)}원</span><span>평가손익 <b class="${cls(r.value - r.cost)}">${signWon(r.value - r.cost)}</b> <b class="${cls(r.value - r.cost)}">(${pct((r.value - r.cost) / r.cost, 1)})</b></span></div>` : ''}
