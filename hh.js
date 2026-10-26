@@ -1,0 +1,1441 @@
+/* Dalton House 가계부 (편한가계부와 같은 구성: 가계부 · 통계 · 자산 · 더보기)
+ * 데이터는 구글 시트 '가계부' 탭들에 저장되고, 이 파일에는 개인 정보가 들어있지 않습니다. */
+(() => {
+  'use strict';
+  const D = window.DH;
+  const { $, $$, esc, store, sess } = D;
+  const toast = (m, e) => D.toast(m, e);
+
+  const F_TX = ['ID', '일시', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '화폐', '외화금액', '반복', '입력자'];
+  const WD = ['일', '월', '화', '수', '목', '금', '토'];
+  const COLORS = ['#F87171', '#FB923C', '#FBBF24', '#FDE047', '#A3E635', '#4ADE80', '#2DD4BF', '#38BDF8', '#60A5FA', '#A78BFA', '#E879F9', '#F472B6'];
+  const CACHE = 'dh_hh_cache';
+
+  /* ───────────── 작은 도우미 ───────────── */
+  const pad = n => String(n).padStart(2, '0');
+  const fmt = n => Math.round(n).toLocaleString('ko-KR');
+  const won = n => `${fmt(n)}원`;
+  const swon = n => `${n > 0 ? '+' : n < 0 ? '−' : ''}${fmt(Math.abs(n))}원`;
+  const ymOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  const dOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const today = () => dOf(new Date());
+  const parseD = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d || 1); };
+  const addMonths = (ym, k) => { const d = parseD(ym + '-01'); d.setMonth(d.getMonth() + k); return ymOf(d); };
+  const addDays = (ds, k) => { const d = parseD(ds); d.setDate(d.getDate() + k); return dOf(d); };
+  const daysIn = ym => new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0).getDate();
+  const ymLabel = ym => `${+ym.slice(0, 4)}년 ${+ym.slice(5, 7)}월`;
+  const mdLabel = ds => `${+ds.slice(5, 7)}.${+ds.slice(8, 10)}`;
+  const wdOf = ds => parseD(ds).getDay();
+  function tmLabel(tm) {
+    if (!tm || tm === '00:00:00') return '';
+    const h = +tm.slice(0, 2), m = tm.slice(3, 5);
+    return `${h < 12 ? '오전' : '오후'} ${h % 12 === 0 ? 12 : h % 12}:${m}`;
+  }
+  const dateLabel = ds => `${ds.slice(2, 4)}. ${+ds.slice(5, 7)}. ${+ds.slice(8, 10)}. (${WD[wdOf(ds)]})`;
+  function compactWon(v) {
+    const a = Math.abs(v), s = v < 0 ? '−' : '';
+    if (a >= 1e8) return `${s}${(a / 1e8).toFixed(2)}억`;
+    if (a >= 1e4) return `${s}${fmt(a / 1e4)}만`;
+    return `${s}${fmt(a)}`;
+  }
+  const cellAmt = v => (v >= 1e6 ? `${fmt(v / 1e4)}만` : fmt(v));
+  const chars = s => Array.from(String(s || ''));
+  const clip = (s, n) => { const c = chars(s); return c.length > n ? c.slice(0, n).join('') + '…' : c.join(''); };
+  const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const isFixed = t => /고정/.test(t.cat + ' ' + t.sub);
+  const ico = {
+    back: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>',
+    left: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
+    right: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+    pen: '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
+    close: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    del: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="var(--exp)"/><path d="M7.5 12h9" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>',
+    drag: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 8h14M5 12h14M5 16h14"/></svg>',
+    rep: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11V9a3 3 0 0 1 3-3h12l-3-3M20 13v2a3 3 0 0 1-3 3H5l3 3"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
+    chev: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+  };
+
+  /* ───────────── 상태 ───────────── */
+  const pick = (v, list, d) => (list.includes(v) ? v : d);
+  const H = {
+    ready: true, loaded: false, loading: false,
+    tx: [], byId: new Map(), byYm: new Map(), bal: new Map(),
+    cats: { 수입: [], 지출: [] }, assets: [], rules: [], memos: [],
+    pending: new Map(),
+    view: pick(sess.get('dh_hview'), ['book', 'stats', 'assets', 'more'], 'book'),
+    btab: pick(sess.get('dh_hbtab'), ['daily', 'cal', 'month', 'close', 'memo'], 'daily'),
+    ym: /^\d{4}-\d{2}$/.test(sess.get('dh_hym') || '') ? sess.get('dh_hym') : ymOf(new Date()),
+    calDay: null,
+    openMonths: new Set(), openInit: new Set(),
+    st: {
+      period: pick(store.get('dh_hst_p'), ['week', 'month', 'year', 'range'], 'month'),
+      type: pick(store.get('dh_hst_t'), ['수입', '지출'], '지출'),
+      anchor: today(), from: `${today().slice(0, 4)}-01-01`, to: today(),
+    },
+    active: false,
+  };
+
+  /* ───────────── 데이터 ───────────── */
+  function toTx(a) {
+    const ts = String(a[1] || '');
+    const famt = a[11] === '' || a[11] === null || a[11] === undefined ? '' : Number(a[11]);
+    return {
+      id: String(a[0]), ts, d: ts.slice(0, 10), tm: ts.slice(11, 19), ym: ts.slice(0, 7), type: String(a[2] || ''),
+      cat: String(a[3] || ''), sub: String(a[4] || ''), text: String(a[5] || ''), amt: Number(a[6]) || 0,
+      asset: String(a[7] || ''), to: String(a[8] || ''), memo: String(a[9] || ''), cur: String(a[10] || ''), famt,
+      rule: String(a[12] || ''), by: String(a[13] || ''),
+    };
+  }
+  const txArr = t => [t.id, t.ts, t.type, t.cat, t.sub, t.text, t.amt, t.asset, t.to, t.memo, t.cur, t.famt, t.rule, t.by];
+  const txObj = t => Object.fromEntries(F_TX.map((h, i) => [h, txArr(t)[i]]));
+  const ruleArr = r => [r.id, '매월', r.day, r.type, r.cat, r.sub, r.text, r.amt, r.asset, r.to, r.memo, r.start, r.end, r.last];
+  const ruleObj = r => ({ ID: r.id, 주기: '매월', 일: r.day, 구분: r.type, 분류: r.cat, 소분류: r.sub, 내용: r.text, 금액: r.amt, 자산: r.asset, 받는자산: r.to, 메모: r.memo, 시작: r.start, 종료: r.end, 마지막생성: r.last });
+  const toRule = a => ({ id: String(a[0]), day: Number(a[2]) || 1, type: String(a[3] || ''), cat: String(a[4] || ''), sub: String(a[5] || ''), text: String(a[6] || ''), amt: Number(a[7]) || 0, asset: String(a[8] || ''), to: String(a[9] || ''), memo: String(a[10] || ''), start: String(a[11] || ''), end: String(a[12] || ''), last: String(a[13] || '') });
+  const toMemo = a => ({ id: String(a[0]), date: String(a[1] || ''), text: String(a[2] || ''), by: String(a[3] || '') });
+  const catsArr = () => ['수입', '지출'].flatMap(t => H.cats[t].map(c => [t, c.name, c.subs.join(' | ')]));
+  const assetsArr = () => H.assets.map(a => [a.group, a.name, a.hidden ? 'Y' : '', a.memo]);
+
+  function ingest(hh) {
+    H.tx = (hh.tx || []).map(toTx).filter(t => /^\d{4}-\d{2}-\d{2}/.test(t.ts));
+    H.cats = { 수입: [], 지출: [] };
+    (hh.cats || []).forEach(r => {
+      const t = String(r[0] || '').trim();
+      if (H.cats[t] && String(r[1] || '').trim()) H.cats[t].push({ name: String(r[1]).trim(), subs: String(r[2] || '').split('|').map(s => s.trim()).filter(Boolean) });
+    });
+    H.assets = (hh.assets || []).map(r => ({ group: String(r[0] || '기타').trim() || '기타', name: String(r[1] || '').trim(), hidden: String(r[2] || '').trim().toUpperCase() === 'Y', memo: String(r[3] || '') })).filter(a => a.name);
+    H.rules = (hh.rules || []).map(toRule).filter(r => r.id);
+    H.memos = (hh.memos || []).map(toMemo).filter(m => m.id);
+    H.pending.forEach((t, id) => { if (!H.tx.some(x => x.id === id)) H.tx.push(t); });
+    reindex();
+  }
+
+  function reindex() {
+    H.tx.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : a.id < b.id ? 1 : -1));
+    H.byId = new Map(H.tx.map(t => [t.id, t]));
+    H.byYm = new Map();
+    H.tx.forEach(t => { let l = H.byYm.get(t.ym); if (!l) H.byYm.set(t.ym, (l = [])); l.push(t); });
+    H.bal = new Map();
+    H.tx.forEach(t => applyBal(H.bal, t));
+  }
+  function applyBal(m, t) {
+    const add = (a, v) => m.set(a, (m.get(a) || 0) + v);
+    if (t.type === '수입') add(t.asset, t.amt);
+    else if (t.type === '지출') add(t.asset, -t.amt);
+    else if (t.type === '이체') { add(t.asset, -t.amt); add(t.to, t.amt); }
+    else add(t.asset, t.amt);
+  }
+  // 이 자산 기준으로 들어오면 +, 나가면 −
+  function flowFor(t, a) {
+    if (t.type === '수입') return t.asset === a ? t.amt : 0;
+    if (t.type === '지출') return t.asset === a ? -t.amt : 0;
+    if (t.type === '이체') return (t.to === a ? t.amt : 0) - (t.asset === a ? t.amt : 0);
+    return t.asset === a ? t.amt : 0;
+  }
+  const nwDelta = t => (t.type === '수입' ? t.amt : t.type === '지출' ? -t.amt : t.type === '수정' ? t.amt : 0);
+  const monthTx = ym => H.byYm.get(ym) || [];
+  function sums(list) {
+    let inc = 0, exp = 0;
+    list.forEach(t => { if (t.type === '수입') inc += t.amt; else if (t.type === '지출') exp += t.amt; });
+    return { inc, exp, net: inc - exp };
+  }
+  const inRange = (from, to) => H.tx.filter(t => t.d >= from && t.d <= to);
+  const assetNames = () => H.assets.map(a => a.name);
+
+  let cacheT = 0;
+  function saveCache() {
+    clearTimeout(cacheT);
+    cacheT = setTimeout(() => {
+      try {
+        store.set(CACHE, JSON.stringify({ tx: H.tx.filter(t => !H.pending.has(t.id)).map(txArr), cats: catsArr(), assets: assetsArr(), rules: H.rules.map(ruleArr), memos: H.memos.map(m => [m.id, m.date, m.text, m.by]) }));
+      } catch { /* 저장 공간 부족 등은 무시 */ }
+    }, 400);
+  }
+  function loadCache() {
+    try { const c = JSON.parse(store.get(CACHE) || 'null'); if (c && c.tx) { ingest(c); H.loaded = true; return true; } } catch { /* 손상된 캐시 무시 */ }
+    return false;
+  }
+
+  async function load({ quiet = true } = {}) {
+    if (H.loading) return;
+    H.loading = true; D.spin(true);
+    try {
+      const j = await D.api('hh');
+      if (!j.hh || !j.hh.ready) { H.ready = false; H.loaded = true; render(); return; }
+      H.ready = true;
+      ingest(j.hh); H.loaded = true; saveCache();
+      const y = window.scrollY; render(); window.scrollTo({ top: y });
+      refreshPages();
+      if (j.hh.made) toast(`매월 반복 내역 ${j.hh.made}건을 자동으로 넣었습니다`);
+      else if (!quiet) toast('가계부를 새로 불러왔습니다');
+    } catch (e) {
+      if (e.code === 'auth') { D.logout('비밀번호를 다시 입력하십시오.'); return; }
+      toast(`가계부 불러오기 실패: ${e.message}`, true);
+      if (!H.loaded) render();
+    } finally { H.loading = false; D.spin(false); }
+  }
+
+  /* ───────────── 화면 틀 ───────────── */
+  function setTopH() { const tb = $('.topbar'); if (tb) document.documentElement.style.setProperty('--topbar-h', `${tb.offsetHeight}px`); }
+
+  function render() {
+    if (!H.active) return;
+    $$('.hh-view').forEach(v => { v.hidden = v.id !== `hh-${H.view}`; });
+    $$('#hhTabs .htab').forEach(t => t.classList.toggle('active', t.dataset.hv === H.view));
+    $('#hhFab').hidden = H.view !== 'book';
+    renderHead();
+    if (!H.loaded) { $(`#hh-${H.view}`).innerHTML = '<div class="skeleton"></div><div class="skeleton" style="height:320px"></div>'; return; }
+    if (!H.ready) {
+      $(`#hh-${H.view}`).innerHTML = `<div class="card"><p class="empty">구글 시트에 <b>가계부</b> 탭이 아직 없습니다.<br>보내드린 가져오기 파일을 시트에 넣은 뒤<br>새로고침하십시오.</p></div>`;
+      $('#hhFab').hidden = true;
+      return;
+    }
+    ({ book: renderBook, stats: renderStats, assets: renderAssets, more: renderMore })[H.view]();
+    setTopH();
+  }
+
+  function renderHead() {
+    const head = $('#hhHead');
+    let title = '', nav = false, month = null;
+    if (H.view === 'book') {
+      nav = true;
+      if (H.btab === 'month') title = `${H.ym.slice(0, 4)}년`; else { title = ymLabel(H.ym); month = H.ym; }
+    } else if (H.view === 'stats') {
+      const p = H.st.period, a = H.st.anchor;
+      if (p === 'month') { title = ymLabel(a.slice(0, 7)); nav = true; month = a.slice(0, 7); }
+      else if (p === 'year') { title = `${a.slice(0, 4)}년`; nav = true; }
+      else if (p === 'week') { const [f, t] = statRange(); title = `${mdLabel(f)} ~ ${mdLabel(t)}`; nav = true; }
+      else title = '기간 통계';
+    } else title = H.view === 'assets' ? '자산' : '더보기';
+    head.innerHTML = nav
+      ? `<button class="hh-arrow" data-mv="-1" aria-label="이전">${ico.left}</button>
+         <label class="hh-title">${title}${month ? `<input type="month" id="hhMonthPick" value="${month}" aria-label="달 고르기">` : ''}</label>
+         <button class="hh-arrow" data-mv="1" aria-label="다음">${ico.right}</button>`
+      : `<span class="hh-title static">${title}</span>`;
+    $$('.hh-arrow', head).forEach(b => b.onclick = () => moveHead(Number(b.dataset.mv)));
+    pickerOnTap(head);
+    const mp = $('#hhMonthPick');
+    if (mp) mp.onchange = () => { if (!/^\d{4}-\d{2}$/.test(mp.value)) return; if (H.view === 'book') setYm(mp.value); else { H.st.anchor = `${mp.value}-01`; render(); } };
+  }
+  function moveHead(k) {
+    if (H.view === 'book') { setYm(addMonths(H.ym, H.btab === 'month' ? 12 * k : k)); return; }
+    const p = H.st.period, a = H.st.anchor;
+    if (p === 'month') H.st.anchor = `${addMonths(a.slice(0, 7), k)}-01`;
+    else if (p === 'year') H.st.anchor = `${+a.slice(0, 4) + k}-01-01`;
+    else if (p === 'week') H.st.anchor = addDays(a, 7 * k);
+    window.scrollTo({ top: 0 }); render();
+  }
+  function setYm(ym) { H.ym = ym; sess.set('dh_hym', ym); H.calDay = null; window.scrollTo({ top: 0 }); render(); }
+  function goView(v) {
+    H.view = v; sess.set('dh_hview', v);
+    window.scrollTo({ top: 0 }); render();
+    requestAnimationFrame(() => { const y = Number(sess.get(`dh_scroll_hh_${v}`)) || 0; if (y) window.scrollTo({ top: y }); });
+  }
+
+  /* ───────────── 가계부 탭 ───────────── */
+  function sumBar({ inc, exp, net }) {
+    return `<div class="hh-sum num">
+      <div><span>수입</span><b class="inc">${fmt(inc)}</b></div>
+      <div><span>지출</span><b class="exp">${fmt(exp)}</b></div>
+      <div><span>합계</span><b>${net < 0 ? '−' : ''}${fmt(Math.abs(net))}</b></div>
+    </div>`;
+  }
+  function renderBook() {
+    const tabs = [['daily', '일일'], ['cal', '달력'], ['month', '월별'], ['close', '결산'], ['memo', '메모']];
+    const list = monthTx(H.ym);
+    let body = '', sum = '';
+    if (H.btab === 'month') {
+      const y = H.ym.slice(0, 4);
+      sum = sumBar(sums(H.tx.filter(t => t.d.startsWith(y))));
+      body = monthsHtml(y);
+    } else if (H.btab === 'memo') body = memoHtml(H.ym);
+    else {
+      sum = sumBar(sums(list));
+      body = H.btab === 'daily' ? dailyHtml(list) : H.btab === 'cal' ? calHtml(H.ym, list) : closeHtml(H.ym);
+    }
+    $('#hh-book').innerHTML = `
+      <div class="hh-sticky">
+        <div class="hh-tabs five" role="tablist">${tabs.map(([k, n]) => `<button role="tab" data-bt="${k}" class="${H.btab === k ? 'on' : ''}" aria-selected="${H.btab === k}">${n}</button>`).join('')}</div>
+        ${sum}
+      </div>
+      <div class="hh-body">${body}</div>`;
+    $$('#hh-book [data-bt]').forEach(b => b.onclick = () => { H.btab = b.dataset.bt; sess.set('dh_hbtab', H.btab); window.scrollTo({ top: 0 }); render(); });
+    bindRows($('#hh-book'));
+    if (H.btab === 'cal') {
+      $$('#hh-book .hc-cell[data-d]').forEach(c => c.onclick = () => {
+        if (c.dataset.d.slice(0, 7) !== H.ym) { H.ym = c.dataset.d.slice(0, 7); sess.set('dh_hym', H.ym); }
+        H.calDay = c.dataset.d;
+        render();
+        const sel = $('#hhCalDay'); if (sel) sel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+      const add = $('#hhCalAdd'); if (add) add.onclick = () => openForm({ date: H.calDay });
+    }
+    if (H.btab === 'month') {
+      $$('#hh-book .hm-row').forEach(r => r.onclick = () => { const k = r.dataset.ym; H.openMonths.has(k) ? H.openMonths.delete(k) : H.openMonths.add(k); render(); });
+      $$('#hh-book [data-goym]').forEach(b => b.onclick = e => { e.stopPropagation(); H.btab = 'daily'; sess.set('dh_hbtab', 'daily'); setYm(b.dataset.goym); });
+    }
+    if (H.btab === 'memo') $$('#hh-book .hm-memo').forEach(m => m.onclick = () => openMemo(H.memos.find(x => x.id === m.dataset.id)));
+  }
+
+  function emptyHtml(a, b = '') { return `<div class="card"><p class="empty">${a}${b ? `<br><span class="sub">${b}</span>` : ''}</p></div>`; }
+
+  function rowHtml(t, { balAfter = null, forAsset = null, showDate = false } = {}) {
+    let left, cls = '', amtTxt;
+    if (t.type === '이체') { left = '<span class="hr-cat">이체</span>'; cls = 'tr'; }
+    else if (t.type === '수정') { left = '<span class="hr-cat">잔액수정</span>'; cls = 'adj'; }
+    else { left = `<span class="hr-cat">${esc(t.cat || '미분류')}</span>${t.sub ? `<small>${esc(t.sub)}</small>` : ''}`; cls = t.type === '수입' ? 'inc' : 'exp'; }
+    if (forAsset) {
+      const f = flowFor(t, forAsset);
+      amtTxt = swon(f); cls = f > 0 ? 'inc' : f < 0 ? 'exp' : '';
+    } else if (t.cur && t.famt !== '') amtTxt = `${t.cur === 'USD' ? 'US$' : t.cur} ${Number(t.famt).toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    else if (t.type === '수정') amtTxt = swon(t.amt);
+    else amtTxt = won(t.amt);
+    const where = t.type === '이체' ? `${esc(t.asset)} → ${esc(t.to)}` : esc(t.asset);
+    const meta = [showDate ? `${mdLabel(t.d)}(${WD[wdOf(t.d)]})` : '', tmLabel(t.tm), where].filter(Boolean).join('&nbsp;&nbsp;') + (t.rule ? ' <i class="hr-rep">(매월)</i>' : '');
+    const title = t.text || (t.type === '이체' ? '이체' : t.sub || t.cat || '');
+    return `<button class="hr ${H.pending.has(t.id) ? 'pending' : ''}" data-tx="${esc(t.id)}">
+      <span class="hr-l">${left}</span>
+      <span class="hr-m"><span class="hr-t">${esc(title)}</span><span class="hr-s">${meta}</span></span>
+      <span class="hr-r"><b class="num ${cls}">${amtTxt}</b>${balAfter !== null ? `<small class="num">${won(balAfter)}</small>` : ''}</span>
+    </button>`;
+  }
+  function dayHead(ds, list) {
+    const s = list ? sums(list) : null, w = wdOf(ds);
+    return `<div class="hd-head">
+      <b class="hd-d">${+ds.slice(8, 10)}</b><span class="hd-w w${w}">${WD[w]}요일</span><span class="hd-ym">${ds.slice(0, 4)}.${ds.slice(5, 7)}</span>
+      <span class="hd-sp"></span>${s ? `<span class="num inc">${won(s.inc)}</span><span class="num exp">${won(s.exp)}</span>` : ''}
+    </div>`;
+  }
+  function groupByDay(list) {
+    const m = new Map();
+    list.forEach(t => { let l = m.get(t.d); if (!l) m.set(t.d, (l = [])); l.push(t); });
+    return m;
+  }
+  function dailyHtml(list) {
+    if (!list.length) return emptyHtml('이 달에는 내역이 없습니다.', '오른쪽 아래 + 버튼으로 입력하십시오.');
+    return [...groupByDay(list)].map(([ds, l]) => `<section class="card hd">${dayHead(ds, l)}${l.map(t => rowHtml(t)).join('')}</section>`).join('');
+  }
+  function bindRows(root) {
+    $$('.hr[data-tx]', root).forEach(r => r.onclick = () => { const t = H.byId.get(r.dataset.tx); if (t) openForm({ tx: t }); });
+  }
+
+  function calHtml(ym, list) {
+    const per = new Map();
+    list.forEach(t => {
+      if (t.type !== '수입' && t.type !== '지출') return;
+      const p = per.get(t.d) || { inc: 0, exp: 0 };
+      if (t.type === '수입') p.inc += t.amt; else p.exp += t.amt;
+      per.set(t.d, p);
+    });
+    const first = parseD(ym + '-01'), lead = first.getDay(), n = daysIn(ym), td = today();
+    if (!H.calDay) H.calDay = td.startsWith(ym) ? td : null;
+    const cells = [];
+    for (let i = 0; i < lead; i++) cells.push(`<span class="hc-cell out"></span>`);
+    for (let d = 1; d <= n; d++) {
+      const ds = `${ym}-${pad(d)}`, p = per.get(ds), w = (lead + d - 1) % 7;
+      cells.push(`<button class="hc-cell w${w} ${ds === td ? 'today' : ''} ${ds === H.calDay ? 'sel' : ''}" data-d="${ds}" aria-label="${+ym.slice(5)}월 ${d}일">
+        <span class="hc-d">${d}</span>${p && p.inc ? `<span class="hc-i num">${cellAmt(p.inc)}</span>` : ''}${p && p.exp ? `<span class="hc-e num">${cellAmt(p.exp)}</span>` : ''}</button>`);
+    }
+    while (cells.length % 7) cells.push(`<span class="hc-cell out"></span>`);
+    let day = '';
+    if (H.calDay && H.calDay.startsWith(ym)) {
+      const l = list.filter(t => t.d === H.calDay);
+      day = `<section class="card hd" id="hhCalDay">${dayHead(H.calDay, l)}${l.map(t => rowHtml(t)).join('') || '<p class="empty">이 날은 내역이 없습니다.</p>'}
+        <button class="hh-addday" id="hhCalAdd">${ico.plus}<span>${+H.calDay.slice(5, 7)}월 ${+H.calDay.slice(8)}일 내역 입력</span></button></section>`;
+    }
+    return `<div class="card hc">
+      <div class="hc-wd">${WD.map((w, i) => `<span class="w${i}">${w}</span>`).join('')}</div>
+      <div class="hc-grid">${cells.join('')}</div>
+    </div>${day}`;
+  }
+
+  function weeksOf(ym) {
+    const n = daysIn(ym), out = [];
+    let s = 1;
+    while (s <= n) {
+      const dow = parseD(`${ym}-${pad(s)}`).getDay();
+      const e = Math.min(n, s + (6 - dow));
+      out.push([`${ym}-${pad(s)}`, `${ym}-${pad(e)}`]);
+      s = e + 1;
+    }
+    return out;
+  }
+  function monthsHtml(y) {
+    const cur = ymOf(new Date());
+    const months = [];
+    for (let m = 12; m >= 1; m--) {
+      const ym = `${y}-${pad(m)}`;
+      if (ym > cur && !monthTx(ym).length) continue;
+      months.push(ym);
+    }
+    if (!months.length) return emptyHtml('이 해에는 내역이 없습니다.');
+    if (!H.openInit.has(y)) { H.openInit.add(y); H.openMonths.add(months[0]); }
+    return `<div class="card hm">${months.map(ym => {
+      const s = sums(monthTx(ym)), open = H.openMonths.has(ym);
+      const wk = open ? `<div class="hm-weeks">${weeksOf(ym).map(([a, b]) => {
+        const ws = sums(monthTx(ym).filter(t => t.d >= a && t.d <= b));
+        return `<div class="hm-week"><span>${mdLabel(a)} ~ ${mdLabel(b)}</span><span class="num inc">${fmt(ws.inc)}</span><span class="num exp">${fmt(ws.exp)}</span><span class="num">${ws.net < 0 ? '−' : ''}${fmt(Math.abs(ws.net))}</span></div>`;
+      }).join('')}<button class="link-btn" data-goym="${ym}">${+ym.slice(5)}월 내역 보기 ›</button></div>` : '';
+      return `<div class="hm-item ${open ? 'open' : ''}"><button class="hm-row" data-ym="${ym}" aria-expanded="${open}">
+        <span class="hm-m"><b>${+ym.slice(5)}월</b><small>${mdLabel(ym + '-01')} ~ ${mdLabel(`${ym}-${daysIn(ym)}`)}</small></span>
+        <span class="num inc">${fmt(s.inc)}</span><span class="num exp">${fmt(s.exp)}</span><span class="num">${s.net < 0 ? '−' : ''}${fmt(Math.abs(s.net))}</span>
+      </button>${wk}</div>`;
+    }).join('')}</div>`;
+  }
+
+  function barRows(rows, total, color) {
+    const mx = Math.max(...rows.map(r => Math.abs(r.v)), 1);
+    return rows.map(r => `<div class="hb-row"><div class="hb-top"><span>${esc(r.k)}${r.n ? ` <small>${r.n}건</small>` : ''}</span><b class="num">${won(r.v)}${total ? ` <small>${Math.round(r.v / total * 100)}%</small>` : ''}</b></div>
+      <div class="hb-meter"><i style="width:${Math.max(1.5, Math.abs(r.v) / mx * 100)}%;background:${r.c || color}"></i></div></div>`).join('');
+  }
+  function closeHtml(ym) {
+    const list = monthTx(ym), s = sums(list);
+    if (!list.length) return emptyHtml('이 달에는 내역이 없습니다.');
+    const prev = sums(monthTx(addMonths(ym, -1)));
+    const exp = list.filter(t => t.type === '지출');
+    const byAsset = new Map(); exp.forEach(t => { const r = byAsset.get(t.asset) || { k: t.asset, v: 0, n: 0 }; r.v += t.amt; r.n++; byAsset.set(t.asset, r); });
+    const fixed = exp.filter(isFixed).reduce((a, t) => a + t.amt, 0), vari = s.exp - fixed;
+    const catNow = new Map(), catPrev = new Map();
+    exp.forEach(t => catNow.set(t.cat, (catNow.get(t.cat) || 0) + t.amt));
+    monthTx(addMonths(ym, -1)).filter(t => t.type === '지출').forEach(t => catPrev.set(t.cat, (catPrev.get(t.cat) || 0) + t.amt));
+    const diffs = [...new Set([...catNow.keys(), ...catPrev.keys()])].map(k => ({ k, now: catNow.get(k) || 0, d: (catNow.get(k) || 0) - (catPrev.get(k) || 0) }))
+      .filter(x => x.d !== 0).sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 6);
+    const rate = s.inc > 0 ? s.net / s.inc : null;
+    return `
+      <section class="card hcl">
+        <h3 class="hh-h3">${+ym.slice(5)}월 결산</h3>
+        <div class="hcl-net num ${s.net >= 0 ? 'inc' : 'exp'}">${swon(s.net)}</div>
+        <p class="hcl-sub">${s.net >= 0 ? '수입에서 지출을 빼고 남은 돈입니다.' : '지출이 수입보다 많았습니다.'}${rate !== null ? ` 저축률 ${Math.round(rate * 100)}%` : ''}</p>
+        <div class="hcl-split"><i class="exp-bg" style="flex:${Math.max(s.exp, 0)}"></i><i class="inc-bg" style="flex:${Math.max(s.net, 0)}"></i></div>
+        <div class="hcl-legend num"><span><i class="exp-bg"></i>지출 ${won(s.exp)}</span><span><i class="inc-bg"></i>남은 돈 ${won(Math.max(s.net, 0))}</span></div>
+        <div class="hcl-prev num">지난달: 수입 ${won(prev.inc)} · 지출 ${won(prev.exp)}</div>
+      </section>
+      <section class="card">
+        <h3 class="hh-h3">고정 지출 · 변동 지출</h3>
+        <div class="hcl-two num">
+          <div><span>고정 지출</span><b>${won(fixed)}</b><small>분류·소분류에 '고정'이 들어간 내역</small></div>
+          <div><span>변동 지출</span><b>${won(vari)}</b><small>그 밖의 지출</small></div>
+        </div>
+      </section>
+      <section class="card">
+        <h3 class="hh-h3">자산별 지출</h3>
+        ${barRows([...byAsset.values()].sort((a, b) => b.v - a.v), s.exp, 'var(--exp)')}
+      </section>
+      ${diffs.length ? `<section class="card">
+        <h3 class="hh-h3">지난달보다 많이·적게 쓴 분류</h3>
+        ${diffs.map(x => `<div class="hcl-diff"><span>${esc(x.k)}</span><span class="num">${won(x.now)}</span><b class="num ${x.d > 0 ? 'exp' : 'inc'}">${x.d > 0 ? '▲' : '▼'} ${fmt(Math.abs(x.d))}</b></div>`).join('')}
+      </section>` : ''}`;
+  }
+
+  function memoHtml(ym) {
+    const list = H.memos.filter(m => m.date.startsWith(ym)).sort((a, b) => (a.date < b.date ? 1 : -1));
+    if (!list.length) return emptyHtml('이 달에는 메모가 없습니다.', '+ 버튼으로 메모를 남기십시오.');
+    return list.map(m => {
+      const [first, ...rest] = m.text.split('\n');
+      return `<button class="card hm-memo" data-id="${esc(m.id)}"><span class="hm-date">${mdLabel(m.date)} (${WD[wdOf(m.date)]})${m.by ? ` · ${esc(m.by)}` : ''}</span>
+        <b>${esc(first)}</b>${rest.length ? `<span class="hm-text">${esc(rest.join('\n'))}</span>` : ''}</button>`;
+    }).join('');
+  }
+
+  /* ───────────── 통계 탭 ───────────── */
+  function statRange() {
+    const { period: p, anchor: a } = H.st;
+    if (p === 'week') { const s = addDays(a, -wdOf(a)); return [s, addDays(s, 6)]; }
+    if (p === 'month') { const ym = a.slice(0, 7); return [`${ym}-01`, `${ym}-${pad(daysIn(ym))}`]; }
+    if (p === 'year') return [`${a.slice(0, 4)}-01-01`, `${a.slice(0, 4)}-12-31`];
+    return H.st.from <= H.st.to ? [H.st.from, H.st.to] : [H.st.to, H.st.from];
+  }
+  function catTotals(list, type) {
+    const m = new Map();
+    list.filter(t => t.type === type).forEach(t => { const k = t.cat || '미분류'; m.set(k, (m.get(k) || 0) + t.amt); });
+    const order = H.cats[type].map(c => c.name);
+    return [...m].map(([k, v]) => ({ k, v })).sort((a, b) => b.v - a.v || order.indexOf(a.k) - order.indexOf(b.k));
+  }
+  function renderStats() {
+    const [from, to] = statRange();
+    const list = inRange(from, to), s = sums(list), type = H.st.type;
+    const items = catTotals(list, type).map((x, i) => ({ ...x, c: COLORS[i % COLORS.length] }));
+    const total = type === '수입' ? s.inc : s.exp;
+    const P = [['week', '주간'], ['month', '월간'], ['year', '연간'], ['range', '기간']];
+    $('#hh-stats').innerHTML = `
+      <div class="hh-sticky">
+        <div class="seg hh-pseg" role="group" aria-label="기간 단위">${P.map(([k, n]) => `<button data-p="${k}" class="${H.st.period === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+        ${H.st.period === 'range' ? `<div class="hh-range"><input type="date" id="stFrom" value="${H.st.from}"><span>~</span><input type="date" id="stTo" value="${H.st.to}"></div>` : ''}
+        <div class="hh-tabs two" role="tablist">
+          <button data-st="수입" class="${type === '수입' ? 'on' : ''}">수입 <b class="num">${won(s.inc)}</b></button>
+          <button data-st="지출" class="${type === '지출' ? 'on' : ''}">지출 <b class="num">${won(s.exp)}</b></button>
+        </div>
+      </div>
+      ${items.length ? `<div class="card hs-pie">${pieSvg(items, total)}</div>
+      <div class="card hs-list">${items.map(x => `<button class="hs-row" data-cat="${esc(x.k)}">
+        <span class="hs-badge num" style="background:${x.c}">${Math.round(x.v / total * 100)}%</span>
+        <span class="hs-name">${esc(x.k)}</span><b class="num">${won(x.v)}</b>${ico.chev}</button>`).join('')}</div>`
+      : emptyHtml(`이 기간에는 ${type} 내역이 없습니다.`)}`;
+    $$('#hh-stats [data-p]').forEach(b => b.onclick = () => { H.st.period = b.dataset.p; store.set('dh_hst_p', H.st.period); render(); });
+    $$('#hh-stats [data-st]').forEach(b => b.onclick = () => { H.st.type = b.dataset.st; store.set('dh_hst_t', H.st.type); render(); });
+    pickerOnTap($('#hh-stats'));
+    const f = $('#stFrom'), t = $('#stTo');
+    if (f) f.onchange = () => { if (f.value) { H.st.from = f.value; render(); } };
+    if (t) t.onchange = () => { if (t.value) { H.st.to = t.value; render(); } };
+    $$('#hh-stats .hs-row').forEach(b => b.onclick = () => openCatDetail(H.st.type, b.dataset.cat, from, to));
+  }
+
+  function pieSvg(items, total) {
+    const W = 380, Hh = 236, cx = W / 2, cy = Hh / 2, r = 68;
+    let a0 = -Math.PI / 2;
+    const paths = [], labels = [];
+    items.forEach(it => {
+      const fr = it.v / total, a1 = a0 + fr * Math.PI * 2;
+      if (fr > 0.9999) paths.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${it.c}"/>`);
+      else if (fr > 0) {
+        const p = a => `${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`;
+        paths.push(`<path d="M${cx},${cy}L${p(a0)}A${r},${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${p(a1)}Z" fill="${it.c}"/>`);
+      }
+      if (fr >= 0.03 && labels.length < 10) labels.push({ am: (a0 + a1) / 2, fr, it });
+      a0 = a1;
+    });
+    const L = labels.map(l => ({ ...l, right: Math.cos(l.am) >= 0, y: cy + (r + 22) * Math.sin(l.am) }));
+    [true, false].forEach(side => {
+      const arr = L.filter(l => l.right === side).sort((a, b) => a.y - b.y), gap = 31, top = 14, bot = Hh - 22;
+      arr.forEach((l, i) => { l.y = Math.max(l.y, i ? arr[i - 1].y + gap : top); });
+      for (let i = arr.length - 1; i >= 0; i--) { const lim = i === arr.length - 1 ? bot : arr[i + 1].y - gap; if (arr[i].y > lim) arr[i].y = lim; }
+    });
+    const lab = L.map(l => {
+      const ex = cx + r * Math.cos(l.am), ey = cy + r * Math.sin(l.am);
+      const mx = cx + (r + 10) * Math.cos(l.am), my = cy + (r + 10) * Math.sin(l.am);
+      const x = l.right ? cx + r + 24 : cx - r - 24;
+      return `<polyline points="${ex.toFixed(1)},${ey.toFixed(1)} ${mx.toFixed(1)},${my.toFixed(1)} ${(l.right ? x - 4 : x + 4).toFixed(1)},${(l.y - 4).toFixed(1)}" fill="none" stroke="${l.it.c}" stroke-width="1.3"/>
+        <text x="${x}" y="${l.y - 6}" text-anchor="${l.right ? 'start' : 'end'}" class="pl-n">${esc(clip(l.it.k, 6))}</text>
+        <text x="${x}" y="${l.y + 9}" text-anchor="${l.right ? 'start' : 'end'}" class="pl-p num">${(l.fr * 100).toFixed(1)} %</text>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${W} ${Hh}" class="pie" role="img" aria-label="분류별 비중">${paths.join('')}<g class="pie-sep">${pieSeps(items, total, cx, cy, r)}</g>${lab}</svg>`;
+  }
+  function pieSeps(items, total, cx, cy, r) {
+    if (items.length < 2) return '';
+    let a = -Math.PI / 2;
+    return items.map(it => { const s = `<line x1="${cx}" y1="${cy}" x2="${(cx + r * Math.cos(a)).toFixed(2)}" y2="${(cy + r * Math.sin(a)).toFixed(2)}"/>`; a += it.v / total * Math.PI * 2; return s; }).join('');
+  }
+
+  function periodLabel(from, to) {
+    if (from.slice(0, 7) === to.slice(0, 7) && from.endsWith('-01') && to === `${to.slice(0, 7)}-${pad(daysIn(to.slice(0, 7)))}`) return ymLabel(from.slice(0, 7));
+    if (from.endsWith('-01-01') && to.endsWith('-12-31') && from.slice(0, 4) === to.slice(0, 4)) return `${from.slice(0, 4)}년`;
+    return `${from.slice(2).replace(/-/g, '.')} ~ ${to.slice(2).replace(/-/g, '.')}`;
+  }
+  function openCatDetail(type, cat, from, to) {
+    const build = () => {
+      const list = inRange(from, to).filter(t => t.type === type && (t.cat || '미분류') === cat);
+      const total = list.reduce((a, t) => a + t.amt, 0);
+      const subs = new Map(); list.forEach(t => { const k = t.sub || '(소분류 없음)'; const r = subs.get(k) || { k, v: 0, n: 0 }; r.v += t.amt; r.n++; subs.set(k, r); });
+      const endYm = to.slice(0, 7), months = Array.from({ length: 12 }, (_, i) => addMonths(endYm, i - 11));
+      const mv = months.map(ym => monthTx(ym).filter(t => t.type === type && (t.cat || '미분류') === cat).reduce((a, t) => a + t.amt, 0));
+      const avg = mv.reduce((a, b) => a + b, 0) / 12;
+      return `
+        <section class="card">
+          <div class="hcd-top"><span>${periodLabel(from, to)} · ${list.length}건</span></div>
+          <div class="hcd-total num ${type === '수입' ? 'inc' : 'exp'}">${won(total)}</div>
+          ${barRows([...subs.values()].sort((a, b) => b.v - a.v), total, type === '수입' ? 'var(--inc)' : 'var(--exp)')}
+        </section>
+        <section class="card">
+          <h3 class="hh-h3">최근 12개월 <small>월평균 ${won(avg)}</small></h3>
+          ${monthBars(months, mv, type === '수입' ? 'var(--inc)' : 'var(--exp)', endYm)}
+        </section>
+        ${[...groupByDay(list)].map(([ds, l]) => `<section class="card hd">${dayHead(ds, l)}${l.map(t => rowHtml(t)).join('')}</section>`).join('')}`;
+    };
+    pushPage({ title: esc(cat), body: build(), refresh: pg => { $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); }, onMount: pg => bindRows(pg) });
+  }
+  function monthBars(months, vals, color, hi) {
+    const W = 336, Hh = 120, bw = W / months.length, mx = Math.max(...vals, 1);
+    return `<svg viewBox="0 0 ${W} ${Hh + 18}" class="mbars" role="img" aria-label="월별 금액">${months.map((ym, i) => {
+      const h = vals[i] / mx * (Hh - 16), x = i * bw + bw * 0.22;
+      return `<rect x="${x.toFixed(1)}" y="${(Hh - h).toFixed(1)}" width="${(bw * 0.56).toFixed(1)}" height="${Math.max(h, vals[i] ? 1.5 : 0).toFixed(1)}" rx="3" fill="${color}" opacity="${ym === hi ? 1 : 0.42}"/>
+        <text x="${(i * bw + bw / 2).toFixed(1)}" y="${Hh + 14}" text-anchor="middle" class="mb-x">${+ym.slice(5)}</text>`;
+    }).join('')}</svg>`;
+  }
+
+  /* ───────────── 자산 탭 ───────────── */
+  function renderAssets() {
+    let pos = 0, neg = 0;
+    H.bal.forEach(v => { if (v > 0) pos += v; else neg += v; });
+    const groups = new Map();
+    H.assets.filter(a => !a.hidden).forEach(a => { let g = groups.get(a.group); if (!g) groups.set(a.group, (g = [])); g.push(a); });
+    const known = new Set(assetNames());
+    const orphan = [...H.bal].filter(([k, v]) => !known.has(k) && Math.round(v) !== 0);
+    const nw = pos + neg;
+    const ms = Array.from({ length: 6 }, (_, i) => addMonths(ymOf(new Date()), i - 5));
+    const cum = cumByMonth();
+    $('#hh-assets').innerHTML = `
+      <div class="card ha-sum num">
+        <div><span>자산</span><b class="inc">${fmt(pos)}</b></div>
+        <div><span>부채</span><b class="exp">${fmt(-neg)}</b></div>
+        <div><span>합계</span><b>${nw < 0 ? '−' : ''}${fmt(Math.abs(nw))}</b></div>
+      </div>
+      <button class="card ha-total" id="hhTotalBtn">
+        <span class="ha-tl">누적잔액 추이 <em>전체통계 ›</em></span>
+        ${sparkSvg(ms.map(m => cum.get(m)))}
+      </button>
+      ${[...groups].map(([g, list]) => {
+        const gs = list.reduce((a, x) => a + (H.bal.get(x.name) || 0), 0);
+        return `<section class="card ha-group"><div class="ha-gh"><b>${esc(g)}</b><span class="num ${gs < 0 ? 'exp' : ''}">${won(gs)}</span></div>
+          ${list.map(a => { const v = H.bal.get(a.name) || 0; return `<button class="ha-row" data-asset="${esc(a.name)}"><span>${esc(a.name)}</span><b class="num ${v < 0 ? 'exp' : v > 0 ? 'inc' : ''}">${won(v)}</b></button>`; }).join('')}
+        </section>`;
+      }).join('')}
+      ${orphan.length ? `<section class="card ha-group"><div class="ha-gh"><b>목록에 없는 자산</b></div>${orphan.map(([k, v]) => `<button class="ha-row" data-asset="${esc(k)}"><span>${esc(k)}</span><b class="num ${v < 0 ? 'exp' : 'inc'}">${won(v)}</b></button>`).join('')}
+        <p class="note">더보기 → 자산 설정에서 추가하면 그룹에 들어갑니다.</p></section>` : ''}
+      <p class="note ha-note">숨긴 자산은 목록에서 빠지지만 합계에는 들어갑니다.</p>`;
+    $$('#hh-assets .ha-row').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
+    $('#hhTotalBtn').onclick = () => openTotal(ymOf(new Date()));
+  }
+  function cumByMonth() {
+    const per = new Map();
+    H.tx.forEach(t => per.set(t.ym, (per.get(t.ym) || 0) + nwDelta(t)));
+    const keys = [...per.keys()].sort();
+    const out = new Map(); let c = 0;
+    if (!keys.length) return out;
+    for (let ym = keys[0], cur = ymOf(new Date()) > keys.at(-1) ? ymOf(new Date()) : keys.at(-1); ym <= cur; ym = addMonths(ym, 1)) { c += per.get(ym) || 0; out.set(ym, c); }
+    return out;
+  }
+  function sparkSvg(vals) {
+    const v = vals.map(x => x ?? null).filter(x => x !== null);
+    if (v.length < 2) return '';
+    const W = 300, Hh = 46, lo = Math.min(...v), hi = Math.max(...v);
+    const pts = v.map((x, i) => [4 + (W - 8) * i / (v.length - 1), 5 + (Hh - 10) * (1 - (x - lo) / ((hi - lo) || 1))]);
+    return `<svg viewBox="0 0 ${W} ${Hh}" class="ha-spark" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="var(--hh)" stroke-width="2.2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>
+      <span class="ha-tv num">${won(v.at(-1))}</span>`;
+  }
+
+  function openTotal(endYm) {
+    const build = ym => {
+      const cum = cumByMonth(), ms = Array.from({ length: 6 }, (_, i) => addMonths(ym, i - 5));
+      const nv = ms.map(m => cum.get(m) ?? null), s = ms.map(m => sums(monthTx(m)));
+      return `
+        <div class="hp-nav"><button class="hh-arrow" data-tm="-1" aria-label="이전 달">${ico.left}</button><b>${ymLabel(ym)}</b><button class="hh-arrow" data-tm="1" aria-label="다음 달">${ico.right}</button></div>
+        <section class="card">
+          <span class="ht-l">누적잔액</span><div class="ht-v num">${nv.at(-1) === null ? '—' : won(nv.at(-1))}</div>
+          ${lineChart(ms, nv)}
+        </section>
+        <section class="card">
+          <h3 class="hh-h3">월별 수입 · 지출</h3>
+          ${ioBars(ms, s)}
+        </section>`;
+    };
+    let ym = endYm;
+    const bindNav = pg => $$('[data-tm]', pg).forEach(b => b.onclick = () => { ym = addMonths(ym, Number(b.dataset.tm)); $('.hh-pbody', pg).innerHTML = build(ym); bindNav(pg); });
+    pushPage({ title: '전체통계', body: build(ym), onMount: bindNav });
+  }
+  function lineChart(ms, vals) {
+    const W = 336, Hh = 150, padL = 4, padR = 4, top = 14, bot = 24;
+    const v = vals.filter(x => x !== null);
+    if (v.length < 1) return '<p class="empty">기록이 없습니다.</p>';
+    const lo = Math.min(...v), hi = Math.max(...v), span = (hi - lo) || Math.abs(hi) * 0.05 || 1;
+    const y = x => top + (Hh - top - bot) * (1 - (x - lo + span * 0.1) / (span * 1.2));
+    const xs = i => padL + (W - padL - padR) * (i + 0.5) / ms.length;
+    const pts = vals.map((x, i) => (x === null ? null : [xs(i), y(x)])).filter(Boolean);
+    return `<svg viewBox="0 0 ${W} ${Hh}" class="lchart" role="img" aria-label="누적잔액 추이">
+      <polyline points="${pts.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="var(--hh)" stroke-width="2.4" stroke-linejoin="round"/>
+      ${pts.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4" fill="var(--hh)"/>`).join('')}
+      ${ms.map((m, i) => `<text x="${xs(i).toFixed(1)}" y="${Hh - 6}" text-anchor="middle" class="mb-x">${+m.slice(5)}월</text>`).join('')}
+    </svg>
+    <div class="ht-cols num">${ms.map((m, i) => `<span>${vals[i] === null ? '—' : compactWon(vals[i])}</span>`).join('')}</div>`;
+  }
+  function ioBars(ms, s) {
+    const W = 336, Hh = 150, bot = 20, mx = Math.max(...s.map(x => Math.max(x.inc, x.exp)), 1), bw = W / ms.length;
+    return `<svg viewBox="0 0 ${W} ${Hh}" class="mbars" role="img" aria-label="월별 수입 지출">
+      ${ms.map((m, i) => {
+        const hi = s[i].inc / mx * (Hh - bot - 8), he = s[i].exp / mx * (Hh - bot - 8), x = i * bw + bw * 0.18, w = bw * 0.3;
+        return `<rect x="${x.toFixed(1)}" y="${(Hh - bot - hi).toFixed(1)}" width="${w.toFixed(1)}" height="${hi.toFixed(1)}" rx="2.5" fill="var(--inc)"/>
+          <rect x="${(x + w + 2).toFixed(1)}" y="${(Hh - bot - he).toFixed(1)}" width="${w.toFixed(1)}" height="${he.toFixed(1)}" rx="2.5" fill="var(--exp)"/>
+          <text x="${(i * bw + bw / 2).toFixed(1)}" y="${Hh - 5}" text-anchor="middle" class="mb-x">${+m.slice(5)}월</text>`;
+      }).join('')}
+    </svg>
+    <div class="ht-cols num">${s.map(x => `<span><b class="inc">${compactWon(x.inc)}</b><b class="exp">${compactWon(x.exp)}</b></span>`).join('')}</div>`;
+  }
+
+  function openAsset(name) {
+    let ym = ymOf(new Date());
+    const build = () => {
+      const all = H.tx.filter(t => t.asset === name || t.to === name).slice().reverse();
+      const after = new Map(); let run = 0;
+      all.forEach(t => { run += flowFor(t, name); after.set(t.id, run); });
+      const list = monthTx(ym).filter(t => t.asset === name || t.to === name);
+      let inn = 0, out = 0; list.forEach(t => { const f = flowFor(t, name); if (f > 0) inn += f; else out -= f; });
+      const endBal = (() => { let b = 0; all.forEach(t => { if (t.ym <= ym) b = after.get(t.id); }); return b; })();
+      const a = H.assets.find(x => x.name === name);
+      const bal = H.bal.get(name) || 0;
+      return `
+        <section class="card hp-asset">
+          <span class="hp-ag">${esc(a ? a.group : '목록에 없는 자산')}${a && a.hidden ? ' · 숨김' : ''}</span>
+          <div class="hp-bal num ${bal < 0 ? 'exp' : ''}">${won(bal)}</div>
+          ${a && a.memo ? `<p class="note">${esc(a.memo)}</p>` : ''}
+          <div class="hp-btns"><button class="btn sm" id="aAdj">잔액 수정</button><button class="btn sm" id="aSet">자산 설정</button></div>
+        </section>
+        <div class="hp-nav"><button class="hh-arrow" data-am="-1" aria-label="이전 달">${ico.left}</button><b>${ymLabel(ym)}</b><button class="hh-arrow" data-am="1" aria-label="다음 달">${ico.right}</button></div>
+        <div class="card ha-sum num sm">
+          <div><span>들어옴</span><b class="inc">${fmt(inn)}</b></div>
+          <div><span>나감</span><b class="exp">${fmt(out)}</b></div>
+          <div><span>월말 잔액</span><b>${endBal < 0 ? '−' : ''}${fmt(Math.abs(endBal))}</b></div>
+        </div>
+        ${list.length ? [...groupByDay(list)].map(([ds, l]) => `<section class="card hd">${dayHead(ds, null)}${l.map(t => rowHtml(t, { forAsset: name, balAfter: after.get(t.id) })).join('')}</section>`).join('')
+          : emptyHtml('이 달에는 이 자산의 내역이 없습니다.')}`;
+    };
+    const bind = pg => {
+      bindRows(pg);
+      $$('[data-am]', pg).forEach(b => b.onclick = () => { ym = addMonths(ym, Number(b.dataset.am)); $('.hh-pbody', pg).innerHTML = build(); bind(pg); });
+      $('#aAdj', pg).onclick = () => adjustBalance(name);
+      $('#aSet', pg).onclick = () => { const a = H.assets.find(x => x.name === name); if (a) openAssetEdit(a); else openAssetEdit({ name, group: '기타', hidden: false, memo: '', isNew: true }); };
+    };
+    pushPage({ title: esc(name), body: build(), onMount: bind, refresh: pg => { $('.hh-pbody', pg).innerHTML = build(); bind(pg); } });
+  }
+
+  async function adjustBalance(name) {
+    const cur = H.bal.get(name) || 0;
+    const v = await askText('잔액 수정', fmt(cur), { note: `지금 앱에 기록된 잔액은 ${won(cur)}입니다. 실제 잔액을 입력하면 차액만큼 '잔액수정' 내역이 생깁니다.`, ok: '수정', money: true });
+    if (v === null) return;
+    const n = Number(String(v).replace(/[^\d-]/g, ''));
+    if (!Number.isFinite(n) || String(v).replace(/[^\d]/g, '') === '') { toast('금액을 숫자로 입력하십시오', true); return; }
+    const diff = n - cur;
+    if (!diff) { toast('잔액이 같아서 바꿀 것이 없습니다'); return; }
+    const d = new Date();
+    const t = toTx([newId('n'), `${dOf(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`, '수정', '잔액수정', '', '잔액 수정', diff, name, '', '', '', '', '', store.get('dh_name') || '']);
+    await commitTx(t, null);
+  }
+
+  /* ───────────── 더보기 탭 ───────────── */
+  function renderMore() {
+    const n = H.tx.length;
+    $('#hh-more').innerHTML = `
+      <div class="card hmo">
+        <button class="hmo-row" data-go="cat-수입"><span>수입 분류 설정</span><small>${H.cats['수입'].length}개</small>${ico.chev}</button>
+        <button class="hmo-row" data-go="cat-지출"><span>지출 분류 설정</span><small>${H.cats['지출'].length}개</small>${ico.chev}</button>
+        <button class="hmo-row" data-go="assets"><span>자산 설정</span><small>${H.assets.length}개</small>${ico.chev}</button>
+        <button class="hmo-row" data-go="rules"><span>매월 반복 내역</span><small>${H.rules.length}개</small>${ico.chev}</button>
+      </div>
+      <div class="card hmo">
+        <button class="hmo-row" data-go="search"><span>내역 검색</span>${ico.chev}</button>
+        <button class="hmo-row" data-go="csv"><span>내역 내려받기 (CSV)</span><small>${fmt(n)}건</small>${ico.chev}</button>
+        <button class="hmo-row" data-go="reload"><span>가계부 새로 불러오기</span>${ico.chev}</button>
+        <button class="hmo-row" data-go="inv"><span>투자 화면으로</span>${ico.chev}</button>
+      </div>
+      <p class="note hmo-note">가계부는 구글 시트의 '가계부' 탭들에 저장됩니다. 시트에서 직접 고친 뒤 새로 불러오면 앱에 반영됩니다.<br>
+      매월 반복 내역은 그 날짜가 지난 뒤 앱을 처음 열 때 자동으로 들어갑니다.</p>`;
+    $$('#hh-more [data-go]').forEach(b => b.onclick = () => {
+      const g = b.dataset.go;
+      if (g.startsWith('cat-')) openCatSettings(g.slice(4));
+      else if (g === 'assets') openAssetSettings();
+      else if (g === 'rules') openRules();
+      else if (g === 'search') openSearch();
+      else if (g === 'csv') exportCsv();
+      else if (g === 'reload') load({ quiet: false });
+      else if (g === 'inv') D.setApp('inv');
+    });
+  }
+
+  function exportCsv() {
+    const head = ['일시', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '화폐', '외화금액', '입력자'];
+    const q = v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [head.join(',')].concat(H.tx.slice().reverse().map(t => [t.ts, t.type, t.cat, t.sub, t.text, t.amt, t.asset, t.to, t.memo, t.cur, t.famt, t.by].map(q).join(',')));
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `가계부_${today()}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast(`${fmt(H.tx.length)}건을 내려받았습니다`);
+  }
+
+  /* ───────────── 겹쳐 뜨는 화면 (뒤로 가기 버튼으로 닫힘) ───────────── */
+  const stack = [];
+  function lock(on) { document.documentElement.classList.toggle('hh-locked', on); }
+  function pushPage({ title, body, actions = '', cls = '', onMount, refresh, onClose }) {
+    const layer = $('#hhLayer');
+    layer.hidden = false; lock(true);
+    const pg = document.createElement('section');
+    pg.className = `hh-page ${cls}`;
+    pg.setAttribute('role', 'dialog'); pg.setAttribute('aria-modal', 'true');
+    pg.innerHTML = `<header class="hh-ph"><button class="icon-btn hh-back" aria-label="뒤로">${ico.back}</button><h2>${title}</h2><div class="hh-pa">${actions}</div></header><div class="hh-pbody">${body}</div>`;
+    layer.appendChild(pg);
+    stack.forEach(s => s.pg && s.pg.classList.add('under'));
+    const item = { pg, refresh, onClose, close: () => { pg.classList.remove('in'); setTimeout(() => pg.remove(), 220); } };
+    stack.push(item);
+    history.pushState({ hhp: stack.length }, '');
+    $('.hh-back', pg).onclick = () => history.back();
+    requestAnimationFrame(() => pg.classList.add('in'));
+    if (onMount) onMount(pg);
+    return pg;
+  }
+  function pushState(close) { stack.push({ close }); history.pushState({ hhp: stack.length }, ''); }
+  function popOne() {
+    const s = stack.pop();
+    if (!s) return;
+    s.close();
+    if (s.onClose) s.onClose();
+    const top = [...stack].reverse().find(x => x.pg);
+    if (top) top.pg.classList.remove('under');
+    if (!stack.some(x => x.pg)) { lock(false); setTimeout(() => { if (!stack.some(x => x.pg)) $('#hhLayer').hidden = true; }, 230); }
+  }
+  let afterPop = [];
+  window.addEventListener('popstate', e => {
+    const want = (e.state && e.state.hhp) || 0;
+    while (stack.length > want) popOne();
+    const run = afterPop; afterPop = [];
+    run.forEach(fn => setTimeout(fn, 0));
+  });
+  function back(n = 1, then) { if (then) afterPop.push(then); if (n > 0) history.go(-n); }
+  function refreshPages() { stack.forEach(s => { if (s.pg && s.refresh) s.refresh(s.pg); }); }
+  function closeAllPages() { const n = stack.length; if (n) history.go(-n); }
+
+  // 작은 입력 창 (앱의 팝업 사용)
+  function askText(title, value = '', { note = '', ok = '저장', money = false, placeholder = '' } = {}) {
+    return new Promise(res => {
+      D.openSheet(`<h2 id="sheetTitle">${esc(title)}</h2>${note ? `<p class="note ask-note">${note}</p>` : ''}
+        <input id="askIn" ${money ? 'inputmode="numeric"' : ''} value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="off" class="ask-in">
+        <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn primary" id="askOk">${ok}</button></div>`, 'pop');
+      let done = false;
+      const fin = v => { if (done) return; done = true; obs.disconnect(); res(v); };
+      const sh = $('#sheet');
+      const obs = new MutationObserver(() => { if (!sh.classList.contains('open') || sh.hidden) fin(null); });
+      setTimeout(() => obs.observe(sh, { attributes: true, attributeFilter: ['class', 'hidden'] }), 60);
+      const inp = $('#askIn');
+      if (money) bindMoneyInput(inp, true);
+      setTimeout(() => { inp.focus(); inp.select(); }, 80);
+      $('#askOk').onclick = () => { const v = inp.value.trim(); fin(v); D.closeSheet(); };
+      inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('#askOk').click(); } };
+    });
+  }
+  function askConfirm(title, note = '', ok = '확인', danger = true) {
+    return new Promise(res => {
+      D.openSheet(`<h2 id="sheetTitle">${esc(title)}</h2>${note ? `<p class="note ask-note">${note}</p>` : ''}
+        <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn ${danger ? 'danger' : 'primary'}" id="askOk">${ok}</button></div>`, 'pop');
+      let done = false;
+      const fin = v => { if (done) return; done = true; obs.disconnect(); res(v); };
+      const sh = $('#sheet');
+      const obs = new MutationObserver(() => { if (!sh.classList.contains('open') || sh.hidden) fin(false); });
+      setTimeout(() => obs.observe(sh, { attributes: true, attributeFilter: ['class', 'hidden'] }), 60);
+      $('#askOk').onclick = () => { fin(true); D.closeSheet(); };
+    });
+  }
+  function pickerOnTap(root) {
+    $$('input[type="date"], input[type="time"], input[type="month"]', root).forEach(i => {
+      if (i.dataset.pk) return; i.dataset.pk = '1';
+      i.addEventListener('click', () => { try { i.showPicker(); } catch { /* 지원하지 않는 브라우저는 기본 동작 */ } });
+    });
+  }
+  function bindMoneyInput(inp, allowNeg = false) {
+    inp.addEventListener('input', () => {
+      const neg = allowNeg && /^\s*[-−]/.test(inp.value);
+      const d = inp.value.replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '');
+      inp.value = (neg ? '-' : '') + (d ? Number(d).toLocaleString('ko-KR') : '');
+    });
+  }
+  const moneyVal = s => { const neg = /^\s*[-−]/.test(s); const d = String(s).replace(/[^\d]/g, ''); return d ? (neg ? -1 : 1) * Number(d) : NaN; };
+
+  /* ───────────── 내역 입력·수정 ───────────── */
+  function nowTime() { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+  function lastAsset(type) { const a = store.get(`dh_hla_${type}`); return a && assetNames().includes(a) ? a : ''; }
+
+  function openForm(opts = {}) {
+    const e = opts.tx || null, rule = opts.rule || null, isRule = opts.mode === 'rule';
+    const src = e || rule || opts.copy || null;
+    const f = {
+      id: e ? e.id : null,
+      type: src ? src.type : (opts.type || store.get('dh_hlt') || '지출'),
+      date: e ? e.d : (opts.date || today()),
+      time: e ? e.tm.slice(0, 5) : nowTime(),
+      sec: e ? e.tm.slice(6, 8) : '',
+      amt: src ? Math.abs(src.amt) : 0,
+      neg: src ? src.amt < 0 : false,
+      cat: src ? src.cat : '', sub: src ? src.sub : '',
+      asset: src ? src.asset : '', to: src ? src.to : '',
+      text: src ? src.text : '', memo: src ? src.memo : '',
+      cur: e ? e.cur : '', famt: e ? e.famt : '',
+      rule: e ? e.rule : '',
+      repeat: false,
+      day: rule ? rule.day : +(opts.date || today()).slice(8, 10),
+      start: rule ? rule.start : ymOf(new Date()), end: rule ? rule.end : '',
+    };
+    if (!src && !isRule) f.asset = lastAsset(f.type);
+    if (f.type === '수정' && !e) f.type = '지출';
+    const title = isRule ? (rule ? '반복 내역 수정' : '반복 내역 추가') : e ? '내역 수정' : f.type;
+    const actions = e && !isRule ? `${e.type !== '수정' ? `<button class="icon-btn" id="hfCopy" aria-label="복사해서 새로 입력">${ico.copy}</button>` : ''}<button class="icon-btn" id="hfDel" aria-label="삭제">${ico.trash}</button>`
+      : rule ? `<button class="icon-btn" id="hfDel" aria-label="반복 내역 삭제">${ico.trash}</button>` : '';
+    const pg = pushPage({ title, body: '<div class="hf" id="hf"></div><div class="hf-picker" id="hfPicker" hidden></div>', actions, cls: 'hf-page' });
+    const root = $('#hf', pg);
+
+    function draw() {
+      const tr = f.type === '이체', adj = f.type === '수정';
+      root.dataset.type = { 수입: 'in', 지출: 'out', 이체: 'tr', 수정: 'adj' }[f.type];
+      $('.hh-ph h2', pg).textContent = isRule ? title : e ? '내역 수정' : f.type;
+      root.innerHTML = `
+        ${adj ? `<div class="hf-adj">잔액 수정 내역입니다. 금액 앞에 −를 붙이면 잔액이 줄어듭니다.</div>` : `
+        <div class="hf-types" role="group" aria-label="구분">
+          ${['수입', '지출', '이체'].map(t => `<button data-t="${t}" class="${f.type === t ? 'on' : ''} t-${{ 수입: 'in', 지출: 'out', 이체: 'tr' }[t]}">${t}</button>`).join('')}
+        </div>`}
+        ${isRule ? `
+        <div class="hf-row"><span class="hf-l">반복</span><div class="hf-v">매월 <select id="hfDay" class="hf-sel">${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${f.day === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select> 일</div></div>
+        <div class="hf-row"><span class="hf-l">기간</span><div class="hf-v hf-months"><input type="month" id="hfStart" value="${f.start}" aria-label="시작 달"><span>~</span><input type="month" id="hfEnd" value="${f.end}" aria-label="끝 달 (비우면 계속)"></div></div>
+        <p class="hf-info">${rule ? `마지막으로 들어간 달: ${rule.last || '없음'}` : '이번 달 날짜가 이미 지났으면 다음 달부터 자동으로 들어갑니다.'} 끝 달을 비우면 계속 반복합니다.</p>`
+        : `
+        <div class="hf-row"><span class="hf-l">날짜</span>
+          <div class="hf-v hf-date">
+            <label class="hf-dt"><span>${dateLabel(f.date)}</span><input type="date" id="hfDate" value="${f.date}" aria-label="날짜"></label>
+            <label class="hf-dt"><span>${tmLabel(f.time + ':00') || '오전 12:00'}</span><input type="time" id="hfTime" value="${f.time}" aria-label="시간"></label>
+          </div>
+          ${!e && !adj ? `<button class="hf-rep ${f.repeat ? 'on' : ''}" id="hfRep" aria-pressed="${f.repeat}">${ico.rep}<span>반복</span></button>` : ''}
+        </div>`}
+        ${f.repeat && !isRule ? `<p class="hf-info">매월 ${+f.date.slice(8)}일에 같은 내역이 자동으로 들어갑니다.</p>` : ''}
+        ${e && e.rule ? `<p class="hf-info">매월 반복 내역입니다. 여기서 고치면 이번 것만 바뀝니다. 반복 자체는 더보기 → 매월 반복 내역에서 고칩니다.</p>` : ''}
+        <div class="hf-row"><span class="hf-l">금액</span><div class="hf-v"><input id="hfAmt" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="0" value="${f.amt ? (f.neg ? '-' : '') + fmt(f.amt) : ''}"><span class="hf-unit">원</span></div></div>
+        ${f.cur && f.famt !== '' ? `<p class="hf-info">외화 ${f.cur === 'USD' ? 'US$' : f.cur} ${Number(f.famt).toLocaleString('ko-KR', { minimumFractionDigits: 2 })} 내역입니다. 앱은 원화 금액으로 계산합니다.</p>` : ''}
+        ${adj ? '' : `<div class="hf-row"><span class="hf-l">${tr ? '출금' : '분류'}</span><button class="hf-v hf-pick ${(tr ? f.asset : f.cat) ? '' : 'ph'}" id="hfCat">${tr ? esc(f.asset || '출금 자산') : esc(f.cat ? `${f.cat}${f.sub ? ` / ${f.sub}` : ''}` : '분류 고르기')}</button></div>`}
+        <div class="hf-row"><span class="hf-l">${tr ? '입금' : '자산'}</span><button class="hf-v hf-pick ${(tr ? f.to : f.asset) ? '' : 'ph'}" id="hfAsset">${tr ? esc(f.to || '입금 자산') : esc(f.asset || '자산 고르기')}</button></div>
+        <div class="hf-row"><span class="hf-l">내용</span><div class="hf-v"><input id="hfText" maxlength="200" autocomplete="off" enterkeyhint="done" value="${esc(f.text)}" placeholder="${tr ? '예: 생활비 이체' : '예: 점심'}"></div></div>
+        <div class="hf-sugg" id="hfSugg"></div>
+        <textarea id="hfMemo" class="hf-memo" rows="2" placeholder="메모">${esc(f.memo)}</textarea>
+        <p class="form-error" id="hfErr" role="alert"></p>
+        <div class="hf-btns">
+          <button class="btn hf-save" id="hfSave">저장하기</button>
+          ${!e && !isRule ? '<button class="btn hf-cont" id="hfCont">계속</button>' : ''}
+        </div>`;
+      bind();
+    }
+    function readInputs() {
+      const a = $('#hfAmt', root); if (a) { const v = moneyVal(a.value); f.amt = Number.isFinite(v) ? Math.abs(v) : 0; f.neg = v < 0; }
+      const t = $('#hfText', root); if (t) f.text = t.value;
+      const m = $('#hfMemo', root); if (m) f.memo = m.value;
+    }
+    function bind() {
+      $$('.hf-types [data-t]', root).forEach(b => b.onclick = () => {
+        readInputs();
+        const was = f.type; f.type = b.dataset.t;
+        if (was !== f.type) {
+          if (f.type === '이체') { f.cat = ''; f.sub = ''; f.to = ''; }
+          else if (was === '이체') { f.to = ''; f.cat = ''; f.sub = ''; }
+          else { f.cat = ''; f.sub = ''; }
+          if (!f.asset && !isRule && !e) f.asset = lastAsset(f.type);
+        }
+        draw();
+      });
+      const fd = $('#hfDate', root); if (fd) fd.onchange = () => { if (fd.value) { readInputs(); f.date = fd.value; f.sec = ''; draw(); } };
+      const ft = $('#hfTime', root); if (ft) ft.onchange = () => { if (ft.value) { readInputs(); f.time = ft.value.slice(0, 5); f.sec = ''; draw(); } };
+      const rep = $('#hfRep', root); if (rep) rep.onclick = () => { readInputs(); f.repeat = !f.repeat; draw(); };
+      const day = $('#hfDay', root); if (day) day.onchange = () => { f.day = Number(day.value); };
+      const fs = $('#hfStart', root); if (fs) fs.onchange = () => { f.start = fs.value; };
+      const fe = $('#hfEnd', root); if (fe) fe.onchange = () => { f.end = fe.value; };
+      const amt = $('#hfAmt', root);
+      bindMoneyInput(amt, f.type === '수정');
+      amt.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); readInputs(); amt.blur(); if (f.type === '수정') $('#hfText', root).focus(); else openPicker(f.type === '이체' ? 'from' : 'cat'); } };
+      const cat = $('#hfCat', root); if (cat) cat.onclick = () => { readInputs(); openPicker(f.type === '이체' ? 'from' : 'cat'); };
+      $('#hfAsset', root).onclick = () => { readInputs(); openPicker(f.type === '이체' ? 'to' : 'asset'); };
+      const txt = $('#hfText', root);
+      txt.oninput = () => sugg(txt.value);
+      txt.onfocus = () => sugg(txt.value);
+      txt.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); txt.blur(); } };
+      pickerOnTap(root);
+      $('#hfSave', root).onclick = () => submit(false);
+      const c = $('#hfCont', root); if (c) c.onclick = () => submit(true);
+    }
+    function sugg(q) {
+      const box = $('#hfSugg', root);
+      q = q.trim().toLowerCase();
+      const seen = new Set(), out = [];
+      for (const t of H.tx) {
+        if (out.length >= 6) break;
+        if (t.type !== f.type || !t.text) continue;
+        if (q ? !t.text.toLowerCase().includes(q) : !(f.cat && t.cat === f.cat && (!f.sub || t.sub === f.sub))) continue;
+        const k = `${t.text}|${t.cat}|${t.sub}|${t.asset}|${t.to}`;
+        if (seen.has(k)) continue;
+        seen.add(k); out.push(t);
+      }
+      box.innerHTML = out.map((t, i) => `<button type="button" class="hf-chip" data-i="${i}"><b>${esc(t.text)}</b><small>${t.type === '이체' ? `${esc(t.asset)} → ${esc(t.to)}` : esc([t.sub || t.cat, t.asset].filter(Boolean).join(' · '))} · ${fmt(t.amt)}원</small></button>`).join('');
+      $$('.hf-chip', box).forEach(b => b.onpointerdown = ev => {
+        ev.preventDefault();
+        const t = out[Number(b.dataset.i)];
+        readInputs();
+        f.text = t.text;
+        if (!f.amt) f.amt = t.amt;
+        if (f.type === '이체') { if (!f.asset) f.asset = t.asset; if (!f.to) f.to = t.to; }
+        else { if (!f.cat) { f.cat = t.cat; f.sub = t.sub; } if (!f.asset) f.asset = t.asset; }
+        draw();
+      });
+    }
+
+    // 아래에서 올라오는 고르기 창 (분류 → 소분류, 자산)
+    let pickerOpen = false;
+    function openPicker(kind) {
+      const box = $('#hfPicker', pg);
+      const close = () => { box.hidden = true; box.innerHTML = ''; pickerOpen = false; pg.classList.remove('picking'); };
+      if (!pickerOpen) { pickerOpen = true; pushState(close); }
+      pg.classList.add('picking');
+      box.hidden = false;
+      const done = next => {
+        draw();
+        if (next) { openPicker(next); return; }
+        back();
+        setTimeout(() => { const t = $('#hfText', root); if (t && !f.text) t.focus(); }, 260);
+      };
+      if (kind === 'cat') {
+        const list = H.cats[f.type] || [];
+        let active = list.find(c => c.name === f.cat) || null;
+        const paint = () => {
+          box.innerHTML = `<div class="pk-head"><b>분류</b><button class="icon-btn" id="pkEdit" aria-label="분류 설정">${ico.pen}</button><button class="icon-btn" id="pkX" aria-label="닫기">${ico.close}</button></div>
+            <div class="pk-cols">
+              <div class="pk-col">${list.map((c, i) => `<button class="pk-item ${active === c ? 'on' : ''}" data-ci="${i}"><span>${esc(c.name)}</span>${c.subs.length ? ico.chev : ''}</button>`).join('') || '<p class="empty">분류가 없습니다.</p>'}</div>
+              <div class="pk-col sub">${active ? active.subs.map(s => `<button class="pk-item ${f.cat === active.name && f.sub === s ? 'on' : ''}" data-s="${esc(s)}">${esc(s)}</button>`).join('') : ''}</div>
+            </div>`;
+          $$('[data-ci]', box).forEach(b => b.onclick = () => {
+            const c = list[Number(b.dataset.ci)];
+            if (!c.subs.length) { f.cat = c.name; f.sub = ''; done(!f.asset ? 'asset' : null); return; }
+            active = c; paint();
+          });
+          $$('[data-s]', box).forEach(b => b.onclick = () => { f.cat = active.name; f.sub = b.dataset.s; done(!f.asset ? 'asset' : null); });
+          $('#pkX', box).onclick = () => back();
+          $('#pkEdit', box).onclick = () => back(1, () => openCatSettings(f.type));
+        };
+        paint();
+      } else {
+        const groups = new Map();
+        H.assets.filter(a => !a.hidden).forEach(a => { let g = groups.get(a.group); if (!g) groups.set(a.group, (g = [])); g.push(a); });
+        const cur = kind === 'to' ? f.to : f.asset;
+        box.innerHTML = `<div class="pk-head"><b>${kind === 'from' ? '출금' : kind === 'to' ? '입금' : '자산'}</b><button class="icon-btn" id="pkEdit" aria-label="자산 설정">${ico.pen}</button><button class="icon-btn" id="pkX" aria-label="닫기">${ico.close}</button></div>
+          <div class="pk-assets">${[...groups].map(([g, l]) => `<div class="pk-g">${esc(g)}</div><div class="pk-grid">${l.map(a => `<button class="pk-a ${a.name === cur ? 'on' : ''}" data-a="${esc(a.name)}">${esc(a.name)}</button>`).join('')}</div>`).join('') || '<p class="empty">자산이 없습니다.</p>'}</div>`;
+        $$('[data-a]', box).forEach(b => b.onclick = () => {
+          const a = b.dataset.a;
+          if (kind === 'to') f.to = a; else f.asset = a;
+          if (kind === 'from') done(!f.to ? 'to' : null);
+          else done(null);
+        });
+        $('#pkX', box).onclick = () => back();
+        $('#pkEdit', box).onclick = () => back(1, () => openAssetSettings());
+      }
+    }
+
+    async function submit(cont) {
+      readInputs();
+      const err = $('#hfErr', root);
+      const amount = f.neg ? -f.amt : f.amt;
+      const fail = m => { err.textContent = m; };
+      if (f.type === '수정' ? !amount : !(f.amt > 0)) return fail('금액을 입력하십시오.');
+      if (f.type === '이체') {
+        if (!f.asset) return fail('출금 자산을 고르십시오.');
+        if (!f.to) return fail('입금 자산을 고르십시오.');
+        if (f.asset === f.to) return fail('출금·입금 자산이 같습니다.');
+      } else {
+        if (f.type !== '수정' && !f.cat) return fail('분류를 고르십시오.');
+        if (!f.asset) return fail('자산을 고르십시오.');
+      }
+      const by = store.get('dh_name') || '';
+      if (isRule) {
+        if (!f.start) return fail('시작 달을 고르십시오.');
+        if (f.end && f.end < f.start) return fail('끝 달이 시작 달보다 앞입니다.');
+        const r = { id: rule ? rule.id : newId('r'), day: f.day, type: f.type, cat: f.type === '이체' ? '' : f.cat, sub: f.type === '이체' ? '' : f.sub, text: f.text.trim(), amt: f.amt, asset: f.asset, to: f.type === '이체' ? f.to : '', memo: f.memo.trim(), start: f.start, end: f.end, last: rule ? rule.last : '' };
+        if (!rule) {
+          // 지난 달 것은 채우지 않음. 이번 달 날짜가 이미 지났으면 다음 달부터 자동 입력
+          const cur = ymOf(new Date());
+          r.last = f.start > cur ? addMonths(f.start, -1) : (f.day <= new Date().getDate() ? cur : addMonths(cur, -1));
+        }
+        const btn = $('#hfSave', root); btn.disabled = true; btn.textContent = '저장 중…';
+        try {
+          await D.api('hhSave', { rule: ruleObj(r) });
+          const i = H.rules.findIndex(x => x.id === r.id);
+          if (i >= 0) H.rules[i] = r; else H.rules.push(r);
+          saveCache(); refreshPages(); render(); back(); toast('반복 내역을 저장했습니다');
+        } catch (ex) { btn.disabled = false; btn.textContent = '저장하기'; fail(ex.message); }
+        return;
+      }
+      const sec = f.sec && e && e.d === f.date && e.tm.slice(0, 5) === f.time ? f.sec : pad(new Date().getSeconds());
+      const t = toTx([f.id || newId('n'), `${f.date} ${f.time}:${sec}`, f.type, f.type === '이체' || f.type === '수정' ? (f.type === '수정' ? (e ? e.cat : '잔액수정') : '') : f.cat,
+        f.type === '이체' || f.type === '수정' ? '' : f.sub, f.text.trim(), amount, f.asset, f.type === '이체' ? f.to : '', f.memo.trim(),
+        e && e.amt === amount ? f.cur : '', e && e.amt === amount ? f.famt : '', f.rule, e ? (e.by || by) : by]);
+      let newRule = null;
+      if (f.repeat && !e) {
+        newRule = { id: newId('r'), day: +f.date.slice(8), type: t.type, cat: t.cat, sub: t.sub, text: t.text, amt: t.amt, asset: t.asset, to: t.to, memo: t.memo, start: t.ym, end: '', last: t.ym };
+        t.rule = newRule.id;
+      }
+      store.set('dh_hlt', f.type);
+      if (f.type !== '수정') store.set(`dh_hla_${f.type}`, f.asset);
+      if (cont) {
+        commitTx(t, e, newRule);
+        Object.assign(f, { amt: 0, neg: false, cat: '', sub: '', text: '', memo: '', repeat: false, to: '' });
+        draw();
+        setTimeout(() => $('#hfAmt', root).focus(), 50);
+        toast('저장했습니다. 이어서 입력하십시오');
+      } else {
+        back();
+        commitTx(t, e, newRule);
+      }
+    }
+
+    draw();
+    const del = $('#hfDel', pg);
+    if (del) del.onclick = async () => {
+      if (rule) {
+        if (!(await askConfirm('이 반복 내역을 지울까요?', '앞으로 자동 입력만 멈추고, 이미 들어간 내역은 그대로 남습니다.', '삭제'))) return;
+        try { await D.api('hhDel', { kind: 'rule', id: rule.id }); H.rules = H.rules.filter(x => x.id !== rule.id); saveCache(); refreshPages(); back(); toast('반복 내역을 지웠습니다'); }
+        catch (ex) { toast(`삭제 실패: ${ex.message}`, true); }
+        return;
+      }
+      if (!(await askConfirm('이 내역을 지울까요?', `${esc(e.text || e.cat || e.type)} · ${won(Math.abs(e.amt))}`, '삭제'))) return;
+      back();
+      removeTx(e);
+    };
+    const cp = $('#hfCopy', pg);
+    if (cp) cp.onclick = () => back(1, () => openForm({ copy: e, date: today() }));
+    if (!e && !isRule && !opts.copy) setTimeout(() => { const a = $('#hfAmt', root); if (a) a.focus(); }, 280);
+  }
+
+  // 화면에 먼저 반영하고 서버에 저장. 실패하면 되돌림
+  async function commitTx(t, old, rule) {
+    H.pending.set(t.id, t);
+    const i = H.tx.findIndex(x => x.id === t.id);
+    if (i >= 0) H.tx[i] = t; else H.tx.push(t);
+    if (rule) H.rules.push(rule);
+    reindex(); rerender();
+    try {
+      const j = await D.api('hhSave', { tx: txObj(t), ...(rule ? { rule: ruleObj(rule) } : {}) });
+      H.pending.delete(t.id);
+      const saved = toTx(j.tx);
+      const k = H.tx.findIndex(x => x.id === t.id);
+      if (k >= 0) H.tx[k] = saved; else H.tx.push(saved);
+      reindex(); rerender(); saveCache();
+      toast(old ? '수정했습니다' : '저장했습니다');
+    } catch (ex) {
+      H.pending.delete(t.id);
+      const k = H.tx.findIndex(x => x.id === t.id);
+      if (old) H.tx[k] = old; else if (k >= 0) H.tx.splice(k, 1);
+      if (rule) H.rules = H.rules.filter(x => x.id !== rule.id);
+      reindex(); rerender();
+      if (ex.code === 'auth') { D.logout('비밀번호를 다시 입력하십시오.'); return; }
+      toast(`저장하지 못했습니다: ${ex.message}`, true);
+      setTimeout(() => openForm(old ? { tx: old } : { copy: t, date: t.d }), 300);
+    }
+  }
+  async function removeTx(t) {
+    const i = H.tx.findIndex(x => x.id === t.id);
+    if (i < 0) return;
+    H.tx.splice(i, 1); reindex(); rerender();
+    try { await D.api('hhDel', { kind: 'tx', id: t.id }); saveCache(); toast('지웠습니다'); }
+    catch (ex) { H.tx.push(t); reindex(); rerender(); toast(`삭제 실패: ${ex.message}`, true); }
+  }
+  function rerender() { const y = window.scrollY; render(); window.scrollTo({ top: y }); refreshPages(); }
+
+  /* ───────────── 메모 ───────────── */
+  function openMemo(m) {
+    const isNew = !m;
+    const date = m ? m.date : (H.ym === ymOf(new Date()) ? today() : `${H.ym}-01`);
+    const pg = pushPage({
+      title: isNew ? '새 메모' : '메모', cls: 'hf-page',
+      actions: isNew ? '' : `<button class="icon-btn" id="mDel" aria-label="메모 삭제">${ico.trash}</button>`,
+      body: `<div class="hf">
+        <div class="hf-row"><span class="hf-l">날짜</span><div class="hf-v hf-date"><label class="hf-dt"><span id="mDateTxt">${dateLabel(date)}</span><input type="date" id="mDate" value="${date}" aria-label="날짜"></label></div></div>
+        <textarea id="mText" class="hf-memo big" rows="14" placeholder="첫 줄은 제목처럼 굵게 보입니다">${esc(m ? m.text : '')}</textarea>
+        <p class="form-error" id="mErr" role="alert"></p>
+        <div class="hf-btns"><button class="btn hf-save memo" id="mSave">저장하기</button></div></div>`,
+    });
+    pickerOnTap(pg);
+    const di = $('#mDate', pg);
+    di.onchange = () => { if (di.value) $('#mDateTxt', pg).textContent = dateLabel(di.value); };
+    $('#mSave', pg).onclick = async () => {
+      const text = $('#mText', pg).value.trim();
+      if (!text) { $('#mErr', pg).textContent = '내용을 입력하십시오.'; return; }
+      const obj = { id: m ? m.id : newId('m'), date: di.value || date, text, by: m ? m.by : (store.get('dh_name') || '') };
+      const btn = $('#mSave', pg); btn.disabled = true; btn.textContent = '저장 중…';
+      try {
+        await D.api('hhSave', { memo: { ID: obj.id, 날짜: obj.date, 내용: obj.text, 입력자: obj.by } });
+        const i = H.memos.findIndex(x => x.id === obj.id);
+        if (i >= 0) H.memos[i] = obj; else H.memos.push(obj);
+        saveCache(); back(); rerender(); toast('메모를 저장했습니다');
+      } catch (ex) { btn.disabled = false; btn.textContent = '저장하기'; $('#mErr', pg).textContent = ex.message; }
+    };
+    const del = $('#mDel', pg);
+    if (del) del.onclick = async () => {
+      if (!(await askConfirm('이 메모를 지울까요?', '', '삭제'))) return;
+      try { await D.api('hhDel', { kind: 'memo', id: m.id }); H.memos = H.memos.filter(x => x.id !== m.id); saveCache(); back(); rerender(); toast('메모를 지웠습니다'); }
+      catch (ex) { toast(`삭제 실패: ${ex.message}`, true); }
+    };
+    if (isNew) setTimeout(() => $('#mText', pg).focus(), 280);
+  }
+
+  /* ───────────── 검색 ───────────── */
+  function openSearch() {
+    const pg = pushPage({ title: '내역 검색', body: `<div class="hh-search"><input id="sQ" type="search" enterkeyhint="search" placeholder="내용, 분류, 자산, 메모, 금액" autocomplete="off"></div><div id="sRes"></div>` });
+    const q = $('#sQ', pg), res = $('#sRes', pg);
+    let tm;
+    const run = () => {
+      const s = q.value.trim().toLowerCase();
+      if (!s) { res.innerHTML = '<p class="empty">찾을 말을 입력하십시오.</p>'; return; }
+      const digits = s.replace(/[^\d]/g, '');
+      const hit = H.tx.filter(t => [t.text, t.memo, t.cat, t.sub, t.asset, t.to].some(x => x && x.toLowerCase().includes(s)) || (digits.length >= 3 && String(Math.abs(t.amt)).includes(digits)));
+      const sm = sums(hit);
+      const show = hit.slice(0, 300);
+      res.innerHTML = `<div class="card hs-sum num"><span>${fmt(hit.length)}건</span><span class="inc">수입 ${won(sm.inc)}</span><span class="exp">지출 ${won(sm.exp)}</span></div>
+        ${show.length ? `<section class="card hd">${show.map(t => rowHtml(t, { showDate: true })).join('')}</section>` : '<p class="empty">찾은 내역이 없습니다.</p>'}
+        ${hit.length > show.length ? `<p class="note">최근 ${show.length}건만 보입니다. 더 자세히 입력하십시오.</p>` : ''}`;
+      bindRows(res);
+    };
+    q.oninput = () => { clearTimeout(tm); tm = setTimeout(run, 160); };
+    run();
+    setTimeout(() => q.focus(), 280);
+  }
+
+  /* ───────────── 설정: 분류 ───────────── */
+  async function saveSettings(payload, okMsg) {
+    try { await D.api('hhSettings', payload); saveCache(); if (okMsg) toast(okMsg); return true; }
+    catch (ex) { toast(`저장하지 못했습니다: ${ex.message}`, true); load(); return false; }
+  }
+  function renameLocal(rn) {
+    const fix = o => {
+      if (rn.what === 'asset') { if (o.asset === rn.from) o.asset = rn.to; if (o.to === rn.from) o.to = rn.to; }
+      else if (o.type === rn.type) {
+        if (rn.what === 'cat' && o.cat === rn.from) o.cat = rn.to;
+        if (rn.what === 'sub' && o.cat === rn.cat && o.sub === rn.from) o.sub = rn.to;
+      }
+    };
+    H.tx.forEach(fix); H.rules.forEach(fix); reindex();
+  }
+  function listEditor(pg, { items, label, sub, onOpen, onRename, onDelete, onMove }) {
+    const body = $('.hh-pbody', pg);
+    body.innerHTML = `<div class="card se-list">${items.map((it, i) => `<div class="se-row" data-i="${i}">
+      <button class="se-del" data-del="${i}" aria-label="${esc(label(it))} 삭제">${ico.del}</button>
+      <button class="se-name" data-open="${i}" ${onOpen ? '' : 'tabindex="-1"'}><span>${esc(label(it))}</span>${sub ? `<small>${esc(sub(it))}</small>` : ''}</button>
+      <button class="se-ed" data-ren="${i}" aria-label="이름 바꾸기">${ico.pen}</button>
+      <span class="se-drag" data-drag="${i}" aria-label="끌어서 순서 바꾸기">${ico.drag}</span>
+    </div>`).join('') || '<p class="empty">항목이 없습니다. 오른쪽 위 + 로 추가하십시오.</p>'}</div>
+    <p class="note">≡ 를 끌어서 순서를 바꿉니다. 이름을 바꾸면 지난 내역의 이름도 함께 바뀝니다.</p>`;
+    $$('[data-open]', body).forEach(b => b.onclick = () => onOpen && onOpen(Number(b.dataset.open)));
+    $$('[data-ren]', body).forEach(b => b.onclick = () => onRename(Number(b.dataset.ren)));
+    $$('[data-del]', body).forEach(b => b.onclick = () => onDelete(Number(b.dataset.del)));
+    dragSort($('.se-list', body), onMove);
+  }
+  // 손가락으로 ≡ 를 끌어 순서 바꾸기
+  function dragSort(list, onMove) {
+    if (!list) return;
+    $$('.se-drag', list).forEach(h => {
+      h.onpointerdown = ev => {
+        ev.preventDefault();
+        const row = h.closest('.se-row'), rows = $$('.se-row', list), from = rows.indexOf(row);
+        const rh = row.offsetHeight, startY = ev.clientY;
+        let to = from;
+        row.classList.add('dragging');
+        h.setPointerCapture(ev.pointerId);
+        const move = e2 => {
+          const dy = e2.clientY - startY;
+          row.style.transform = `translateY(${dy}px)`;
+          to = Math.max(0, Math.min(rows.length - 1, from + Math.round(dy / rh)));
+          rows.forEach((r, i) => {
+            if (r === row) return;
+            let sh = 0;
+            if (from < to && i > from && i <= to) sh = -rh;
+            if (from > to && i < from && i >= to) sh = rh;
+            r.style.transform = sh ? `translateY(${sh}px)` : '';
+          });
+        };
+        const up = () => {
+          h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up);
+          rows.forEach(r => { r.style.transform = ''; }); row.classList.remove('dragging');
+          if (to !== from) onMove(from, to);
+        };
+        h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+      };
+    });
+  }
+  const moveItem = (arr, a, b) => { const [x] = arr.splice(a, 1); arr.splice(b, 0, x); };
+
+  function openCatSettings(type) {
+    const pg = pushPage({ title: `${type} 분류`, actions: `<button class="icon-btn" id="cAdd" aria-label="분류 추가">${ico.plus}</button>`, body: '', refresh: p => draw(p) });
+    const used = name => H.tx.some(t => t.type === type && t.cat === name);
+    function draw(p = pg) {
+      const list = H.cats[type];
+      listEditor(p, {
+        items: list, label: c => `${c.name} (${c.subs.length})`, sub: c => c.subs.join(', '),
+        onOpen: i => openSubSettings(type, list[i]),
+        onRename: async i => {
+          const c = list[i], v = await askText('분류 이름 바꾸기', c.name, { note: '이모지도 이름에 함께 넣을 수 있습니다.' });
+          if (!v || v === c.name) return;
+          if (list.some(x => x.name === v)) { toast('같은 이름의 분류가 있습니다', true); return; }
+          const rn = { what: 'cat', type, from: c.name, to: v };
+          c.name = v; renameLocal(rn); draw(); rerender();
+          saveSettings({ renames: [rn], cats: catsArr() }, '이름을 바꿨습니다');
+        },
+        onDelete: async i => {
+          const c = list[i];
+          if (!(await askConfirm(`'${c.name}' 분류를 지울까요?`, used(c.name) ? '이 분류로 적힌 지난 내역은 그대로 남습니다. 새로 입력할 때 목록에서만 빠집니다.' : '', '삭제'))) return;
+          list.splice(i, 1); draw(); saveSettings({ cats: catsArr() }, '분류를 지웠습니다');
+        },
+        onMove: (a, b) => { moveItem(list, a, b); draw(); saveSettings({ cats: catsArr() }); },
+      });
+    }
+    draw();
+    $('#cAdd', pg).onclick = async () => {
+      const v = await askText(`${type} 분류 추가`, '', { placeholder: '예: 🍜 식비', ok: '추가' });
+      if (!v) return;
+      if (H.cats[type].some(x => x.name === v)) { toast('같은 이름의 분류가 있습니다', true); return; }
+      H.cats[type].push({ name: v, subs: [] }); draw(); saveSettings({ cats: catsArr() }, '분류를 추가했습니다');
+    };
+  }
+  function openSubSettings(type, cat) {
+    const pg = pushPage({ title: esc(cat.name), actions: `<button class="icon-btn" id="sAdd" aria-label="소분류 추가">${ico.plus}</button>`, body: '', refresh: p => draw(p) });
+    function draw(p = pg) {
+      listEditor(p, {
+        items: cat.subs, label: s => s, sub: null, onOpen: null,
+        onRename: async i => {
+          const s = cat.subs[i], v = await askText('소분류 이름 바꾸기', s);
+          if (!v || v === s) return;
+          if (cat.subs.includes(v)) { toast('같은 이름이 있습니다', true); return; }
+          const rn = { what: 'sub', type, cat: cat.name, from: s, to: v };
+          cat.subs[i] = v; renameLocal(rn); draw(); rerender();
+          saveSettings({ renames: [rn], cats: catsArr() }, '이름을 바꿨습니다');
+        },
+        onDelete: async i => {
+          if (!(await askConfirm(`'${cat.subs[i]}' 소분류를 지울까요?`, '지난 내역은 그대로 남습니다.', '삭제'))) return;
+          cat.subs.splice(i, 1); draw(); saveSettings({ cats: catsArr() }, '소분류를 지웠습니다');
+        },
+        onMove: (a, b) => { moveItem(cat.subs, a, b); draw(); saveSettings({ cats: catsArr() }); },
+      });
+    }
+    draw();
+    $('#sAdd', pg).onclick = async () => {
+      const v = await askText('소분류 추가', '', { ok: '추가' });
+      if (!v) return;
+      if (cat.subs.includes(v)) { toast('같은 이름이 있습니다', true); return; }
+      cat.subs.push(v); draw(); saveSettings({ cats: catsArr() }, '소분류를 추가했습니다');
+    };
+  }
+
+  /* ───────────── 설정: 자산 ───────────── */
+  function openAssetSettings() {
+    const pg = pushPage({ title: '자산 설정', actions: `<button class="icon-btn" id="aAdd" aria-label="자산 추가">${ico.plus}</button>`, body: '', refresh: p => draw(p) });
+    function draw(p = pg) {
+      const groups = [...new Set(H.assets.map(a => a.group))];
+      $('.hh-pbody', p).innerHTML = groups.map(g => `<h3 class="se-gh">${esc(g)}</h3><div class="card se-list" data-g="${esc(g)}">${H.assets.filter(a => a.group === g).map(a => `
+        <div class="se-row nodel ${a.hidden ? 'hid' : ''}"><button class="se-name" data-edit="${esc(a.name)}"><span>${esc(a.name)}</span><small class="num">${won(H.bal.get(a.name) || 0)}${a.hidden ? ' · 숨김' : ''}</small></button>
+        <button class="se-ed" data-edit="${esc(a.name)}" aria-label="고치기">${ico.pen}</button><span class="se-drag" aria-label="끌어서 순서 바꾸기">${ico.drag}</span></div>`).join('')}</div>`).join('')
+        + '<p class="note">회색은 숨긴 자산입니다. 숨긴 자산은 입력할 때 목록에 나오지 않지만 합계에는 들어갑니다.</p>';
+      $$('[data-edit]', p).forEach(b => b.onclick = () => openAssetEdit(H.assets.find(a => a.name === b.dataset.edit)));
+      $$('.se-list[data-g]', p).forEach(list => dragSort(list, (a, b) => {
+        const g = list.dataset.g, idx = H.assets.map((x, i) => (x.group === g ? i : -1)).filter(i => i >= 0);
+        const item = H.assets[idx[a]];
+        H.assets.splice(idx[a], 1);
+        const idx2 = H.assets.map((x, i) => (x.group === g ? i : -1)).filter(i => i >= 0);
+        const at = b >= idx2.length ? idx2.at(-1) + 1 : idx2[b];
+        H.assets.splice(at, 0, item);
+        draw(); saveSettings({ assets: assetsArr() });
+      }));
+    }
+    draw();
+    $('#aAdd', pg).onclick = () => openAssetEdit({ name: '', group: H.assets.at(-1)?.group || '현금', hidden: false, memo: '', isNew: true });
+  }
+  function openAssetEdit(a) {
+    const isNew = !!a.isNew;
+    const groups = [...new Set(H.assets.map(x => x.group))];
+    const used = !isNew && H.tx.some(t => t.asset === a.name || t.to === a.name);
+    const pg = pushPage({
+      title: isNew ? '자산 추가' : '자산 고치기', cls: 'hf-page',
+      actions: !isNew ? `<button class="icon-btn" id="eDel" aria-label="자산 삭제">${ico.trash}</button>` : '',
+      body: `<div class="hf">
+        <div class="hf-row"><span class="hf-l">이름</span><div class="hf-v"><input id="eName" value="${esc(a.name)}" maxlength="80" autocomplete="off"></div></div>
+        <div class="hf-row"><span class="hf-l">그룹</span><div class="hf-v"><select id="eGroup" class="hf-sel wide">${groups.map(g => `<option ${g === a.group ? 'selected' : ''}>${esc(g)}</option>`).join('')}<option value="__new">+ 새 그룹</option></select></div></div>
+        ${isNew ? `<div class="hf-row"><span class="hf-l">시작 잔액</span><div class="hf-v"><input id="eBal" inputmode="numeric" placeholder="0" autocomplete="off"><span class="hf-unit">원</span></div></div>
+          <p class="hf-info">대출처럼 갚을 돈은 앞에 −를 붙입니다.</p>` : ''}
+        <label class="hf-switch"><span>숨기기</span><input type="checkbox" id="eHide" ${a.hidden ? 'checked' : ''}><i></i></label>
+        <textarea id="eMemo" class="hf-memo" rows="2" placeholder="메모">${esc(a.memo || '')}</textarea>
+        <p class="form-error" id="eErr" role="alert"></p>
+        <div class="hf-btns"><button class="btn hf-save memo" id="eSave">저장하기</button></div></div>`,
+    });
+    const bal = $('#eBal', pg); if (bal) bindMoneyInput(bal, true);
+    $('#eGroup', pg).onchange = async ev => {
+      if (ev.target.value !== '__new') return;
+      const g = await askText('새 그룹 이름', '', { ok: '추가' });
+      const sel = $('#eGroup', pg);
+      if (!g) { sel.value = a.group || groups[0]; return; }
+      const o = document.createElement('option'); o.textContent = g; sel.insertBefore(o, sel.lastElementChild); sel.value = g;
+    };
+    $('#eSave', pg).onclick = async () => {
+      const name = $('#eName', pg).value.trim(), group = $('#eGroup', pg).value, hidden = $('#eHide', pg).checked, memo = $('#eMemo', pg).value.trim();
+      const err = $('#eErr', pg);
+      if (!name) { err.textContent = '이름을 입력하십시오.'; return; }
+      if (group === '__new') { err.textContent = '그룹을 고르십시오.'; return; }
+      if (H.assets.some(x => x.name === name && x !== a)) { err.textContent = '같은 이름의 자산이 있습니다.'; return; }
+      const payload = {};
+      if (isNew) {
+        const exists = H.assets.some(x => x.name === name);
+        if (!exists) {
+          const lastIdx = H.assets.map(x => x.group).lastIndexOf(group);
+          const item = { group, name, hidden, memo };
+          if (lastIdx >= 0) H.assets.splice(lastIdx + 1, 0, item); else H.assets.push(item);
+        }
+      } else {
+        if (name !== a.name) { payload.renames = [{ what: 'asset', from: a.name, to: name }]; renameLocal(payload.renames[0]); }
+        if (group !== a.group) {
+          H.assets.splice(H.assets.indexOf(a), 1);
+          const lastIdx = H.assets.map(x => x.group).lastIndexOf(group);
+          if (lastIdx >= 0) H.assets.splice(lastIdx + 1, 0, a); else H.assets.push(a);
+        }
+        Object.assign(a, { name, group, hidden, memo });
+      }
+      payload.assets = assetsArr();
+      const btn = $('#eSave', pg); btn.disabled = true; btn.textContent = '저장 중…';
+      const ok = await saveSettings(payload, isNew ? '자산을 추가했습니다' : '자산을 고쳤습니다');
+      if (!ok) { btn.disabled = false; btn.textContent = '저장하기'; return; }
+      back(); rerender();
+      const v = bal ? moneyVal(bal.value) : NaN;
+      if (isNew && Number.isFinite(v) && v) {
+        const d = new Date();
+        commitTx(toTx([newId('n'), `${dOf(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`, '수정', '잔액수정', '', '시작 잔액', v, name, '', '', '', '', '', store.get('dh_name') || '']), null);
+      }
+    };
+    const del = $('#eDel', pg);
+    if (del) del.onclick = async () => {
+      if (used) { toast('내역이 있는 자산은 지울 수 없습니다. 숨기기를 켜십시오.', true); return; }
+      if (!(await askConfirm(`'${a.name}' 자산을 지울까요?`, '', '삭제'))) return;
+      H.assets.splice(H.assets.indexOf(a), 1);
+      if (await saveSettings({ assets: assetsArr() }, '자산을 지웠습니다')) { back(); rerender(); }
+    };
+    if (isNew) setTimeout(() => $('#eName', pg).focus(), 280);
+  }
+
+  /* ───────────── 설정: 매월 반복 ───────────── */
+  function openRules() {
+    const pg = pushPage({ title: '매월 반복 내역', actions: `<button class="icon-btn" id="rAdd" aria-label="반복 내역 추가">${ico.plus}</button>`, body: '', refresh: p => draw(p) });
+    function draw(p = pg) {
+      const cur = ymOf(new Date());
+      const act = H.rules.filter(r => !r.end || r.end >= cur).sort((a, b) => a.day - b.day);
+      const ended = H.rules.filter(r => r.end && r.end < cur);
+      const row = r => `<button class="hr" data-rule="${esc(r.id)}">
+        <span class="hr-l"><span class="hr-cat">매월 ${r.day}일</span>${r.type === '이체' ? '<small>이체</small>' : `<small>${esc(r.cat)}</small>`}</span>
+        <span class="hr-m"><span class="hr-t">${esc(r.text || r.sub || r.cat)}</span><span class="hr-s">${r.type === '이체' ? `${esc(r.asset)} → ${esc(r.to)}` : esc(r.asset)}${r.end ? ` · ${r.end}까지` : ''}</span></span>
+        <span class="hr-r"><b class="num ${r.type === '수입' ? 'inc' : r.type === '지출' ? 'exp' : 'tr'}">${won(r.amt)}</b></span></button>`;
+      const tot = act.filter(r => r.type === '지출').reduce((a, r) => a + r.amt, 0);
+      $('.hh-pbody', p).innerHTML = `
+        <div class="card hs-sum num"><span>${act.length}개</span><span class="exp">매월 지출 ${won(tot)}</span></div>
+        ${act.length ? `<section class="card hd">${act.map(row).join('')}</section>` : '<p class="empty">반복 내역이 없습니다.</p>'}
+        ${ended.length ? `<h3 class="se-gh">끝난 반복</h3><section class="card hd">${ended.map(row).join('')}</section>` : ''}
+        <p class="note">그 날짜가 지난 뒤 앱을 처음 열 때 자동으로 들어갑니다. 이미 들어간 내역은 각각 고칠 수 있습니다.</p>`;
+      $$('[data-rule]', p).forEach(b => b.onclick = () => openForm({ mode: 'rule', rule: H.rules.find(r => r.id === b.dataset.rule) }));
+    }
+    draw();
+    $('#rAdd', pg).onclick = () => openForm({ mode: 'rule' });
+  }
+
+  /* ───────────── 시작·전환 ───────────── */
+  function enter() {
+    H.active = true;
+    if (!H.loaded) loadCache();
+    render();
+    requestAnimationFrame(() => { setTopH(); const y = Number(sess.get(`dh_scroll_hh_${H.view}`)) || 0; if (y) window.scrollTo({ top: y }); });
+    load();
+  }
+  function leave() { H.active = false; closeAllPages(); $('#hhFab').hidden = true; }
+  function bindOnce() {
+    $$('#hhTabs .htab').forEach(t => t.onclick = () => goView(t.dataset.hv));
+    $('#hhFab').onclick = () => { if (H.btab === 'memo') openMemo(null); else openForm({ date: H.btab === 'cal' && H.calDay ? H.calDay : (H.ym === ymOf(new Date()) ? today() : `${H.ym}-01`) }); };
+    $('#hhSearchBtn').onclick = () => openSearch();
+    window.addEventListener('resize', setTopH);
+  }
+  bindOnce();
+
+  window.HH = {
+    enter, leave, load, render,
+    scrollKey: () => `dh_scroll_hh_${H.view}`,
+    clear() { H.loaded = false; H.tx = []; reindex(); store.del(CACHE); },
+  };
+})();

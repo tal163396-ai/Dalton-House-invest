@@ -21,6 +21,8 @@
   const state = {
     data: null,
     view: ['home', 'record', 'years', 'assets'].includes(sess.get('dh_view')) ? sess.get('dh_view') : 'home',
+    app: store.get('dh_app') === 'hh' ? 'hh' : 'inv',   // inv = 투자, hh = 가계부
+    loadedAt: 0,
     mode: store.get(LS.mode) || 'weight',
     basis: store.get('dh_basis') === 'cost' ? 'cost' : 'value',
     sort: store.get(LS.sort) || 'cost',
@@ -70,13 +72,16 @@
   }
 
   let pendingScroll = null;
+  let spinN = 0;
+  function spin(on) { spinN = Math.max(0, spinN + (on ? 1 : -1)); $('.topbar').classList.toggle('loading', spinN > 0); }
   async function load({ quiet = false } = {}) {
     const btn = $('#refreshBtn');
-    btn.classList.add('spin');
+    btn.classList.add('spin'); spin(true);
     try {
       const j = await api('data');
-      state.data = prepare(j.data);
+      state.data = prepare(j.data); state.loadedAt = Date.now();
       store.set(LS.cache, JSON.stringify(j.data));
+      if (state.app === 'hh') { pendingScroll = null; render(); return; }
       const y = pendingScroll ?? window.scrollY; pendingScroll = null; render(); requestAnimationFrame(() => window.scrollTo({ top: y }));
       if (!quiet) toast('최신 데이터로 갱신했습니다');
     } catch (e) {
@@ -84,7 +89,7 @@
       toast(state.data ? `새로고침 실패: ${e.message}` : `불러오기 실패: ${e.message}`, true);
       if (!state.data) $('#view-home').innerHTML = `<div class="card"><p class="empty">데이터를 불러오지 못했습니다.<br>${esc(e.message)}<br><br>인터넷 연결을 확인하고 새로고침을 누르십시오.</p></div>`;
     } finally {
-      btn.classList.remove('spin');
+      btn.classList.remove('spin'); spin(false);
     }
   }
 
@@ -162,6 +167,7 @@
     if (D.bad.length) { banner.hidden = false; banner.textContent = `시세를 불러오지 못한 종목이 있습니다: ${D.bad.join(', ')}. 잠시 후 새로고침하십시오.`; }
     else banner.hidden = true;
     renderHome(); renderRecord(); renderYears(); renderAssets();
+    if (state.app === 'hh') $$('.view:not(.hh-view)').forEach(v => { v.hidden = true; });
   }
 
   /* ── 포트폴리오 ── */
@@ -1884,9 +1890,33 @@
     }
   }
 
+  /* ───────────── 투자 ↔ 가계부 전환 (오른쪽 위 돼지 아이콘) ───────────── */
+  const scrollKey = () => (state.app === 'hh' && window.HH ? window.HH.scrollKey() : `dh_scroll_${state.view}`);
+  function setApp(mode, initial = false) {
+    if (mode === 'hh' && !window.HH) mode = 'inv';
+    if (!initial) sess.set(scrollKey(), Math.round(window.scrollY));
+    state.app = mode; store.set('dh_app', mode);
+    document.body.classList.toggle('hh-mode', mode === 'hh');
+    $('#invTabs').hidden = mode === 'hh'; $('#hhTabs').hidden = mode !== 'hh';
+    const sw = $('#appSwitch');
+    sw.setAttribute('aria-label', mode === 'hh' ? '투자 화면으로' : '가계부로'); sw.title = mode === 'hh' ? '투자 화면으로' : '가계부로';
+    if (mode === 'hh') {
+      $$('.view:not(.hh-view)').forEach(v => { v.hidden = true; });
+      window.HH.enter();
+    } else {
+      if (window.HH) window.HH.leave();
+      $$('.hh-view').forEach(v => { v.hidden = true; });
+      go(state.view, true);
+      const y = sessNum(`dh_scroll_${state.view}`);
+      requestAnimationFrame(() => window.scrollTo({ top: y }));
+      if (!initial && store.get(LS.pw) && Date.now() - state.loadedAt > 120000) load({ quiet: true });
+    }
+  }
+
   /* ───────────── 공통 UI ───────────── */
   function go(view, keepY = false) {
     state.view = view; sess.set('dh_view', view);
+    if (state.app === 'hh') return;
     $$('.view').forEach(v => { v.hidden = v.id !== `view-${view}`; });
     $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
     if (!keepY) window.scrollTo({ top: 0 });
@@ -1947,6 +1977,8 @@
 
   function logout(msg = '') {
     store.del(LS.pw); store.del(LS.cache);
+    if (window.HH) { window.HH.leave(); window.HH.clear(); }
+    document.body.classList.remove('hh-mode');
     state.data = null;
     $('#pwInput').value = '';
     showLogin(msg);
@@ -1959,7 +1991,8 @@
       try { state.data = prepare(JSON.parse(cached)); render(); } catch { /* 캐시 손상 무시 */ }
     }
     if (!state.data) $('#view-home').innerHTML = '<div class="skeleton"></div><div class="skeleton" style="height:380px"></div>';
-    go(state.view, true);
+    if (state.app === 'hh' && window.HH) { setApp('hh', true); return; }   // 가계부 데이터는 HH가 불러옴
+    setApp('inv', true);
     const sy = sessNum(`dh_scroll_${state.view}`);
     pendingScroll = sy;
     requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: sy })));
@@ -1968,7 +2001,7 @@
 
   /* ── 숫자 가리기 (다른 사람에게 화면을 보여줄 때) ── */
   const MASK_RES = [
-    /[+\-−]?\$\d[\d,.]*/g,                                   // 달러 금액
+    /[+\-−]?\$\s?\d[\d,.]*/g,                                // 달러 금액 (US$ 584.92 포함)
     /[+\-−]?\d[\d,.]*(?=\s*(?:억|만|원|%|%p|주))/g,            // 단위가 붙은 숫자
     /[+\-−]?\d{1,3}(?:,\d{3})+(?:\.\d+)?/g,                   // 콤마 숫자
   ];
@@ -2019,7 +2052,8 @@
         state.data = prepare(j.data);
         store.set(LS.cache, JSON.stringify(j.data));
         $('#login').hidden = true; $('#app').hidden = false;
-        render(); go(state.view);
+        state.loadedAt = Date.now();
+        render(); setApp(state.app, true);
       } catch (err) {
         if (err.code === 'auth') store.del(LS.pw);
         $('#loginError').textContent = err.code === 'auth' ? '비밀번호가 틀렸습니다.' : `연결 실패: ${err.message}`;
@@ -2029,6 +2063,7 @@
     });
     $$('.tab').forEach(t => t.onclick = () => go(t.dataset.view));
     $('#refreshBtn').onclick = () => load();
+    $('#appSwitch').onclick = () => setApp(state.app === 'hh' ? 'inv' : 'hh');
     $('#maskBtn').onclick = () => setMask(!document.body.classList.contains('masked'));
     setMask(store.get('dh_mask') === '1', true);
     $('#menuBtn').onclick = openMenu;
@@ -2036,14 +2071,26 @@
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
     let rT; window.addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(() => { if (state.view === 'home') drawPlan(); }, 120); });
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') sess.set(`dh_scroll_${state.view}`, Math.round(window.scrollY));
-      if (document.visibilityState === 'visible' && state.data && store.get(LS.pw)) load({ quiet: true });
+      if (document.visibilityState === 'hidden') sess.set(scrollKey(), Math.round(window.scrollY));
+      if (document.visibilityState !== 'visible' || !store.get(LS.pw) || $('#app').hidden) return;
+      if (state.app === 'hh' && window.HH) window.HH.load();
+      else if (state.data) load({ quiet: true });
     });
-    let sT; window.addEventListener('scroll', () => { clearTimeout(sT); sT = setTimeout(() => sess.set(`dh_scroll_${state.view}`, Math.round(window.scrollY)), 150); }, { passive: true });
+    let sT; window.addEventListener('scroll', () => {
+      if (document.documentElement.classList.contains('hh-locked')) return;
+      clearTimeout(sT); sT = setTimeout(() => sess.set(scrollKey(), Math.round(window.scrollY)), 150);
+    }, { passive: true });
   }
 
-  bind();
-  if (store.get(LS.pw) && store.get(LS.name)) startApp(); else showLogin();
+  // 가계부(hh.js)가 쓰는 공용 도구
+  window.DH = { $, $$, esc, api, toast, openSheet, closeSheet, store, sess, logout: msg => logout(msg), spin, setApp: m => setApp(m) };
+
+  // hh.js까지 읽힌 뒤 시작
+  function boot() {
+    bind();
+    if (store.get(LS.pw) && store.get(LS.name)) startApp(); else showLogin();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else setTimeout(boot, 0);
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {

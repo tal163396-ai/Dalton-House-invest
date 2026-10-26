@@ -6,6 +6,7 @@
  *  2) 앱에서 입력한 매수·매도·입금·출금을 시트에 기록하고 보유현황을 자동으로 고침
  *  3) 모빅(BMB) 시세를 3시간마다 갱신
  *  4) 매달 말일 자산별 원금·평가금을 '월말평가' 탭에 저장
+ *  5) 가계부(수입·지출·이체) 읽기·쓰기, 매월 반복 내역 자동 입력
  *
  * 설치: 시트 상단 메뉴 [Dalton House] → [① 처음 설정] 을 한 번 누르면 끝.
  * 이 파일에는 비밀번호가 들어있지 않습니다 (스크립트 속성에 암호화해 저장).
@@ -107,6 +108,10 @@ function doPost(e) {
       case 'trade':  return json_(withLock_(() => recordTrade_(req.trade)));
       case 'manual': return json_(withLock_(() => setManual_(req.manual)));
       case 'month':  return json_(withLock_(() => saveMonth_(req.month)));
+      case 'hh':        return json_({ ok: true, hh: readHH_() });
+      case 'hhSave':    return json_(withLock_(() => hhSave_(req)));
+      case 'hhDel':     return json_(withLock_(() => hhDel_(req)));
+      case 'hhSettings':return json_(withLock_(() => hhSettings_(req)));
       default:       return json_({ ok: false, error: '알 수 없는 요청' });
     }
   } catch (err) {
@@ -556,6 +561,266 @@ function ensureHeaders_(name, headers) {
     head.splice(end, 0, h); end++;
   });
 }
+
+/* ───────────────────────── 가계부 (편한가계부 대신) ─────────────────────────
+ * 가계부        : 내역 한 줄 = 수입·지출·이체·수정(잔액 수정). 금액은 원화. 수정은 +늘림 / −줄임
+ * 가계부분류    : 구분(수입/지출) · 분류 · 소분류(' | '로 구분)
+ * 가계부자산    : 그룹 · 자산 · 숨김(Y) · 메모   (위에서부터 화면 순서)
+ * 가계부반복    : 매월 같은 날 자동으로 들어가는 내역 (앱을 열 때 밀린 달까지 채움)
+ * 가계부메모    : 날짜별 메모
+ * 일시·ID 칸은 글자 서식(구글 시트가 날짜로 바꾸지 않게) */
+
+const HH_TABS = {
+  '가계부':     ['ID', '일시', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '화폐', '외화금액', '반복', '입력자'],
+  '가계부분류': ['구분', '분류', '소분류'],
+  '가계부자산': ['그룹', '자산', '숨김', '메모'],
+  '가계부반복': ['ID', '주기', '일', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '시작', '종료', '마지막생성'],
+  '가계부메모': ['ID', '날짜', '내용', '입력자'],
+};
+const HH_TEXT = { '가계부': ['ID', '일시'], '가계부반복': ['ID', '시작', '종료', '마지막생성'], '가계부메모': ['ID', '날짜'] };
+const HH_KIND = { tx: '가계부', rule: '가계부반복', memo: '가계부메모' };
+
+function readHH_() {
+  if (!SpreadsheetApp.getActive().getSheetByName('가계부')) return { ready: false };
+  const made = withLock_(() => { hhEnsure_(); return hhRunRules_(); });
+  const read = name => hhRows_(name).rows;
+  return {
+    ready: true, made,
+    tx: read('가계부'), cats: read('가계부분류'), assets: read('가계부자산'), rules: read('가계부반복'), memos: read('가계부메모'),
+  };
+}
+
+/** 탭이 없으면 만들고, 머리글이 빠졌으면 채움 */
+function hhEnsure_() {
+  const ss = SpreadsheetApp.getActive();
+  Object.keys(HH_TABS).forEach(name => {
+    const sh = ss.getSheetByName(name);
+    if (!sh) {
+      const n = ss.insertSheet(name);
+      n.getRange(1, 1, 1, HH_TABS[name].length).setValues([HH_TABS[name]]).setFontWeight('bold');
+      n.setFrozenRows(1);
+    } else ensureHeaders_(name, HH_TABS[name]);
+  });
+}
+
+/** 탭의 내용을 HH_TABS 순서의 배열로 (빈 줄 제외). ID가 빈 줄은 ID를 만들어 채움 */
+function hhRows_(name) {
+  const t = table_(name), F = HH_TABS[name], rows = [], fill = [];
+  for (let r = 1; r < t.values.length; r++) {
+    const v = t.values[r];
+    const a = F.map(h => (h in t.col ? hhVal_(v[t.col[h]], h) : ''));
+    if (a.every(x => x === '' || x === null)) continue;
+    if (F[0] === 'ID' && !String(a[0]).trim()) { a[0] = 'm' + Date.now().toString(36) + r; fill.push([r + 1, a[0]]); }
+    rows.push(a);
+  }
+  if (fill.length && 'ID' in t.col) fill.forEach(([row, id]) => t.sh.getRange(row, t.col['ID'] + 1).setNumberFormat('@').setValue(id));
+  return { rows };
+}
+
+function hhVal_(v, h) {
+  if (v instanceof Date) {
+    const f = h === '일시' ? 'yyyy-MM-dd HH:mm:ss' : (h === '시작' || h === '종료' || h === '마지막생성') ? 'yyyy-MM' : 'yyyy-MM-dd';
+    return Utilities.formatDate(v, sheetTz_(), f);
+  }
+  if (typeof v === 'number' && !isFinite(v)) return '';
+  if (typeof v === 'string') return v.trim();
+  return v;
+}
+
+function hhHead_(sh) {
+  const head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(h => String(h).trim());
+  const end = head.indexOf('');
+  return end < 0 ? head : head.slice(0, end);
+}
+
+function hhTextFormat_(sh, name, head, row, n) {
+  (HH_TEXT[name] || []).forEach(h => { const i = head.indexOf(h); if (i >= 0) sh.getRange(row, i + 1, n, 1).setNumberFormat('@'); });
+}
+
+function hhFindRow_(sh, head, id) {
+  const idc = head.indexOf('ID') + 1, last = sh.getLastRow();
+  if (!idc || last < 2) return 0;
+  const ids = sh.getRange(2, idc, last - 1, 1).getValues();
+  for (let i = ids.length - 1; i >= 0; i--) if (String(ids[i][0]).trim() === id) return i + 2;
+  return 0;
+}
+
+/** ID가 같은 줄은 고치고, 없으면 맨 아래에 추가 */
+function hhUpsert_(name, obj) {
+  const sh = sheet_(name), head = hhHead_(sh);
+  let row = hhFindRow_(sh, head, obj.ID), vals;
+  if (row) vals = sh.getRange(row, 1, 1, head.length).getValues()[0];
+  else { row = sh.getLastRow() + 1; vals = head.map(() => ''); }
+  head.forEach((h, i) => { if (h in obj) vals[i] = obj[h]; });
+  hhTextFormat_(sh, name, head, row, 1);
+  sh.getRange(row, 1, 1, head.length).setValues([vals]);
+  return HH_TABS[name].map(h => (h in obj ? obj[h] : hhVal_(vals[head.indexOf(h)], h)));
+}
+
+const hhStr_ = (v, max) => String(v === null || v === undefined ? '' : v).trim().slice(0, max || 300);
+function hhId_(v) {
+  const id = hhStr_(v, 40);
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error('ID가 올바르지 않습니다');
+  return id;
+}
+function hhAmt_(v) {
+  const n = Math.round(Number(v));
+  if (!isFinite(n)) throw new Error('금액이 올바르지 않습니다');
+  return n;
+}
+
+function hhTx_(t) {
+  const o = {
+    'ID': hhId_(t['ID']), '일시': hhStr_(t['일시'], 19), '구분': hhStr_(t['구분'], 4),
+    '분류': hhStr_(t['분류'], 60), '소분류': hhStr_(t['소분류'], 60), '내용': hhStr_(t['내용'], 200), '금액': hhAmt_(t['금액']),
+    '자산': hhStr_(t['자산'], 80), '받는자산': hhStr_(t['받는자산'], 80), '메모': hhStr_(t['메모'], 2000),
+    '화폐': hhStr_(t['화폐'], 5), '외화금액': t['외화금액'] === '' || t['외화금액'] === undefined ? '' : Number(t['외화금액']),
+    '반복': hhStr_(t['반복'], 40), '입력자': hhStr_(t['입력자'], 20),
+  };
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(o['일시'])) o['일시'] += ':00';
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(o['일시'])) throw new Error('날짜가 올바르지 않습니다');
+  if (['수입', '지출', '이체', '수정'].indexOf(o['구분']) < 0) throw new Error('구분이 올바르지 않습니다');
+  if (o['구분'] !== '수정' && !(o['금액'] > 0)) throw new Error('금액을 입력하세요');
+  if (!o['자산']) throw new Error('자산을 고르세요');
+  if (o['구분'] === '이체') {
+    if (!o['받는자산']) throw new Error('입금 자산을 고르세요');
+    if (o['받는자산'] === o['자산']) throw new Error('출금·입금 자산이 같습니다');
+    o['분류'] = ''; o['소분류'] = '';
+  } else o['받는자산'] = '';
+  return o;
+}
+
+function hhRule_(t) {
+  const o = hhTx_(Object.assign({}, t, { '일시': '2000-01-01 00:00:00' }));
+  delete o['일시']; delete o['반복']; delete o['입력자']; delete o['화폐']; delete o['외화금액'];
+  o['주기'] = '매월';
+  o['일'] = Math.min(31, Math.max(1, Math.round(Number(t['일'])) || 1));
+  ['시작', '종료', '마지막생성'].forEach(h => {
+    o[h] = hhStr_(t[h], 7);
+    if (o[h] && !/^\d{4}-\d{2}$/.test(o[h])) throw new Error(`${h} 달이 올바르지 않습니다`);
+  });
+  if (!o['시작']) throw new Error('시작 달이 없습니다');
+  return o;
+}
+
+function hhMemo_(t) {
+  const o = { 'ID': hhId_(t['ID']), '날짜': hhStr_(t['날짜'], 10), '내용': hhStr_(t['내용'], 5000), '입력자': hhStr_(t['입력자'], 20) };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(o['날짜'])) throw new Error('날짜가 올바르지 않습니다');
+  if (!o['내용']) throw new Error('메모 내용이 없습니다');
+  return o;
+}
+
+/** req = { tx?, rule?, memo? } — 반복 내역을 새로 만들 때는 tx와 rule을 함께 보냄 */
+function hhSave_(req) {
+  hhEnsure_();
+  const out = { ok: true };
+  if (req.rule) out.rule = hhUpsert_('가계부반복', hhRule_(req.rule));
+  if (req.tx) out.tx = hhUpsert_('가계부', hhTx_(req.tx));
+  if (req.memo) out.memo = hhUpsert_('가계부메모', hhMemo_(req.memo));
+  return out;
+}
+
+/** req = { kind: 'tx'|'rule'|'memo', id } */
+function hhDel_(req) {
+  const name = HH_KIND[req.kind];
+  if (!name) throw new Error('삭제할 종류가 올바르지 않습니다');
+  const id = hhId_(req.id), sh = sheet_(name);
+  const row = hhFindRow_(sh, hhHead_(sh), id);
+  if (!row) return { ok: true, message: '이미 지워진 내역입니다' };
+  sh.deleteRow(row);
+  return { ok: true };
+}
+
+/** req = { renames?: [{what:'asset'|'cat'|'sub', type, cat, from, to}], cats?: [[구분,분류,소분류]], assets?: [[그룹,자산,숨김,메모]] } */
+function hhSettings_(req) {
+  hhEnsure_();
+  (req.renames || []).forEach(hhRename_);
+  if (req.cats) hhRewrite_('가계부분류', req.cats.map(r => [hhStr_(r[0], 4), hhStr_(r[1], 60), hhStr_(r[2], 2000)]).filter(r => r[1]));
+  if (req.assets) hhRewrite_('가계부자산', req.assets.map(r => [hhStr_(r[0], 30), hhStr_(r[1], 80), r[2] ? 'Y' : '', hhStr_(r[3], 200)]).filter(r => r[1]));
+  return { ok: true };
+}
+
+function hhRewrite_(name, rows) {
+  const sh = sheet_(name), head = hhHead_(sh), F = HH_TABS[name];
+  const last = sh.getLastRow();
+  if (last > 1) sh.getRange(2, 1, last - 1, head.length).clearContent();
+  if (!rows.length) return;
+  const vals = rows.map(r => head.map(h => { const i = F.indexOf(h); return i >= 0 ? r[i] : ''; }));
+  sh.getRange(2, 1, vals.length, head.length).setValues(vals);
+}
+
+/** 이름 바꾸기: 지난 내역·반복 내역에 적힌 이름도 함께 바꿈 */
+function hhRename_(rn) {
+  const from = hhStr_(rn.from, 80), to = hhStr_(rn.to, 80);
+  if (!from || !to || from === to) return;
+  ['가계부', '가계부반복'].forEach(name => {
+    const t = table_(name), c = t.col, changed = {};
+    const get = (v, h) => (h in c ? String(v[c[h]]).trim() : '');
+    for (let r = 1; r < t.values.length; r++) {
+      const v = t.values[r];
+      if (rn.what === 'asset') {
+        ['자산', '받는자산'].forEach(h => { if (get(v, h) === from) { v[c[h]] = to; changed[h] = true; } });
+      } else if (get(v, '구분') === rn.type) {
+        if (rn.what === 'cat' && get(v, '분류') === from) { v[c['분류']] = to; changed['분류'] = true; }
+        if (rn.what === 'sub' && get(v, '분류') === rn.cat && get(v, '소분류') === from) { v[c['소분류']] = to; changed['소분류'] = true; }
+      }
+    }
+    Object.keys(changed).forEach(h => {
+      const col = c[h];
+      t.sh.getRange(2, col + 1, t.values.length - 1, 1).setValues(t.values.slice(1).map(v => [v[col]]));
+    });
+  });
+}
+
+/** 반복 내역: 마지막으로 만든 달 다음 달부터 이번 달(오늘 날짜까지)까지 채움 */
+function hhRunRules_() {
+  const rt = table_('가계부반복'), c = rt.col;
+  if (rt.values.length < 2) return 0;
+  const now = new Date();
+  const ym = Utilities.formatDate(now, TZ, 'yyyy-MM'), today = Number(Utilities.formatDate(now, TZ, 'd'));
+  const add = [], done = [];
+  for (let r = 1; r < rt.values.length; r++) {
+    const v = rt.values[r], g = h => (h in c ? hhVal_(v[c[h]], h) : '');
+    const id = String(g('ID')).trim();
+    if (!id || (g('주기') && g('주기') !== '매월')) continue;
+    const start = String(g('시작')).slice(0, 7), end = String(g('종료')).slice(0, 7), last = String(g('마지막생성')).slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(start)) continue;
+    let m = /^\d{4}-\d{2}$/.test(last) ? hhNextYm_(last) : start, made = '', guard = 0;
+    if (m < start) m = start;
+    while (m <= ym && (!end || m <= end) && guard++ < 36) {
+      const day = Math.min(Math.max(1, Math.round(num_(g('일'))) || 1), hhDays_(m));
+      if (m === ym && day > today) break;
+      add.push({
+        'ID': `${id}-${m.replace('-', '')}`, '일시': `${m}-${('0' + day).slice(-2)} 00:00:00`, '구분': g('구분'),
+        '분류': g('분류'), '소분류': g('소분류'), '내용': g('내용'), '금액': num_(g('금액')), '자산': g('자산'),
+        '받는자산': g('받는자산'), '메모': g('메모'), '반복': id, '입력자': '자동',
+      });
+      made = m; m = hhNextYm_(m);
+    }
+    if (made) done.push([r + 1, made]);
+  }
+  let n = 0;
+  if (add.length) {
+    const sh = sheet_('가계부'), head = hhHead_(sh), idc = head.indexOf('ID') + 1, last = sh.getLastRow();
+    const have = {};
+    if (idc && last > 1) sh.getRange(2, idc, last - 1, 1).getValues().forEach(x => { have[String(x[0]).trim()] = true; });
+    const rows = add.filter(o => !have[o.ID]).map(o => head.map(h => (h in o ? o[h] : '')));
+    if (rows.length) {
+      hhTextFormat_(sh, '가계부', head, last + 1, rows.length);
+      sh.getRange(last + 1, 1, rows.length, head.length).setValues(rows);
+      n = rows.length;
+    }
+  }
+  done.forEach(([row, m]) => rt.sh.getRange(row, c['마지막생성'] + 1).setNumberFormat('@').setValue(m));
+  return n;
+}
+
+function hhNextYm_(ym) {
+  let y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7)) + 1;
+  if (m > 12) { m = 1; y++; }
+  return `${y}-${('0' + m).slice(-2)}`;
+}
+function hhDays_(ym) { return new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate(); }
 
 /* ───────────────────────── 공통 도우미 ───────────────────────── */
 

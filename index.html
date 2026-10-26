@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Dalton House</title>
-<meta name="description" content="준환·나예 가족 투자 자산 현황">
+<meta name="description" content="준환·나예 가족 투자 자산과 가계부">
 <meta name="theme-color" content="#F2F4F6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#101317" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
@@ -16,7 +16,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=3">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=3">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="app.css?v=48">
+<link rel="stylesheet" href="app.css?v=49">
 </head>
 <body>
 
@@ -50,12 +50,20 @@
         <span id="updated" class="updated"></span>
       </div>
     </div>
+    <div class="hh-head" id="hhHead"></div>
+    <button id="appSwitch" class="icon-btn app-switch" aria-label="가계부로">
+      <svg class="ic-pig" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"/><path d="M2 9v1c0 1.1.9 2 2 2h1"/><path d="M16 11h.01"/></svg>
+      <svg class="ic-inv" viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 17.5l5-5 4 3.5 8-8.5"/><path d="M15 7.5h5.5V13"/></svg>
+    </button>
     <button id="maskBtn" class="icon-btn" aria-label="숫자 가리기" aria-pressed="false">
       <svg class="eye-on" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
       <svg class="eye-off" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a9.8 9.8 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
     </button>
     <button id="refreshBtn" class="icon-btn" aria-label="새로고침">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+    </button>
+    <button id="hhSearchBtn" class="icon-btn" aria-label="내역 검색">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
     </button>
     <button id="menuBtn" class="icon-btn" aria-label="설정">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
@@ -69,9 +77,13 @@
     <section id="view-record" class="view" aria-label="기록" hidden></section>
     <section id="view-years" class="view" aria-label="수익률" hidden></section>
     <section id="view-assets" class="view" aria-label="보유자산" hidden></section>
+    <section id="hh-book" class="view hh-view" aria-label="가계부" hidden></section>
+    <section id="hh-stats" class="view hh-view" aria-label="통계" hidden></section>
+    <section id="hh-assets" class="view hh-view" aria-label="자산" hidden></section>
+    <section id="hh-more" class="view hh-view" aria-label="더보기" hidden></section>
   </main>
 
-  <nav class="tabbar" aria-label="화면 이동">
+  <nav class="tabbar" id="invTabs" aria-label="화면 이동">
     <button class="tab active" data-view="home">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="10" height="11" rx="2" fill="currentColor"/><rect x="15" y="3" width="6" height="6" rx="1.6" fill="currentColor" opacity=".55"/><rect x="15" y="11" width="6" height="10" rx="1.6" fill="currentColor" opacity=".75"/><rect x="3" y="16" width="10" height="5" rx="1.6" fill="currentColor" opacity=".55"/></svg>
       <span>포트폴리오</span>
@@ -88,8 +100,32 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
       <span>기록</span>
     </button>
-</nav>
+  </nav>
+
+  <nav class="tabbar hh-tabbar" id="hhTabs" aria-label="가계부 화면 이동" hidden>
+    <button class="htab active" data-hv="book">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h11a1.5 1.5 0 0 1 1.5 1.5v14.5H7a2 2 0 0 1-2-2v-12a2 2 0 0 1 1-2z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M5 17.5a2 2 0 0 1 2-2h11.5M9 8h6M9 11.5h4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+      <span>가계부</span>
+    </button>
+    <button class="htab" data-hv="stats">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 16v-4M12 16V8.5M15.5 16v-6M19 16V6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>통계</span>
+    </button>
+    <button class="htab" data-hv="assets">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="10" cy="6.5" rx="6.5" ry="2.8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 6.5v4.5c0 1.5 2.9 2.8 6.5 2.8M3.5 11v4.5c0 1.5 2.9 2.8 6.5 2.8M16.5 6.5v3" fill="none" stroke="currentColor" stroke-width="1.8"/><ellipse cx="15.5" cy="13" rx="5.5" ry="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 13v4.5c0 1.3 2.5 2.4 5.5 2.4s5.5-1.1 5.5-2.4V13" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      <span>자산</span>
+    </button>
+    <button class="htab" data-hv="more">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="19" cy="12" r="1.9" fill="currentColor"/></svg>
+      <span>더보기</span>
+    </button>
+  </nav>
+  <button id="hhFab" class="hh-fab" aria-label="내역 입력" hidden>
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
 </div>
+
+<div id="hhLayer" class="hh-layer" hidden></div>
 
 <div id="sheet" class="sheet" hidden>
   <div class="sheet-backdrop" data-close></div>
@@ -102,6 +138,7 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script src="config.js?v=1"></script>
-<script src="app.js?v=54"></script>
+<script src="app.js?v=55"></script>
+<script src="hh.js?v=1"></script>
 </body>
 </html>
