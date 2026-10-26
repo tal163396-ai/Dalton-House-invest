@@ -97,7 +97,7 @@
       return {
         asset: String(h['자산']).trim(), kind: String(h['종류'] || '').trim(), sub: String(h['세부종목'] || h['자산']).trim(),
         ticker: h['티커'], cur: h['통화'] || 'KRW', qty: num(h['수량']), avg: num(h['평단가']),
-        cost: num(h['원금(원)']), price: num(h['현재가']), value: num(h['평가금(원)']), method: String(h['시세방식'] || ''),
+        cost: num(h['원금(원)']), price: num(h['현재가']), value: num(h['평가금(원)']), method: String(h['시세방식'] || ''), src: String(h['시세출처'] || ''),
       };
     });
 
@@ -674,7 +674,7 @@
           <div class="holding-top"><span>${esc(r.sub)}</span><span class="num">${won(r.value)}</span></div>
           ${isCash ? (r.cur === 'USD' && r.qty ? `<div class="holding-sub num"><span>${money(r.qty)}</span></div>` : '') : `
           <div class="holding-sub num">
-            <span>${r.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${r.avg ? ` · 평단 ${money(r.avg)}` : ''} · 현재 ${money(r.price)}</span>
+            <span>${r.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${r.avg ? ` · 평단 ${money(r.avg)}` : ''} · 현재 ${money(r.price)}${r.src ? ` <small class="live">● ${esc(r.src)}</small>` : ''}</span>
             <span class="${cls(unitRet)}">${unitRet === null ? '' : pct(unitRet, 1)}</span>
           </div>
           ${r.cost > 0 ? `<div class="holding-pl num"><span>원금 ${compact(r.cost)}원</span><span>평가손익 <b class="${cls(r.value - r.cost)}">${signWon(r.value - r.cost)}</b> <b class="${cls(r.value - r.cost)}">(${pct((r.value - r.cost) / r.cost, 1)})</b></span></div>` : ''}

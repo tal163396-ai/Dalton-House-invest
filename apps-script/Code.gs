@@ -120,7 +120,7 @@ function readAll_() {
   return {
     updatedAt: Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm'),
     rate: rate_(),
-    holdings: rowsAsObjects_('보유현황', o => !o['자산'] || o['자산'] === '합계'),
+    holdings: applyLiveQuotes_(rowsAsObjects_('보유현황', o => !o['자산'] || o['자산'] === '합계')),
     composition: rowsAsObjects_('연도별구성', o => !o['연도']),
     realized: rowsAsObjects_('실현손익', o => !o['날짜']),
     monthly: rowsAsObjects_('월말평가', o => !o['월']),
@@ -128,6 +128,62 @@ function readAll_() {
     index: readIndex_(),
     household: SpreadsheetApp.getActive().getSheetByName('가계부월별') ? rowsAsObjects_('가계부월별', o => !o['연도']) : [],
   };
+}
+
+/* ───────────────────────── 실시간 시세 (앱 새로고침 때마다) ─────────────────────────
+ * 국내 주식·ETF: 네이버 증권 / 이더리움: 업비트 / 모빅: CoinGecko
+ * 실패하면 시트(구글 시세) 값을 그대로 사용. 같은 종목은 60초 동안 캐시. */
+function applyLiveQuotes_(rows) {
+  const cache = CacheService.getScriptCache();
+  const jobs = [];
+  rows.forEach((o, i) => {
+    const tk = String(o['티커'] || '').trim().toUpperCase();
+    let m;
+    if ((m = tk.match(/^KRX:(\w{6})$/))) jobs.push({ i, key: 'krx_' + m[1], urls: [
+      `https://polling.finance.naver.com/api/realtime/domestic/stock/${m[1]}`,
+      `https://m.stock.naver.com/api/stock/${m[1]}/basic`], parse: parseNaver_, src: '네이버' });
+    else if (tk === 'ETH' && String(o['통화']).trim() === 'KRW') jobs.push({ i, key: 'upbit_eth', urls: ['https://api.upbit.com/v1/ticker?markets=KRW-ETH'],
+      parse: t => { const j = JSON.parse(t); return Number(j[0].trade_price); }, src: '업비트' });
+    else if (tk === 'BMB') jobs.push({ i, key: 'bmb_usd', urls: ['https://api.coingecko.com/api/v3/simple/price?ids=btcmobick&vs_currencies=usd'],
+      parse: t => Number(JSON.parse(t).btcmobick.usd), src: 'CoinGecko' });
+  });
+  if (!jobs.length) return rows;
+  const price = {};
+  const need = [];
+  jobs.forEach(j => { const c = cache.get(j.key); if (c) price[j.key] = { p: Number(c), src: j.src }; else if (!need.some(n => n.key === j.key)) need.push(j); });
+  // 1차 주소들을 한꺼번에 요청, 실패한 것만 2차 주소로
+  for (let step = 0; step < 2 && need.length; step++) {
+    const batch = need.filter(j => j.urls[step] && !price[j.key]);
+    if (!batch.length) break;
+    let res = [];
+    try { res = UrlFetchApp.fetchAll(batch.map(j => ({ url: j.urls[step], muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } }))); } catch (e) { res = []; }
+    batch.forEach((j, k) => {
+      try {
+        const r = res[k];
+        if (!r || r.getResponseCode() !== 200) return;
+        const p = j.parse(r.getContentText());
+        if (p > 0) { price[j.key] = { p, src: j.src }; cache.put(j.key, String(p), 60); }
+      } catch (e) { /* 다음 주소로 */ }
+    });
+  }
+  let rate = null;
+  jobs.forEach(j => {
+    const q = price[j.key]; if (!q) return;
+    const o = rows[j.i];
+    const qty = num_(o['수량']);
+    const usd = String(o['통화']).trim() === 'USD';
+    if (usd && rate === null) rate = rate_();
+    o['현재가'] = q.p;
+    o['평가금(원)'] = Math.round(qty * q.p * (usd ? rate : 1));
+    o['시세출처'] = q.src + ' 실시간';
+  });
+  return rows;
+}
+
+function parseNaver_(text) {
+  const j = JSON.parse(text);
+  const d = j.datas ? j.datas[0] : j;
+  return Number(String(d.closePrice || d.nv || '').replace(/,/g, ''));
 }
 
 /* ───────────────────────── 지수 비교 (누적 수익률 그래프용) ───────────────────────── */
