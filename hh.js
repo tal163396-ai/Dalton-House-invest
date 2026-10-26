@@ -68,7 +68,7 @@
     view: pick(sess.get('dh_hview'), ['book', 'stats', 'assets', 'more'], 'book'),
     btab: pick(sess.get('dh_hbtab'), ['daily', 'month', 'close', 'memo'], 'daily'),
     ym: /^\d{4}-\d{2}$/.test(sess.get('dh_hym') || '') ? sess.get('dh_hym') : ymOf(new Date()),
-    budgets: new Map(), link: new Map(),
+    budgets: new Map(), link: new Map(), inv: new Set(),
     budClosed: new Set((() => { try { return JSON.parse(store.get('dh_hbud_closed') || '[]'); } catch { return []; } })()),
     openMonths: new Set(), openInit: new Set(),
     st: {
@@ -123,9 +123,14 @@
     H.tx.forEach(t => { let l = H.byYm.get(t.ym); if (!l) H.byYm.set(t.ym, (l = [])); l.push(t); });
     const names = new Set(H.assets.map(a => a.name));
     H.link = new Map(H.assets.filter(a => a.link && a.link !== a.name && names.has(a.link)).map(a => [a.name, a.link]));
+    H.inv = new Set(H.assets.filter(a => a.link === INVLINK).map(a => a.name));
     H.bal = new Map();
     H.tx.forEach(t => applyBal(H.bal, t));
   }
+  // 투자 앱과 연결된 자산(투자 계좌): 가계부에는 보낸 돈·찾은 돈만 남고, 금액은 투자 앱의 원금을 그대로 씀
+  const INVLINK = '투자앱';
+  const invTotal = () => (D.invTotal ? D.invTotal() : null);
+  const assetVal = n => (H.inv.has(n) ? (invTotal() ? invTotal().cost : 0) : (H.bal.get(n) || 0));
   // 체크카드처럼 결제 계좌가 연결된 자산은 그 계좌의 잔액으로 계산
   const eff = a => H.link.get(a) || a;
   function applyBal(m, t) {
@@ -557,11 +562,13 @@
   /* ───────────── 자산 탭 ───────────── */
   function renderAssets() {
     let pos = 0, neg = 0;
-    H.bal.forEach(v => { if (v > 0) pos += v; else neg += v; });
+    const vals = new Map(H.bal); H.inv.forEach(n => vals.set(n, assetVal(n)));
+    vals.forEach(v => { if (v > 0) pos += v; else neg += v; });
     const groups = new Map();
     H.assets.filter(a => !a.hidden).forEach(a => { let g = groups.get(a.group); if (!g) groups.set(a.group, (g = [])); g.push(a); });
     const known = new Set(assetNames());
     const orphan = [...H.bal].filter(([k, v]) => !known.has(k) && Math.round(v) !== 0);
+    const split = H.inv.size > 0;
     const nw = pos + neg;
     const ms = Array.from({ length: 6 }, (_, i) => addMonths(ymOf(new Date()), i - 5));
     const cum = cumByMonth();
@@ -573,18 +580,22 @@
       </div>
       <div class="ha-tools"><button class="hbud-set" id="hhAAdd">${ico.plus}<span>자산 추가</span></button><button class="hbud-set" id="hhAEdit">${ico.pen}<span>표시·숨김 · 순서 · 삭제</span></button></div>
       <button class="card ha-total" id="hhTotalBtn">
-        <span class="ha-tl">누적잔액 추이 <em>전체통계 ›</em></span>
+        <span class="ha-tl">${split ? '생활 자산 추이 <small>투자 제외</small>' : '누적잔액 추이'} <em>전체통계 ›</em></span>
         ${sparkSvg(ms.map(m => cum.get(m)))}
       </button>
       ${[...groups].map(([g, list]) => {
         const own = list.filter(x => !H.link.has(x.name));
-        const gs = own.reduce((a, x) => a + (H.bal.get(x.name) || 0), 0);
+        const gs = own.reduce((a, x) => a + assetVal(x.name), 0);
         const cm = ymOf(new Date());
         return `<section class="card ha-group"><div class="ha-gh"><b>${esc(g)}</b>${own.length ? `<span class="num ${gs < 0 ? 'exp' : ''}">${won(gs)}</span>` : ''}</div>
           ${list.map(a => {
             if (H.link.has(a.name)) {
               const used = monthTx(cm).filter(t => t.asset === a.name && t.type === '지출').reduce((x, t) => x + t.amt, 0);
               return `<button class="ha-row" data-asset="${esc(a.name)}"><span>${esc(a.name)}<small>${esc(H.link.get(a.name))} 연결</small></span><b class="num ha-use">이번 달 ${won(used)}</b></button>`;
+            }
+            if (H.inv.has(a.name)) {
+              const t = invTotal();
+              return `<button class="ha-row" data-asset="${esc(a.name)}"><span>${esc(a.name)}<small>${t ? `투자 앱 원금 · 지금 평가금 ${compactWon(t.value)}원` : '투자 앱 자료를 불러오는 중입니다'}</small></span><b class="num inc">${t ? won(t.cost) : '—'}</b></button>`;
             }
             const v = H.bal.get(a.name) || 0;
             return `<button class="ha-row" data-asset="${esc(a.name)}"><span>${esc(a.name)}</span><b class="num ${v < 0 ? 'exp' : v > 0 ? 'inc' : ''}">${won(v)}</b></button>`;
@@ -593,7 +604,7 @@
       }).join('')}
       ${orphan.length ? `<section class="card ha-group"><div class="ha-gh"><b>목록에 없는 자산</b></div>${orphan.map(([k, v]) => `<button class="ha-row" data-asset="${esc(k)}"><span>${esc(k)}</span><b class="num ${v < 0 ? 'exp' : 'inc'}">${won(v)}</b></button>`).join('')}
         <p class="note">더보기 → 자산 설정에서 추가하면 그룹에 들어갑니다.</p></section>` : ''}
-      <p class="note ha-note">숨긴 자산은 목록에서 빠지지만 합계에는 들어갑니다.</p>`;
+      <p class="note ha-note">숨긴 자산은 목록에서 빠지지만 합계에는 들어갑니다.${split ? '<br>투자 계좌는 투자 앱의 원금으로 합계에 들어갑니다.' : ''}</p>`;
     $$('#hh-assets .ha-row').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
     $('#hhTotalBtn').onclick = () => openTotal(ymOf(new Date()));
     $('#hhAAdd').onclick = () => openAssetEdit(newAsset());
@@ -602,7 +613,7 @@
   const newAsset = () => ({ name: '', group: H.assets.at(-1)?.group || '현금', hidden: false, memo: '', link: '', isNew: true });
   function cumByMonth() {
     const per = new Map();
-    H.tx.forEach(t => per.set(t.ym, (per.get(t.ym) || 0) + nwDelta(t)));
+    H.tx.forEach(t => { let d = nwDelta(t); H.inv.forEach(n => { d -= flowFor(t, n); }); per.set(t.ym, (per.get(t.ym) || 0) + d); });
     const keys = [...per.keys()].sort();
     const out = new Map(); let c = 0;
     if (!keys.length) return out;
@@ -625,7 +636,7 @@
       return `
         <div class="hp-nav"><button class="hh-arrow" data-tm="-1" aria-label="이전 달">${ico.left}</button><b>${ymLabel(ym)}</b><button class="hh-arrow" data-tm="1" aria-label="다음 달">${ico.right}</button></div>
         <section class="card">
-          <span class="ht-l">누적잔액</span><div class="ht-v num">${nv.at(-1) === null ? '—' : won(nv.at(-1))}</div>
+          <span class="ht-l">${H.inv.size ? '생활 자산 (투자 제외)' : '누적잔액'}</span><div class="ht-v num">${nv.at(-1) === null ? '—' : won(nv.at(-1))}</div>
           ${lineChart(ms, nv)}
         </section>
         <section class="card">
@@ -668,6 +679,7 @@
   function openAsset(name) {
     let ym = ymOf(new Date());
     const card = H.link.get(name) || null;   // 결제 계좌가 연결된 체크카드
+    const isInv = H.inv.has(name);
     const build = () => {
       const hit = t => (card ? t.asset === name || t.to === name : eff(t.asset) === name || eff(t.to) === name);
       const all = H.tx.filter(hit).slice().reverse();
@@ -682,24 +694,26 @@
       return `
         <section class="card hp-asset">
           <span class="hp-ag">${esc(a ? a.group : '목록에 없는 자산')}${a && a.hidden ? ' · 숨김' : ''}</span>
-          ${card ? `<div class="hp-bal num">${won(out - inn)}</div><p class="note">${ymLabel(ym)} 사용 금액입니다. 결제 계좌 <b>${esc(card)}</b> 잔액에서 바로 빠집니다.</p>`
+          ${isInv ? (() => { const t = invTotal(); return `<div class="hp-bal num">${t ? won(t.cost) : '—'}</div><p class="note">투자 앱의 원금입니다.${t ? ` 지금 평가금 ${won(t.value)} · 평가손익 ${t.value - t.cost >= 0 ? '+' : ''}${compactWon(t.value - t.cost)}원.` : ''}<br>가계부에는 투자로 보낸 돈과 찾은 돈만 남습니다.</p>`; })()
+            : card ? `<div class="hp-bal num">${won(out - inn)}</div><p class="note">${ymLabel(ym)} 사용 금액입니다. 결제 계좌 <b>${esc(card)}</b> 잔액에서 바로 빠집니다.</p>`
             : `<div class="hp-bal num ${bal < 0 ? 'exp' : ''}">${won(bal)}</div>${linked.length ? `<p class="note">${linked.map(esc).join(', ')} 사용 금액이 이 잔액에 들어 있습니다.</p>` : ''}`}
-          ${a && a.memo ? `<p class="note">${esc(a.memo)}</p>` : ''}
-          <div class="hp-btns">${card ? '' : '<button class="btn sm" id="aAdj">잔액 수정</button>'}<button class="btn sm" id="aSet">자산 설정</button></div>
+          ${a && a.memo && !isInv ? `<p class="note">${esc(a.memo)}</p>` : ''}
+          <div class="hp-btns">${isInv ? '<button class="btn sm" id="aInv">투자 화면으로</button>' : card ? '' : '<button class="btn sm" id="aAdj">잔액 수정</button>'}<button class="btn sm" id="aSet">자산 설정</button></div>
         </section>
         <div class="hp-nav"><button class="hh-arrow" data-am="-1" aria-label="이전 달">${ico.left}</button><b>${ymLabel(ym)}</b><button class="hh-arrow" data-am="1" aria-label="다음 달">${ico.right}</button></div>
         <div class="card ha-sum num sm">
-          <div><span>들어옴</span><b class="inc">${fmt(inn)}</b></div>
-          <div><span>나감</span><b class="exp">${fmt(out)}</b></div>
-          ${card ? `<div><span>사용</span><b>${fmt(out - inn)}</b></div>` : `<div><span>월말 잔액</span><b>${endBal < 0 ? '−' : ''}${fmt(Math.abs(endBal))}</b></div>`}
+          <div><span>${isInv ? '보낸 돈' : '들어옴'}</span><b class="inc">${fmt(inn)}</b></div>
+          <div><span>${isInv ? '찾은 돈' : '나감'}</span><b class="exp">${fmt(out)}</b></div>
+          ${isInv ? `<div><span>순입금</span><b>${inn - out < 0 ? '−' : ''}${fmt(Math.abs(inn - out))}</b></div>` : card ? `<div><span>사용</span><b>${fmt(out - inn)}</b></div>` : `<div><span>월말 잔액</span><b>${endBal < 0 ? '−' : ''}${fmt(Math.abs(endBal))}</b></div>`}
         </div>
-        ${list.length ? [...groupByDay(list)].map(([ds, l]) => `<section class="card hd">${dayHead(ds, null)}${l.map(t => rowHtml(t, { forAsset: name, raw: !!card, balAfter: card ? null : after.get(t.id) })).join('')}</section>`).join('')
+        ${list.length ? [...groupByDay(list)].map(([ds, l]) => `<section class="card hd">${dayHead(ds, null)}${l.map(t => rowHtml(t, { forAsset: name, raw: !!card, balAfter: card || isInv ? null : after.get(t.id) })).join('')}</section>`).join('')
           : emptyHtml('이 달에는 이 자산의 내역이 없습니다.')}`;
     };
     const bind = pg => {
       bindRows(pg);
       $$('[data-am]', pg).forEach(b => b.onclick = () => { ym = addMonths(ym, Number(b.dataset.am)); $('.hh-pbody', pg).innerHTML = build(); bind(pg); });
       const adj = $('#aAdj', pg); if (adj) adj.onclick = () => adjustBalance(name);
+      const iv = $('#aInv', pg); if (iv) iv.onclick = () => D.setApp('inv');
       $('#aSet', pg).onclick = () => { const a = H.assets.find(x => x.name === name); openAssetEdit(a || { ...newAsset(), name, group: '기타' }); };
     };
     pushPage({ title: esc(name), body: build(), onMount: bind, refresh: pg => { $('.hh-pbody', pg).innerHTML = build(); bind(pg); } });
@@ -1342,11 +1356,11 @@
       $('.hh-pbody', p).innerHTML = groups.map(g => `<h3 class="se-gh">${esc(g)}</h3><div class="card se-list" data-g="${esc(g)}">${H.assets.filter(a => a.group === g).map(a => `
         <div class="se-row eye ${a.hidden ? 'hid' : ''}">
           <button class="se-del" data-del="${esc(a.name)}" aria-label="${esc(a.name)} 삭제">${ico.del}</button>
-          <button class="se-name" data-edit="${esc(a.name)}"><span>${esc(a.name)}</span><small class="num">${H.link.has(a.name) ? `${esc(H.link.get(a.name))} 연결` : won(H.bal.get(a.name) || 0)}${a.hidden ? ' · 숨김' : ''}</small></button>
+          <button class="se-name" data-edit="${esc(a.name)}"><span>${esc(a.name)}</span><small class="num">${H.inv.has(a.name) ? '투자 앱 원금 연동' : H.link.has(a.name) ? `${esc(H.link.get(a.name))} 연결` : won(H.bal.get(a.name) || 0)}${a.hidden ? ' · 숨김' : ''}</small></button>
           <button class="se-ed se-eye ${a.hidden ? '' : 'on'}" data-eye="${esc(a.name)}" aria-pressed="${!a.hidden}" aria-label="${esc(a.name)} ${a.hidden ? '보이기' : '숨기기'}">${a.hidden ? ico.eyeOff : ico.eye}</button>
           <span class="se-drag" aria-label="끌어서 순서 바꾸기">${ico.drag}</span>
         </div>`).join('')}</div>`).join('')
-        + '<p class="note">눈 아이콘으로 표시·숨김을 바꿉니다. 숨긴 자산은 입력할 때 목록에 나오지 않지만 합계에는 들어갑니다. ≡ 를 끌어 순서를 바꾸고, 이름을 누르면 이름·그룹·결제 계좌를 고칩니다.</p>';
+        + '<p class="note">눈 아이콘으로 표시·숨김을 바꿉니다. 숨긴 자산은 입력할 때 목록에 나오지 않지만 합계에는 들어갑니다. ≡ 를 끌어 순서를 바꾸고, 이름을 누르면 이름·그룹·연결을 고칩니다.</p>';
       $$('[data-edit]', p).forEach(b => b.onclick = () => openAssetEdit(H.assets.find(a => a.name === b.dataset.edit)));
       $$('[data-eye]', p).forEach(b => b.onclick = () => {
         const a = H.assets.find(x => x.name === b.dataset.eye); if (!a) return;
@@ -1389,8 +1403,8 @@
         <div class="hf-row"><span class="hf-l">그룹</span><div class="hf-v"><select id="eGroup" class="hf-sel wide">${groups.map(g => `<option ${g === a.group ? 'selected' : ''}>${esc(g)}</option>`).join('')}<option value="__new">+ 새 그룹</option></select></div></div>
         ${isNew ? `<div class="hf-row"><span class="hf-l">시작 잔액</span><div class="hf-v"><input id="eBal" inputmode="numeric" placeholder="0" autocomplete="off"><span class="hf-unit">원</span></div></div>
           <p class="hf-info">대출처럼 갚을 돈은 앞에 −를 붙입니다.</p>` : ''}
-        <div class="hf-row"><span class="hf-l">결제 계좌</span><div class="hf-v"><select id="eLink" class="hf-sel wide"><option value="">없음</option>${H.assets.filter(x => x !== a && x.name !== a.name && !x.link).map(x => `<option ${x.name === a.link ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div></div>
-        <p class="hf-info">체크카드처럼 쓰는 즉시 통장에서 빠지는 자산은 그 통장을 고르십시오. 사용 금액이 통장 잔액에서 빠지고, 이 자산은 이번 달 사용 금액만 보입니다.</p>
+        <div class="hf-row"><span class="hf-l">연결</span><div class="hf-v"><select id="eLink" class="hf-sel wide"><option value="">없음</option><option value="${INVLINK}" ${a.link === INVLINK ? 'selected' : ''}>투자 앱 원금으로 보기</option><optgroup label="결제 계좌 (체크카드)">${H.assets.filter(x => x !== a && x.name !== a.name && !x.link).map(x => `<option ${x.name === a.link ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</optgroup></select></div></div>
+        <p class="hf-info">투자 앱 원금으로 보기: 금액을 투자 앱의 원금으로 보여 주고, 가계부에는 보낸 돈·찾은 돈만 적습니다.<br>결제 계좌: 체크카드처럼 쓰는 즉시 통장에서 빠지는 자산은 그 통장을 고르십시오. 사용 금액이 통장 잔액에서 빠집니다.</p>
         <label class="hf-switch"><span>숨기기</span><input type="checkbox" id="eHide" ${a.hidden ? 'checked' : ''}><i></i></label>
         <textarea id="eMemo" class="hf-memo" rows="2" placeholder="메모">${esc(a.memo || '')}</textarea>
         <p class="form-error" id="eErr" role="alert"></p>
@@ -1512,6 +1526,7 @@
   /* ───────────── 시작·전환 ───────────── */
   function enter() {
     H.active = true;
+    if (D.ensureInv) D.ensureInv();
     if (!H.loaded) loadCache();
     render();
     requestAnimationFrame(() => { setTopH(); const y = Number(sess.get(`dh_scroll_hh_${H.view}`)) || 0; if (y) window.scrollTo({ top: y }); });
@@ -1528,6 +1543,7 @@
 
   window.HH = {
     enter, leave, load, render,
+    invUpdated() { if (H.active && H.view === 'assets') { const y = window.scrollY; render(); window.scrollTo({ top: y }); } refreshPages(); },
     scrollKey: () => `dh_scroll_hh_${H.view}`,
     clear() { H.loaded = false; H.tx = []; reindex(); store.del(CACHE); },
   };

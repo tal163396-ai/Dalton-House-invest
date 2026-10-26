@@ -81,7 +81,7 @@
       const j = await api('data');
       state.data = prepare(j.data); state.loadedAt = Date.now();
       store.set(LS.cache, JSON.stringify(j.data));
-      if (state.app === 'hh') { pendingScroll = null; render(); return; }
+      if (state.app === 'hh') { pendingScroll = null; render(); if (window.HH) window.HH.invUpdated(); return; }
       const y = pendingScroll ?? window.scrollY; pendingScroll = null; render(); requestAnimationFrame(() => window.scrollTo({ top: y }));
       if (!quiet) toast('최신 데이터로 갱신했습니다');
     } catch (e) {
@@ -2083,7 +2083,10 @@
   }
 
   // 가계부(hh.js)가 쓰는 공용 도구
-  window.DH = { $, $$, esc, api, toast, openSheet, closeSheet, store, sess, logout: msg => logout(msg), spin, setApp: m => setApp(m) };
+  window.DH = {
+    invTotal: () => (state.data ? state.data.total : null),
+    ensureInv: () => { if (store.get(LS.pw) && (!state.data || Date.now() - state.loadedAt > 300000)) load({ quiet: true }); },
+    $, $$, esc, api, toast, openSheet, closeSheet, store, sess, logout: msg => logout(msg), spin, setApp: m => setApp(m) };
 
   // hh.js까지 읽힌 뒤 시작
   function boot() {

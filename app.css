@@ -1165,3 +1165,5 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .hf-row.wide .hf-l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14.5px; }
 .bs-sub { display: block; font-size: 12px; color: var(--ink-3); font-weight: 600; }
 .hmo-row .bs-on { color: var(--ink); font-weight: 700; }
+.ha-tl small { font-size: 12px; color: var(--ink-3); font-weight: 600; margin: 0 auto 0 6px; }
+.ha-row span small { white-space: normal; }
