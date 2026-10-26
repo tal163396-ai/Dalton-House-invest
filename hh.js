@@ -377,7 +377,7 @@
   }
   function budRow(name, b, spent, { kind = 'cat', marker = null, toggle = null, open = true } = {}) {
     const pct = b > 0 ? spent / b : Infinity, over = spent > b, rem = b - spent;
-    const pTxt = !Number.isFinite(pct) || pct > 9.99 ? '-' : `${Math.round(pct * 100)}%`;
+    const pTxt = !Number.isFinite(pct) || pct > 9.99 ? '-' : `${Math.floor(pct * 100)}%`;
     const fill = Math.min(100, (Number.isFinite(pct) ? pct : 1) * 100);
     const tg = toggle ? `data-bcat="${esc(toggle)}" role="button" tabindex="0" aria-expanded="${open}"` : '';
     return `<div class="bud ${kind}" ${tg}>
