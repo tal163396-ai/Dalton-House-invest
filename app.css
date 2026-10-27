@@ -274,7 +274,7 @@ button.trade { width: 100%; background: none; border: 0; border-top: 1px solid v
 button.trade:first-of-type { border-top: 0; } button.trade:active { background: var(--fill); }
 /* 이름이 길면 둘째 줄이 구분 태그 아래가 아니라 이름 첫 글자 아래에서 시작 */
 .tr-t { display: flex; align-items: flex-start; } .tr-t > .tag { flex: none; margin-top: 2px; }
-.tr-n { min-width: 0; word-break: keep-all; overflow-wrap: anywhere; } .tr-n .tag { margin-right: 0; }
+.tr-n { min-width: 0; word-break: keep-all; overflow-wrap: anywhere; } .tr-n .tag, .tr-n .tag.hh-link { margin-right: 0; margin-left: 0; }
 .trade .tr-t + small { display: block; margin-top: 2px; }
 .td-kv { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 14px 0 0; font-size: 14.5px; }
 .td-kv dt { color: var(--ink-3); font-weight: 600; } .td-kv dd { margin: 0; text-align: right; font-weight: 700; word-break: keep-all; overflow-wrap: anywhere; }
