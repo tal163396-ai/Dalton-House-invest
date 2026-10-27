@@ -1124,7 +1124,7 @@
       start: rule ? rule.start : ymOf(new Date()), end: rule ? rule.end : '',
       // 투자 앱 연결: null = 아직 안 고름, { type: '' } = 연결 안 함
       inv: (() => {
-        const x = e || rule;
+        const x = e || rule || opts.copy;
         if (!x || x.type !== '이체') return null;
         if (x.invType) return { type: x.invType, acct: x.invAcct, sub: x.invSub, qty: x.invQty || '', price: x.invPrice || '' };
         return { type: '' };
@@ -1488,15 +1488,8 @@
       back();
       removeTx(e);
     }
-    // 복사: 저장된 내역을 그대로(투자 앱 연결 포함), 날짜·시간만 지금으로 새 내역 저장
-    function doCopy() {
-      const d = new Date();
-      const t = toTx([newId('n'), `${dOf(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`, e.type, e.cat, e.sub, e.text, e.amt, e.asset, e.to, e.memo,
-        e.cur || '', e.famt === undefined ? '' : e.famt, '', store.get('dh_name') || e.by || '',
-        e.invType || '', e.invAcct || '', e.invSub || '', e.invQty === undefined ? '' : e.invQty, e.invPrice === undefined ? '' : e.invPrice]);
-      back();
-      commitTx(t, null, null, `지금 시간(${tmLabel(t.tm)})으로 복사했습니다`);
-    }
+    // 복사: 같은 내용(투자 앱 연결 포함)으로 새 입력 화면을 열고, 날짜·시간만 지금으로. 저장은 직접
+    function doCopy() { back(1, () => openForm({ copy: e, date: today() })); }
     if (!e && !isRule && !opts.copy) setTimeout(() => openPicker('amt'), 280);
   }
 
