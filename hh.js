@@ -927,9 +927,9 @@
   // 작은 입력 창 (앱의 팝업 사용)
   function askText(title, value = '', { note = '', ok = '저장', money = false, placeholder = '' } = {}) {
     return new Promise(res => {
-      D.openSheet(`<h2 id="sheetTitle">${esc(title)}</h2>${note ? `<p class="note ask-note">${note}</p>` : ''}
+      D.openSheet(`<div class="ask"><h2 id="sheetTitle">${esc(title)}</h2>${note ? `<p class="note ask-note">${note}</p>` : ''}
         <input id="askIn" ${money ? 'inputmode="numeric"' : ''} value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="off" class="ask-in">
-        <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn primary" id="askOk">${ok}</button></div>`, 'pop');
+        <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn primary" id="askOk">${ok}</button></div></div>`, 'pop');
       let done = false;
       const fin = v => { if (done) return; done = true; obs.disconnect(); res(v); };
       const sh = $('#sheet');
@@ -944,8 +944,8 @@
   }
   function askConfirm(title, note = '', ok = '확인', danger = true) {
     return new Promise(res => {
-      D.openSheet(`<h2 id="sheetTitle">${esc(title)}</h2>${note ? `<p class="note ask-note">${note}</p>` : ''}
-        <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn ${danger ? 'danger' : 'primary'}" id="askOk">${ok}</button></div>`, 'pop');
+      D.openSheet(`<div class="ask"><h2 id="sheetTitle">${esc(title)}</h2>${note ? `<p class="note ask-note">${note}</p>` : ''}
+        <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn ${danger ? 'danger' : 'primary'}" id="askOk">${ok}</button></div></div>`, 'pop');
       let done = false;
       const fin = v => { if (done) return; done = true; obs.disconnect(); res(v); };
       const sh = $('#sheet');
@@ -1582,7 +1582,7 @@
   function pickCat(type, title, exclude, cur) {
     return new Promise(res => {
       const list = H.cats[type].filter(c => c.name !== exclude);
-      D.openSheet(`<h2 id="sheetTitle">${esc(title)}</h2><div class="ae-gl">${list.map(c => `<button class="ae-gi ${c.name === cur ? 'on' : ''}" data-pc="${esc(c.name)}">${esc(c.name)}</button>`).join('')}</div>`, 'pop');
+      D.openSheet(`<div class="ask"><h2 id="sheetTitle">${esc(title)}</h2><div class="ae-gl">${list.map(c => `<button class="ae-gi ${c.name === cur ? 'on' : ''}" data-pc="${esc(c.name)}">${esc(c.name)}</button>`).join('')}</div></div>`, 'pop');
       let done = false; const fin = v => { if (done) return; done = true; obs.disconnect(); res(v); };
       const sh = $('#sheet'); const obs = new MutationObserver(() => { if (!sh.classList.contains('open') || sh.hidden) fin(null); });
       setTimeout(() => obs.observe(sh, { attributes: true, attributeFilter: ['class', 'hidden'] }), 60);
@@ -1768,7 +1768,7 @@
     }
     dyn();
     $('#eGroupBtn', pg).onclick = () => {
-      D.openSheet(`<h2 id="sheetTitle">자산그룹</h2><div class="ae-gl">${groups.map(g => `<button class="ae-gi ${g === group ? 'on' : ''}" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div>`, 'pop');
+      D.openSheet(`<div class="ask"><h2 id="sheetTitle">자산그룹</h2><div class="ae-gl">${groups.map(g => `<button class="ae-gi ${g === group ? 'on' : ''}" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div></div>`, 'pop');
       $$('.ae-gi').forEach(b => b.onclick = () => { group = b.dataset.g; $('#eGroupV', pg).textContent = group; D.closeSheet(); dyn(); });
     };
     $('#eSave', pg).onclick = async () => {

@@ -1334,3 +1334,14 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .cal-tb.ok { color: var(--hh); }
 .cal-tb:active { background: var(--fill); }
 @media (prefers-reduced-motion: reduce) { .sheet.pop .sheet-panel:has(.cal), .sheet.pop.open .sheet-panel:has(.cal) { transform: translate(-50%, -50%); } }
+
+/* ── 작은 확인·입력 창 ── */
+.sheet.pop .sheet-panel:has(.ask) { left: 50%; right: auto; width: min(320px, calc(100% - 48px)); transform: translate(-50%, -50%) scale(.82); padding: 0; border-radius: 22px; }
+.sheet.pop.open .sheet-panel:has(.ask) { transform: translate(-50%, -50%) scale(1); }
+.ask { padding: 22px 20px 18px; }
+.ask h2 { font-size: 18px; line-height: 1.4; word-break: keep-all; }
+.ask .ask-note { font-size: 14px; margin-top: 6px; word-break: keep-all; }
+.ask .sheet-actions { margin-top: 18px; gap: 8px; }
+.ask .sheet-actions .btn { min-height: 46px; padding: 10px 12px; font-size: 15.5px; border-radius: 14px; }
+.ask .ask-in { font-size: 16px; }
+@media (prefers-reduced-motion: reduce) { .sheet.pop .sheet-panel:has(.ask), .sheet.pop.open .sheet-panel:has(.ask) { transform: translate(-50%, -50%); } }
