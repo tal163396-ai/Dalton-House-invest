@@ -355,6 +355,8 @@ function setManual_(m) {
     if (f.qty !== undefined && f.qty !== '') { if (!(num_(f.qty) >= 0)) throw new Error('수량이 올바르지 않습니다'); setCell_(t, r, '수량', round_(num_(f.qty), 6)); done.push('수량'); }
     if (f.avg !== undefined && f.avg !== '') { if (!(num_(f.avg) >= 0)) throw new Error('평단가가 올바르지 않습니다'); setCell_(t, r, '평단가', round_(num_(f.avg), 4)); done.push('평단가'); }
     if (f.cost !== undefined && f.cost !== '') { if (!(num_(f.cost) >= 0)) throw new Error('원금이 올바르지 않습니다'); setCell_(t, r, '원금(원)', Math.round(num_(f.cost))); done.push('원금'); }
+    if (f.cur === 'USD' || f.cur === 'KRW') { if (f.cur !== cur) { setCell_(t, r, '통화', f.cur); done.push('통화'); } }
+    if (f.asset !== undefined && String(f.asset).trim() && String(f.asset).trim() !== String(m.asset).trim()) { setCell_(t, r, '자산', String(f.asset).trim().slice(0, 80)); done.push('자산 이름'); }
     if (!done.length) throw new Error('바꿀 값이 없습니다');
     return { ok: true, message: `${String(m.sub || m.asset)} ${done.join('·')} 저장했습니다` };
   }

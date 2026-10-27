@@ -1637,6 +1637,10 @@
           <label class="field"><span>수량</span><input id="fxQty" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.qty}"></label>
           <label class="field"><span>평단가 (${usd ? '달러' : '원'})</span><input id="fxAvg" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.avg || ''}"></label>
         </div>
+        <div class="two">
+          <label class="field"><span>통화</span><select id="fxCur"><option ${usd ? '' : 'selected'}>KRW</option><option ${usd ? 'selected' : ''}>USD</option></select></label>
+          <label class="field"><span>자산(계좌) 이름</span><input id="fxAsset" autocomplete="off" placeholder="${esc(cur.asset)}"></label>
+        </div>
         <label class="field"><span>원금 = 매입금액 (원)</span><input id="fxCost" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="${Math.round(cur.cost).toLocaleString('ko-KR')}"></label>
         <p class="preview num">지금 기록: ${cur.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}주 · 평단 ${sym}${(cur.avg || 0).toLocaleString('ko-KR')}${usd ? '' : '원'} · 원금 ${won(cur.cost)}</p>
         <p class="preview num" id="fxHint"></p>` : `
@@ -1871,8 +1875,11 @@
       if (!row) { err.textContent = '수정할 항목을 선택하십시오.'; return; }
       const fix = {}; const q = $('#fxQty').value.trim(), a = $('#fxAvg').value.trim(), c = String($('#fxCost').value).replace(/,/g, '').trim();
       if (q !== '') fix.qty = Number(q); if (a !== '') fix.avg = Number(a); if (c !== '') fix.cost = Number(c);
+      const nc = $('#fxCur').value, na = $('#fxAsset').value.trim();
+      if (nc !== (row.cur || 'KRW')) fix.cur = nc;
+      if (na && na !== row.asset) fix.asset = na;
       if (!Object.keys(fix).length) { err.textContent = '바꿀 값을 하나 이상 입력하십시오.'; return; }
-      if (Object.values(fix).some(v => !Number.isFinite(v) || v < 0)) { err.textContent = '숫자를 올바르게 입력하십시오.'; return; }
+      if (['qty', 'avg', 'cost'].some(k => k in fix && (!Number.isFinite(fix[k]) || fix[k] < 0))) { err.textContent = '숫자를 올바르게 입력하십시오.'; return; }
       action = 'manual';
       payload = { manual: { asset: row.asset, sub: row.sub, fix } };
     } else if (F.type === '금액 수정') {
@@ -1896,6 +1903,7 @@
       if (F.key === '__new') {
         t.sub = $('#fNewName').value.trim(); t.ticker = $('#fNewTicker').value.trim().toUpperCase(); t.currency = $('#fNewCur').value; t.kind = F.kind;
         if (!t.sub) { err.textContent = '새 종목 이름을 입력하십시오.'; return; }
+        if (t.currency === 'KRW' && /^[A-Z][A-Z.\-]*$/.test(t.ticker) && !F.krwOk) { F.krwOk = true; err.textContent = `티커 ${t.ticker}는 해외 종목으로 보입니다. 통화를 USD로 바꾸십시오. KRW가 맞으면 한 번 더 누르십시오.`; return; }
         // 그 구성에 자산이 하나뿐이면(예: ISA) 그 자산 안에, 여러 개면(예: 메인투자) 새 자산으로
         const assets = [...new Set(D.rows.filter(r => r.kind === F.kind && isTradable(r)).map(r => r.asset))];
         const named = $('#fNewAsset').value.trim();
@@ -1912,7 +1920,7 @@
     try {
       const r = await api(action, payload);
       const msg = r.realized !== null && r.realized !== undefined ? `${r.message} (${r.realized >= 0 ? '익절' : '손절'} ${signWon(r.realized)})` : r.message;
-      if (F.key === '__new') { F.key = ''; F.newName = ''; F.newTicker = ''; F.newAsset = ''; }
+      if (F.key === '__new') { F.key = ''; F.newName = ''; F.newTicker = ''; F.newAsset = ''; F.krwOk = false; }
       await load({ quiet: true });
       toast(msg);
     } catch (e) {
