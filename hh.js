@@ -1041,6 +1041,12 @@
           if (!f.asset && !isRule && !e) f.asset = lastAsset(f.type);
         }
         draw();
+        // 고르기 창이 열려 있으면 바뀐 구분에 맞게 다시 그림 (수입 → 지출 분류 등)
+        if (pickerOpen && was !== f.type) {
+          const k = pickerKind;
+          const nk = f.type === '이체' ? (k === 'to' || k === 'asset' ? 'to' : 'from') : (k === 'asset' || k === 'to' ? 'asset' : 'cat');
+          openPicker(nk);
+        }
       });
       const fd = $('#hfDate', root); if (fd) fd.onchange = () => { if (fd.value) { readInputs(); f.date = fd.value; f.sec = ''; draw(); } };
       const ft = $('#hfTime', root); if (ft) ft.onchange = () => { if (ft.value) { readInputs(); f.time = ft.value.slice(0, 5); f.sec = ''; draw(); } };
@@ -1087,8 +1093,9 @@
     }
 
     // 아래에서 올라오는 고르기 창 (분류 → 소분류, 자산)
-    let pickerOpen = false;
+    let pickerOpen = false, pickerKind = '';
     function openPicker(kind) {
+      pickerKind = kind;
       const box = $('#hfPicker', pg);
       const close = () => { box.hidden = true; box.innerHTML = ''; pickerOpen = false; pg.classList.remove('picking'); };
       if (!pickerOpen) { pickerOpen = true; pushState(close); }
