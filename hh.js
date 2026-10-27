@@ -571,7 +571,7 @@
     const split = H.inv.size > 0;
     const nw = pos + neg;
     const ms = Array.from({ length: 6 }, (_, i) => addMonths(ymOf(new Date()), i - 5));
-    const cum = cumByMonth();
+    const cum = nwByMonth();
     $('#hh-assets').innerHTML = `
       <div class="card ha-sum num">
         <div><span>자산</span><b class="inc">${fmt(pos)}</b></div>
@@ -580,7 +580,7 @@
       </div>
       <div class="ha-tools"><button class="hbud-set" id="hhAAdd">${ico.plus}<span>자산 추가</span></button><button class="hbud-set" id="hhAEdit">${ico.pen}<span>표시·숨김 · 순서 · 삭제</span></button></div>
       <button class="card ha-total" id="hhTotalBtn">
-        <span class="ha-tl">${split ? '생활 자산 추이 <small>투자 제외</small>' : '누적잔액 추이'} <em>전체통계 ›</em></span>
+        <span class="ha-tl">순자산 추이 <em>전체통계 ›</em></span>
         ${sparkSvg(ms.map(m => cum.get(m)))}
       </button>
       ${[...groups].map(([g, list]) => {
@@ -620,6 +620,18 @@
     for (let ym = keys[0], cur = ymOf(new Date()) > keys.at(-1) ? ymOf(new Date()) : keys.at(-1); ym <= cur; ym = addMonths(ym, 1)) { c += per.get(ym) || 0; out.set(ym, c); }
     return out;
   }
+  // 순자산 추이 (편한가계부처럼 전체): 기록된 달 = 가계부월별 순자산, 이번 달·기록 없는 달 = 생활 자산 + 투자 앱 원금
+  function nwByMonth() {
+    const life = cumByMonth(), out = new Map();
+    const t = invTotal(), inv = H.inv.size ? (t ? t.cost : null) : 0;
+    const hist = new Map((D.household ? D.household() : []).map(h => [`${h.y}-${pad(h.m)}`, h.nw]));
+    const cur = ymOf(new Date());
+    new Set([...life.keys(), ...hist.keys()]).forEach(m => {
+      if (m < cur && hist.has(m)) out.set(m, hist.get(m));
+      else if (life.has(m) && inv !== null) out.set(m, life.get(m) + inv);
+    });
+    return out;
+  }
   function sparkSvg(vals) {
     const v = vals.map(x => x ?? null).filter(x => x !== null);
     if (v.length < 2) return '';
@@ -631,12 +643,12 @@
 
   function openTotal(endYm) {
     const build = ym => {
-      const cum = cumByMonth(), ms = Array.from({ length: 6 }, (_, i) => addMonths(ym, i - 5));
+      const cum = nwByMonth(), ms = Array.from({ length: 6 }, (_, i) => addMonths(ym, i - 5));
       const nv = ms.map(m => cum.get(m) ?? null), s = ms.map(m => sums(monthTx(m)));
       return `
         <div class="hp-nav"><button class="hh-arrow" data-tm="-1" aria-label="이전 달">${ico.left}</button><b>${ymLabel(ym)}</b><button class="hh-arrow" data-tm="1" aria-label="다음 달">${ico.right}</button></div>
         <section class="card">
-          <span class="ht-l">${H.inv.size ? '생활 자산 (투자 제외)' : '누적잔액'}</span><div class="ht-v num">${nv.at(-1) === null ? '—' : won(nv.at(-1))}</div>
+          <span class="ht-l">순자산</span><div class="ht-v num">${nv.at(-1) === null ? '—' : won(nv.at(-1))}</div>
           ${lineChart(ms, nv)}
         </section>
         <section class="card">
@@ -656,7 +668,7 @@
     const y = x => top + (Hh - top - bot) * (1 - (x - lo + span * 0.1) / (span * 1.2));
     const xs = i => padL + (W - padL - padR) * (i + 0.5) / ms.length;
     const pts = vals.map((x, i) => (x === null ? null : [xs(i), y(x)])).filter(Boolean);
-    return `<svg viewBox="0 0 ${W} ${Hh}" class="lchart" role="img" aria-label="누적잔액 추이">
+    return `<svg viewBox="0 0 ${W} ${Hh}" class="lchart" role="img" aria-label="순자산 추이">
       <polyline points="${pts.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="var(--hh)" stroke-width="2.4" stroke-linejoin="round"/>
       ${pts.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4" fill="var(--hh)"/>`).join('')}
       ${ms.map((m, i) => `<text x="${xs(i).toFixed(1)}" y="${Hh - 6}" text-anchor="middle" class="mb-x">${+m.slice(5)}월</text>`).join('')}
@@ -694,7 +706,7 @@
       return `
         <section class="card hp-asset">
           <span class="hp-ag">${esc(a ? a.group : '목록에 없는 자산')}${a && a.hidden ? ' · 숨김' : ''}</span>
-          ${isInv ? (() => { const t = invTotal(); return `<div class="hp-bal num">${t ? won(t.cost) : '—'}</div><p class="note">투자 앱의 원금입니다.${t ? ` 지금 평가금 ${won(t.value)} · 평가손익 ${t.value - t.cost >= 0 ? '+' : ''}${compactWon(t.value - t.cost)}원.` : ''}<br>가계부에는 투자로 보낸 돈과 찾은 돈만 남습니다.</p>`; })()
+          ${isInv ? (() => { const t = invTotal(); return `<div class="hp-bal num">${t ? won(t.cost) : '—'}</div><p class="note">투자 앱의 원금입니다.${t ? `<br>평가금 ${won(t.value)}<br>평가손익 ${t.value - t.cost >= 0 ? '+' : ''}${compactWon(t.value - t.cost)}원` : ''}<br>가계부에는 투자로 보낸 돈과 찾은 돈만 남습니다.</p>`; })()
             : card ? `<div class="hp-bal num">${won(out - inn)}</div><p class="note">${ymLabel(ym)} 사용 금액입니다. 결제 계좌 <b>${esc(card)}</b> 잔액에서 바로 빠집니다.</p>`
             : `<div class="hp-bal num ${bal < 0 ? 'exp' : ''}">${won(bal)}</div>${linked.length ? `<p class="note">${linked.map(esc).join(', ')} 사용 금액이 이 잔액에 들어 있습니다.</p>` : ''}`}
           ${a && a.memo && !isInv ? `<p class="note">${esc(a.memo)}</p>` : ''}
@@ -713,7 +725,7 @@
       bindRows(pg);
       $$('[data-am]', pg).forEach(b => b.onclick = () => { ym = addMonths(ym, Number(b.dataset.am)); $('.hh-pbody', pg).innerHTML = build(); bind(pg); });
       const adj = $('#aAdj', pg); if (adj) adj.onclick = () => adjustBalance(name);
-      const iv = $('#aInv', pg); if (iv) iv.onclick = () => D.setApp('inv');
+      const iv = $('#aInv', pg); if (iv) iv.onclick = () => (D.openInvHome ? D.openInvHome() : D.setApp('inv'));
       $('#aSet', pg).onclick = () => { const a = H.assets.find(x => x.name === name); openAssetEdit(a || { ...newAsset(), name, group: '기타' }); };
     };
     pushPage({ title: esc(name), body: build(), onMount: bind, refresh: pg => { $('.hh-pbody', pg).innerHTML = build(); bind(pg); } });
@@ -762,7 +774,7 @@
       else if (g === 'search') openSearch();
       else if (g === 'csv') exportCsv();
       else if (g === 'reload') load({ quiet: false });
-      else if (g === 'inv') D.setApp('inv');
+      else if (g === 'inv') (D.openInvHome ? D.openInvHome() : D.setApp('inv'));
     });
   }
 

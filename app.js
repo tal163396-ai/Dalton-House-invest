@@ -2127,6 +2127,9 @@
   window.DH = {
     invTotal: () => (state.data ? state.data.total : null),
     ensureInv: () => { if (store.get(LS.pw) && (!state.data || Date.now() - state.loadedAt > 300000)) load({ quiet: true }); },
+    household: () => (state.data ? state.data.household : []),
+    // 가계부 '투자 화면으로' → 포트폴리오의 '투자 자산' 쪽
+    openInvHome: () => { state.view = 'home'; state.hPage = 1; sess.set('dh_hpage', 1); sess.set('dh_scroll_home', 0); setApp('inv'); homePagerApi.align(1); window.scrollTo({ top: 0 }); },
     $, $$, esc, api, toast, openSheet, closeSheet, store, sess, logout: msg => logout(msg), spin, setApp: m => setApp(m) };
 
   // hh.js까지 읽힌 뒤 시작
