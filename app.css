@@ -1427,3 +1427,8 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .hp-memo { position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; cursor: pointer; }
 .hp-memo:active { background: var(--fill); }
 .memo-view { margin: 10px 0 0; font-size: 15px; line-height: 1.6; color: var(--ink-2); white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; max-height: 50dvh; overflow-y: auto; }
+
+.pk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 8px; }
+.pk-grid button { border: 1.5px solid var(--line); border-radius: 12px; background: none; color: var(--ink); font: inherit; font-size: 15px; font-weight: 600; padding: 12px 10px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-grid button.on { border-color: var(--hh); color: var(--hh); }
+.adj-pick-l button, .pk-grid button { white-space: normal; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.35; }

@@ -2223,7 +2223,10 @@
       acc.sort((a, b) => (a.asset === '예수금' ? -1 : b.asset === '예수금' ? 1 : 0));
       // 투자 비용(구독료 등)을 넣을 구성: 구성마다 대표 자산 하나 (실현손익은 자산 → 구성으로 묶임)
       const kinds = [], ks = new Set();
-      D.rows.filter(r => r.kind && r.kind !== '현금').forEach(r => { if (ks.has(r.kind)) return; ks.add(r.kind); kinds.push({ kind: r.kind, asset: r.asset, sub: r.sub }); });
+      D.rows.filter(r => r.kind && r.kind !== '현금').forEach(r => {
+        if (!ks.has(r.kind)) { ks.add(r.kind); kinds.push({ kind: r.kind, asset: r.asset, sub: r.sub, items: [] }); }
+        if (!isCashRow(r)) kinds.find(k => k.kind === r.kind).items.push({ asset: r.asset, sub: r.sub, label: r.asset !== r.sub && r.asset !== r.kind ? `${r.sub} · ${r.asset}` : r.sub });
+      });
       return { acc, items, kinds };
     },
     // 가계부 '투자 화면으로' → 포트폴리오의 '투자 자산' 쪽

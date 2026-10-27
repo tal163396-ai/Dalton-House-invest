@@ -837,8 +837,8 @@
   function adjustBalance(name) {
     const cur = H.bal.get(name) || 0;
     let v = String(cur), fresh = true, mode = ['rec', 'cost'].includes(store.get('dh_adj_mode')) ? store.get('dh_adj_mode') : 'adj', cat = '', sub = '', picking = false;
-    let kAcct = store.get('dh_adj_cost') || '', memo = '';
-    const kinds = () => ((D.invOptions && D.invOptions()) || {}).kinds || [];
+    let kSel = (() => { try { return JSON.parse(store.get('dh_adj_cost2') || 'null'); } catch { return null; } })(), kStep = '', memo = '';
+    const kinds = invKinds;
     const val = () => (v === '' || v === '-' ? NaN : Number(v));
     const typeOf = d => (d < 0 ? '지출' : '수입');
     const defCat = ty => { const l = H.cats[ty] || []; const last = store.get(`dh_adj_cat_${ty}`); return (l.find(c => c.name === last) || l.find(c => c.name === '기타') || l[0] || {}).name || ''; };
@@ -850,21 +850,22 @@
       if (mode === 'rec' && diff && (!cat || !(H.cats[ty] || []).some(c => c.name === cat))) { cat = defCat(ty); const co = (H.cats[ty] || []).find(c => c.name === cat), ls = store.get(`dh_adj_sub_${ty}_${cat}`) || ''; sub = co && co.subs.includes(ls) ? ls : ''; }
       const catObj = (H.cats[ty] || []).find(c => c.name === cat);
       const cats = H.cats[ty] || [];
-      const ks = kinds(); if (mode === 'cost' && !ks.some(x => x.asset === kAcct)) kAcct = ks[0] ? ks[0].asset : '';
-      const kObj = ks.find(x => x.asset === kAcct);
+      const ks = kinds(); if (kSel && ks.length && !ks.some(x => x.kind === kSel.kind)) kSel = null;
       box.innerHTML = `<div class="adj-top"><h2 id="sheetTitle">잔액 수정</h2><span>${esc(name)} · 앱 잔액 ${won(cur)}</span></div>
         <div class="adj-amt"><small>실제 잔액</small><b>${v === '' ? '0' : v === '-' ? '−' : `${n < 0 ? '−' : ''}${fmt(Math.abs(n))}`}<span class="u">원</span></b>
           <em class="${diff > 0 ? 'p' : diff < 0 ? 'm' : ''}">${diff ? `차액 ${swon(diff)}` : '차액 없음'}</em></div>
         <div class="adj-seg" role="tablist"><button data-md="adj" class="${mode === 'adj' ? 'on' : ''}">보정<small>수입·지출 제외</small></button><button data-md="rec" class="${mode === 'rec' ? 'on' : ''}">수입·지출<small>통계·예산 반영</small></button><button data-md="cost" class="${mode === 'cost' ? 'on' : ''}">투자 비용<small>투자 손익 반영</small></button></div>
-        ${mode === 'cost' ? (diff < 0 ? `<button class="adj-catbtn" id="adjKind"><small>투자 구성</small><b>${kObj ? esc(kObj.kind) : (ks.length ? '고르기' : '투자 앱 불러오는 중')}</b>${ico.chev}</button>
+        ${mode === 'cost' ? (diff < 0 ? `<button class="adj-catbtn" id="adjKind"><small>투자 구성</small><b>${kSel ? esc(costLabel(kSel.asset, kSel.sub)) : (ks.length ? '고르기' : '투자 앱 불러오는 중')}</b>${ico.chev}</button>
           <input class="adj-memo" id="adjMemo" placeholder="내용 (예: 라오어 구독료)" value="${esc(memo)}" autocomplete="off">` : '<p class="adj-hint">구독료처럼 투자에 쓴 돈을<br>그 구성의 투자 손익(기타 비용)으로 넣습니다.<br>잔액이 줄 때만 됩니다.</p>')
         : mode === 'rec' ? (diff ? `<button class="adj-catbtn" id="adjCat"><small>${ty} 분류</small><b>${cat ? esc(cat + (sub ? ` / ${sub}` : '')) : '고르기'}</b>${ico.chev}</button>` : '<p class="adj-hint">실제 잔액을 입력하면<br>모자라면 지출, 남으면 수입으로 기록합니다.</p>') : '<p class="adj-hint">차액만큼 \'잔액수정\' 내역이 생기고,<br>수입·지출 통계에는 들어가지 않습니다.</p>'}
-        ${picking === 'kind' && mode === 'cost' ? `<div class="adj-pick"><div class="adj-pick-h">투자 구성 고르기</div><div class="adj-pick-l">${ks.map(x => `<button class="${x.asset === kAcct ? 'on' : ''}" data-ka="${esc(x.asset)}">${esc(x.kind)}</button>`).join('')}</div></div>`
+        ${picking === 'kind' && mode === 'cost' ? `<div class="adj-pick"><div class="adj-pick-h">${kStep ? `<button class="adj-back" id="adjKBack">‹ ${esc(kStep)}</button> 종목 고르기` : '투자 구성 고르기'}</div><div class="adj-pick-l">${costPickHtml(kSel, kStep, 'data-c')}</div></div>`
           : picking === 'cat' && mode === 'rec' && diff ? `<div class="adj-pick"><div class="adj-pick-h">${ty} 분류 고르기</div><div class="adj-pick-l">${cats.map(c => `<button class="${c.name === cat ? 'on' : ''}" data-c="${esc(c.name)}">${esc(c.name)}${c.subs.length ? ' ›' : ''}</button>`).join('') || '<p class="note">분류가 없습니다</p>'}</div></div>`
           : picking === 'sub' && mode === 'rec' && diff && catObj ? `<div class="adj-pick"><div class="adj-pick-h"><button class="adj-back" id="adjBack">‹ ${esc(cat)}</button> 소분류 고르기</div><div class="adj-pick-l"><button class="${!sub ? 'on' : ''}" data-s="">소분류 없음</button>${catObj.subs.map(x => `<button class="${x === sub ? 'on' : ''}" data-s="${esc(x)}">${esc(x)}</button>`).join('')}</div></div>` : `<div class="kp-grid adj-kp">${k(1, 1)}${k(2, 2)}${k(3, 3)}${k('bs', ico.bksp, 'fn')}${k(4, 4)}${k(5, 5)}${k(6, 6)}${k('-', '−', 'fn')}${k(7, 7)}${k(8, 8)}${k(9, 9)}${k('00', '00')}${k('x', '취소', 'fn sm')}${k(0, 0)}${k('000', '000')}${k('ok', '저장', 'ok')}</div>`}`;
       const cb = $('#adjCat', box); if (cb) cb.onclick = () => { picking = picking ? false : 'cat'; draw(); };
-      const kb = $('#adjKind', box); if (kb) kb.onclick = () => { if (!kinds().length && D.ensureInv) D.ensureInv(); picking = picking ? false : 'kind'; draw(); };
-      $$('[data-ka]', box).forEach(b => b.onclick = () => { kAcct = b.dataset.ka; picking = false; draw(); });
+      const kb = $('#adjKind', box); if (kb) kb.onclick = () => { if (!kinds().length && D.ensureInv) D.ensureInv(); picking = picking ? false : 'kind'; kStep = ''; draw(); };
+      const kbb = $('#adjKBack', box); if (kbb) kbb.onclick = () => { kStep = ''; draw(); };
+      $$('[data-c-k]', box).forEach(b => b.onclick = () => { const k = kinds().find(x => x.kind === b.dataset.cK); if (k && k.items.length) kStep = k.kind; else { kSel = costSel(b.dataset.cK, ''); picking = false; } draw(); });
+      $$('[data-c-i]', box).forEach(b => b.onclick = () => { kSel = costSel(kStep, b.dataset.cI); picking = false; kStep = ''; draw(); });
       const mi = $('#adjMemo', box); if (mi) mi.oninput = () => { memo = mi.value; };
       const ab = $('#adjBack', box); if (ab) ab.onclick = () => { picking = 'cat'; draw(); };
       $$('[data-s]', box).forEach(b => b.onclick = () => { sub = b.dataset.s; picking = false; draw(); });
@@ -893,10 +894,9 @@
       let t;
       if (mode === 'cost') {
         if (diff > 0) { toast('투자 비용은 잔액이 줄 때만 넣을 수 있습니다', true); return; }
-        const kObj = kinds().find(x => x.asset === kAcct);
-        if (!kObj) { toast('투자 구성을 고르십시오', true); return; }
-        store.set('dh_adj_cost', kAcct);
-        t = toTx([newId('n'), at, '수정', '잔액수정', '', memo.trim() || '투자 비용', diff, name, '', '', '', '', '', by, '비용', kObj.asset, kObj.sub, '', '']);
+        if (!kSel) { toast('투자 구성을 고르십시오', true); return; }
+        store.set('dh_adj_cost2', JSON.stringify(kSel));
+        t = toTx([newId('n'), at, '수정', '잔액수정', '', memo.trim() || '투자 비용', diff, name, '', '', '', '', '', by, '비용', kSel.asset, kSel.sub, '', '']);
       } else if (mode === 'rec') {
         const ty = typeOf(diff);
         if (!cat) { toast('분류를 고르십시오', true); return; }
@@ -1080,7 +1080,19 @@
       draw();
     });
   }
-  const costLabel = a => { const o = D.invOptions && D.invOptions(), k = o && o.kinds.find(x => x.asset === a); return k ? k.kind : a; };
+  // 투자 비용: 구성(kind) + 종목. 종목 미선택이면 구성 대표 자산에, 종목 이름 = 구성 이름
+  const invKinds = () => ((D.invOptions && D.invOptions()) || {}).kinds || [];
+  const kindOf = a => invKinds().find(k => k.asset === a || k.items.some(i => i.asset === a));
+  const costLabel = (a, s) => { const k = kindOf(a); if (!k) return s || a; return s && s !== k.kind ? `${k.kind} / ${s}` : k.kind; };
+  const costPickHtml = (kSel, step, attr) => {
+    const ks = invKinds();
+    if (!ks.length) return '<p class="empty">투자 앱 자료를 불러오는 중입니다.<br>잠시 뒤 다시 누르십시오.</p>';
+    if (!step) return ks.map(x => `<button class="${kSel && kSel.kind === x.kind ? 'on' : ''}" ${attr}-k="${esc(x.kind)}">${esc(x.kind)}${x.items.length ? ' ›' : ''}</button>`).join('');
+    const k = ks.find(x => x.kind === step); if (!k) return '';
+    const none = kSel && kSel.kind === k.kind && kSel.sub === k.kind;
+    return `<button class="${none ? 'on' : ''}" ${attr}-i="">종목 미선택</button>` + k.items.map((it, i) => `<button class="${kSel && kSel.asset === it.asset && kSel.sub === it.sub ? 'on' : ''}" ${attr}-i="${i}">${esc(it.label)}</button>`).join('');
+  };
+  const costSel = (kind, idx) => { const k = invKinds().find(x => x.kind === kind); if (!k) return null; const it = idx === '' ? null : k.items[Number(idx)]; return it ? { kind, asset: it.asset, sub: it.sub } : { kind, asset: k.asset, sub: k.kind }; };
   // 메모 칸: 안쪽 스크롤 없이 내용만큼 늘어남 (작은 스크롤바 대신 화면 전체로 스크롤)
   function autoGrow(ta) { if (!ta) return; ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight + 2}px`; }
   document.addEventListener('input', ev => { if (ev.target.matches && ev.target.matches('textarea.hf-memo')) autoGrow(ev.target); });
@@ -1196,7 +1208,7 @@
         ${f.cur && f.famt !== '' ? `<p class="hf-info">외화 ${f.cur === 'USD' ? 'US$' : f.cur} ${Number(f.famt).toLocaleString('ko-KR', { minimumFractionDigits: 2 })} 내역입니다. 앱은 원화 금액으로 계산합니다.</p>` : ''}
         ${adj ? '' : `<div class="hf-row"><span class="hf-l">${tr ? '출금' : '분류'}</span><button class="hf-v hf-pick ${(tr ? f.asset : f.cat) ? '' : 'ph'}" id="hfCat">${tr ? esc(f.asset || '출금 자산') : esc(f.cat ? `${f.cat}${f.sub ? ` / ${f.sub}` : ''}` : '분류 고르기')}</button></div>`}
         <div class="hf-row"><span class="hf-l">${tr ? '입금' : '자산'}</span><button class="hf-v hf-pick ${(tr ? f.to : f.asset) ? '' : 'ph'}" id="hfAsset">${tr ? esc(f.to || '입금 자산') : esc(f.asset || '자산 고르기')}</button></div>
-        ${adj && !isRule ? `<div class="hf-row"><span class="hf-l">투자</span><button class="hf-v hf-pick ${f.inv && f.inv.type === '비용' ? '' : 'ph'}" id="hfCost">${f.inv && f.inv.type === '비용' ? esc(costLabel(f.inv.acct)) : '연결 안 함 (보정)'}</button></div>` : ''}
+        ${adj && !isRule ? `<div class="hf-row"><span class="hf-l">투자</span><button class="hf-v hf-pick ${f.inv && f.inv.type === '비용' ? '' : 'ph'}" id="hfCost">${f.inv && f.inv.type === '비용' ? esc(costLabel(f.inv.acct, f.inv.sub)) : '연결 안 함 (보정)'}</button></div>` : ''}
         ${dir ? `<div class="hf-row hf-invrow"><span class="hf-l">투자 앱</span><button class="hf-v hf-pick ${f.inv ? '' : 'ph'}" id="hfInv">${esc(invTxt)}</button></div>
           ${trade ? `<div class="hf-row"><span class="hf-l">수량</span><div class="hf-v"><input id="hfQty" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="0" value="${f.inv.qty || ''}"><span class="hf-unit">주</span></div></div>
           <div class="hf-row"><span class="hf-l">단가</span><div class="hf-v"><input id="hfPrice" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${item && item.price ? item.price : '0'}" value="${f.inv.price || ''}"><span class="hf-unit">${usd ? '달러' : '원'}</span></div></div>` : ''}
@@ -1366,18 +1378,17 @@
         });
         return;
       }
-      if (kind === 'cost') {
-        const ks = ((D.invOptions && D.invOptions()) || {}).kinds || [];
-        const on = f.inv && f.inv.type === '비용' ? f.inv.acct : '';
-        box.innerHTML = `<div class="pk-head"><b>투자 비용으로 넣을 구성</b><button class="icon-btn" id="pkX" aria-label="닫기">${ico.close}</button></div>
-          <div class="pk-assets">${ks.length ? '' : '<p class="empty">투자 앱 자료를 불러오는 중입니다.<br>잠시 뒤 다시 누르십시오.</p>'}<div class="pk-list">${ks.map(x => `<button class="pk-inv ${x.asset === on ? 'on' : ''}" data-ka="${esc(x.asset)}"><span>${esc(x.kind)}</span></button>`).join('')}
-            <button class="pk-inv none ${!on ? 'on' : ''}" data-ka=""><span>연결 안 함 (보정)</span><small>수입·지출에도 투자 손익에도 넣지 않음</small></button></div></div>`;
+      if (kind === 'cost' || kind.startsWith('cost:')) {
+        const step = kind.startsWith('cost:') ? kind.slice(5) : '';
+        const cur = f.inv && f.inv.type === '비용' ? { kind: (kindOf(f.inv.acct) || {}).kind, asset: f.inv.acct, sub: f.inv.sub } : null;
+        box.innerHTML = `<div class="pk-head">${step ? `<button class="icon-btn" id="pkB" aria-label="구성으로">${ico.left}</button>` : ''}<b>${step ? `${esc(step)} · 종목` : '투자 비용으로 넣을 구성'}</b><button class="icon-btn" id="pkX" aria-label="닫기">${ico.close}</button></div>
+          <div class="pk-assets"><div class="pk-grid">${costPickHtml(cur, step, 'data-c')}</div>
+            ${step ? '' : `<button class="pk-inv none ${!cur ? 'on' : ''}" data-c-none="1"><span>연결 안 함 (보정)</span><small>수입·지출에도 투자 손익에도 넣지 않음</small></button>`}</div>`;
         $('#pkX', box).onclick = () => back();
-        $$('[data-ka]', box).forEach(b => b.onclick = () => {
-          const k = ks.find(x => x.asset === b.dataset.ka);
-          f.inv = k ? { type: '비용', acct: k.asset, sub: k.sub, qty: '', price: '' } : null;
-          done(null);
-        });
+        const pb = $('#pkB', box); if (pb) pb.onclick = () => openPicker('cost');
+        const nb = $('[data-c-none]', box); if (nb) nb.onclick = () => { f.inv = null; done(null); };
+        $$('[data-c-k]', box).forEach(b => b.onclick = () => { const k = invKinds().find(x => x.kind === b.dataset.cK); if (k && k.items.length) openPicker(`cost:${k.kind}`); else { const sl = costSel(b.dataset.cK, ''); f.inv = { type: '비용', acct: sl.asset, sub: sl.sub, qty: '', price: '' }; done(null); } });
+        $$('[data-c-i]', box).forEach(b => b.onclick = () => { const sl = costSel(step, b.dataset.cI); f.inv = { type: '비용', acct: sl.asset, sub: sl.sub, qty: '', price: '' }; done(null); });
         return;
       }
       if (kind === 'inv') {

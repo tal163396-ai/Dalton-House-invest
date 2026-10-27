@@ -886,7 +886,7 @@ function hhApplyLink_(spec, id) {
     '날짜': d, '자산': spec.asset, '세부종목': spec.sub, '구분': '비용', '수량': '', '단가': '', '통화': 'KRW', '금액(원)': amt, '실현손익(원)': -amt,
     '입력자': spec.by || '', '메모': `가계부: ${spec.memo}`, '연결': id,
   });
-  appendRealized_({ '날짜': d, '자산': spec.asset, '세부종목': spec.sub, '내용': `${spec.memo} (투자 비용)`, '손익(원)': -amt, '구분': '기타', '출처': '가계부', '메모': '투자 비용', '연결': id });
+  appendRealized_({ '날짜': d, '자산': spec.asset, '세부종목': spec.sub, '내용': spec.memo === '투자 비용' ? '투자 비용' : `${spec.memo} (투자 비용)`, '손익(원)': -amt, '구분': '기타', '출처': '가계부', '메모': '투자 비용', '연결': id });
   return { ok: true, amountKrw: amt, realized: -amt };
 }
 
