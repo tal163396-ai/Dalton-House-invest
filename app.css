@@ -1432,3 +1432,9 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .pk-grid button { border: 1.5px solid var(--line); border-radius: 12px; background: none; color: var(--ink); font: inherit; font-size: 15px; font-weight: 600; padding: 12px 10px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pk-grid button.on { border-color: var(--hh); color: var(--hh); }
 .adj-pick-l button, .pk-grid button { white-space: normal; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.35; }
+
+.sel-list { display: grid; margin: 10px -6px 0; max-height: 52dvh; overflow-y: auto; overscroll-behavior: contain; }
+.sel-list button { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--ink); font: inherit; font-size: 15.5px; font-weight: 600; text-align: left; padding: 13px 8px; word-break: keep-all; }
+.sel-list button:first-child { border-top: 0; }
+.sel-list button.on { color: var(--hh); }
+body:not(.hh-mode) .sel-list button.on { color: var(--accent); }

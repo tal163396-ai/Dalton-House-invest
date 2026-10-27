@@ -1096,6 +1096,26 @@
   // 메모 칸: 안쪽 스크롤 없이 내용만큼 늘어남 (작은 스크롤바 대신 화면 전체로 스크롤)
   function autoGrow(ta) { if (!ta) return; ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight + 2}px`; }
   document.addEventListener('input', ev => { if (ev.target.matches && ev.target.matches('textarea.hf-memo')) autoGrow(ev.target); });
+  // 앱 안의 모든 고르기 칸(select): 휴대폰 기본 목록(화면을 꽉 채움) 대신 작은 팝업 목록
+  document.addEventListener('mousedown', ev => { if (ev.target.closest && ev.target.closest('select')) ev.preventDefault(); }, true);
+  document.addEventListener('click', ev => {
+    const sel = ev.target.closest && ev.target.closest('select');
+    if (!sel || sel.disabled) return;
+    ev.preventDefault(); sel.blur();
+    const row = sel.closest('.hf-row, .field');
+    const lab = sel.getAttribute('aria-label') || (row && (row.querySelector('.hf-l, span') || {}).textContent) || '고르기';
+    const opts = [...sel.options];
+    D.openSheet(`<div class="ask"><h2 id="sheetTitle">${esc(lab.trim())}</h2><div class="sel-list">${opts.map((o, i) => `<button class="${o.selected ? 'on' : ''}" data-si="${i}"><span>${esc(o.textContent)}</span>${o.selected ? '<b>✓</b>' : ''}</button>`).join('')}</div>
+      <div class="sheet-actions"><button class="btn" data-close>취소</button></div></div>`, 'pop');
+    const on = $('#sheetBody .sel-list .on'); if (on) on.scrollIntoView({ block: 'center' });
+    $$('#sheetBody [data-si]').forEach(b => b.onclick = () => {
+      const i = Number(b.dataset.si); D.closeSheet();
+      if (sel.selectedIndex === i) return;
+      sel.selectedIndex = i;
+      sel.dispatchEvent(new Event('input', { bubbles: true }));
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }, true);
   // 앱 안의 모든 날짜·달 칸(투자 기록 포함)은 휴대폰 기본 달력 대신 위 달력 창을 씀
   document.addEventListener('click', async ev => {
     const i = ev.target.closest && ev.target.closest('input[type="date"], input[type="month"]');
