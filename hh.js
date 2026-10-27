@@ -583,7 +583,7 @@
         </section>
         <section class="card">
           <div class="mb-head"><h3 class="hh-h3">${months[0].slice(2, 4)}.${+months[0].slice(5)} ~ ${months[11].slice(2, 4)}.${+months[11].slice(5)} <small>월평균 ${won(avg)}</small></h3>
-            <span class="mb-nav"><button class="hh-arrow" data-mw="-12" aria-label="이전 12개월">${ico.left}</button><button class="hh-arrow" data-mw="12" aria-label="다음 12개월" ${winEnd >= ymOf(new Date()) ? 'disabled' : ''}>${ico.right}</button></span></div>
+            <span class="mb-nav"><button class="hh-arrow" data-mw="-1" aria-label="이전 달">${ico.left}</button><button class="hh-arrow" data-mw="1" aria-label="다음 달" ${endYm >= ymOf(new Date()) ? 'disabled' : ''}>${ico.right}</button></span></div>
           ${monthBars(months, mv, type === '수입' ? 'var(--inc)' : 'var(--exp)', oneMonth ? endYm : null, true)}
           <p class="note mb-note">막대를 누르면 그 달 내역을 봅니다.</p>
         </section>
@@ -595,8 +595,11 @@
         $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg);
       });
       $$('[data-mw]', pg).forEach(b => b.onclick = () => {
+        // 한 달씩: 고른 달을 앞뒤로 옮기고, 막대 범위는 고른 달이 보이도록 따라감
         const cur = ymOf(new Date());
-        winEnd = addMonths(winEnd, Number(b.dataset.mw)); if (winEnd > cur) winEnd = cur;
+        let ym = addMonths(to.slice(0, 7), Number(b.dataset.mw)); if (ym > cur) ym = cur;
+        from = `${ym}-01`; to = `${ym}-${pad(daysIn(ym))}`;
+        if (ym > winEnd) winEnd = ym; else if (ym < addMonths(winEnd, -11)) winEnd = addMonths(ym, 11);
         const y = window.scrollY; $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg);
       });
     };
