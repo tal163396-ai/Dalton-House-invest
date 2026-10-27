@@ -1069,7 +1069,7 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .hf-chip { flex: none; display: grid; text-align: left; border: 0; background: var(--card); border-radius: 12px; padding: 7px 11px; max-width: 230px; color: inherit; }
 .hf-chip b { font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hf-chip small { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hf-memo { margin-top: 14px; resize: vertical; min-height: 64px; line-height: 1.5; }
+.hf-memo { margin-top: 14px; resize: none; overflow: hidden; min-height: 64px; line-height: 1.5; }
 .hf-memo.big { min-height: 48dvh; line-height: 1.6; font-size: 15.5px; }
 .hf-btns { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 12px; }
 .hf-btns .btn:only-child { grid-column: 1 / -1; }

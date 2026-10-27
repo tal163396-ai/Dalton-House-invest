@@ -1058,6 +1058,9 @@
       draw();
     });
   }
+  // 메모 칸: 안쪽 스크롤 없이 내용만큼 늘어남 (작은 스크롤바 대신 화면 전체로 스크롤)
+  function autoGrow(ta) { if (!ta) return; ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight + 2}px`; }
+  document.addEventListener('input', ev => { if (ev.target.matches && ev.target.matches('textarea.hf-memo')) autoGrow(ev.target); });
   // 앱 안의 모든 날짜·달 칸(투자 기록 포함)은 휴대폰 기본 달력 대신 위 달력 창을 씀
   document.addEventListener('click', async ev => {
     const i = ev.target.closest && ev.target.closest('input[type="date"], input[type="month"]');
@@ -1226,6 +1229,7 @@
       txt.onfocus = () => sugg(txt.value);
       txt.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); txt.blur(); } };
       pickerOnTap(root);
+      requestAnimationFrame(() => autoGrow($('#hfMemo', root)));
       $('#hfSave', root).onclick = () => submit(false);
       const c = $('#hfCont', root); if (c) c.onclick = () => submit(true);
     }
@@ -1532,6 +1536,7 @@
         <div class="hf-btns"><button class="btn hf-save memo" id="mSave">저장하기</button></div></div>`,
     });
     pickerOnTap(pg);
+    requestAnimationFrame(() => autoGrow($('#mText', pg)));
     const di = $('#mDate', pg);
     bindDateBtn(di, v => { $('#mDateTxt', pg).textContent = dateLabel(v); });
     $('#mSave', pg).onclick = async () => {
