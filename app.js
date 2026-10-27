@@ -1615,12 +1615,13 @@
       const cur = findRow(F.key);
       const usd = cur && cur.cur === 'USD';
       const trad = cur && isTradable(cur);
-      const groups = kindsOf(fixRows).map(k => `<optgroup label="${esc(k)}">${fixRows.filter(r => r.kind === k).map(r => `<option value="${esc(rowKey(r))}" ${rowKey(r) === F.key ? 'selected' : ''}>${esc(r.sub || r.asset)}${r.asset !== r.sub && r.asset !== k ? ` · ${esc(r.asset)}` : ''}</option>`).join('')}</optgroup>`).join('');
+      const label = r => `${r.sub || r.asset}${r.asset !== r.sub && r.asset !== r.kind ? ` · ${r.asset}` : ''}`;
       const sym = usd ? '$' : '';
       body = `
-        <label class="field"><span>수정할 항목</span><select id="fManual">${groups}</select></label>
+        <div class="field"><span>수정할 항목</span><input type="hidden" id="fManual" value="${esc(F.key)}">
+          <button type="button" class="pick-btn" id="fManualBtn"><small>${cur ? esc(cur.kind) : ''}</small><b>${cur ? esc(label(cur)) : '선택'}</b><i>${'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>'}</i></button></div>
         ${trad ? `
-        <p class="fix-note">증권사 앱의 <b>체결잔고·매입단가·매입금액</b>을 그대로 넣으십시오.<br>비워 둔 칸은 바뀌지 않습니다.</p>
+        <p class="fix-note">증권사 앱의 <b>체결잔고·매입단가·매입금액</b>을<br>그대로 넣으십시오. 비워 둔 칸은 바뀌지 않습니다.</p>
         <div class="two">
           <label class="field"><span>수량</span><input id="fxQty" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.qty}"></label>
           <label class="field"><span id="fxAvgL">평단가 (${usd ? '달러' : '원'})</span><input id="fxAvg" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.avg || ''}"></label>
@@ -1734,7 +1735,12 @@
     const on = (id, ev, fn) => { const x = $(id, el); if (x) x.addEventListener(ev, fn); };
     on('#fKind', 'change', e => { F.kind = e.target.value; F.key = ''; renderRecord(); });
     on('#fRow', 'change', e => { F.key = e.target.value; renderRecord(); });
-    on('#fManual', 'change', e => { F.key = e.target.value; renderRecord(); });
+    on('#fManualBtn', 'click', () => {
+      const rows = D.rows.filter(r => r.asset);
+      const lab = r => `${r.sub || r.asset}${r.asset !== r.sub && r.asset !== r.kind ? ` · ${r.asset}` : ''}`;
+      openSheet(`<h2 id="sheetTitle">수정할 항목</h2><div class="pick-list">${kindsOf(rows).map(k => `<div class="pick-g">${esc(k)}</div>${rows.filter(r => r.kind === k).map(r => `<button class="pick-i ${rowKey(r) === F.key ? 'on' : ''}" data-pk="${esc(rowKey(r))}"><span>${esc(lab(r))}</span>${rowKey(r) === F.key ? '<b>✓</b>' : ''}</button>`).join('')}`).join('')}</div>`);
+      $$('#sheet [data-pk]').forEach(b => b.onclick = () => { F.key = b.dataset.pk; closeSheet(); renderRecord(); });
+    });
     on('#fCash', 'change', e => { F.cashAsset = e.target.value; });
     on('#fNewCur', 'change', e => { F.newCur = e.target.value; F.newName = $('#fNewName').value; F.newTicker = $('#fNewTicker').value; F.newAsset = $('#fNewAsset').value; renderRecord(); });
     const upd = () => {
