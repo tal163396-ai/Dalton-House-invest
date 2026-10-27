@@ -1294,3 +1294,11 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .hr-inv { font-style: normal; font-size: 11px; font-weight: 700; color: var(--accent, #3b82f6); background: color-mix(in srgb, var(--accent, #3b82f6) 14%, transparent); padding: 1px 6px; border-radius: 6px; margin-left: 4px; white-space: nowrap; }
 .tag.hh-link { background: color-mix(in srgb, var(--hh, #F0605A) 16%, transparent); color: var(--hh, #F0605A); margin-left: 4px; }
 .hr-invs { color: var(--accent, #3b82f6) !important; font-weight: 700; }
+/* 월 마감 (자동) */
+.am-list { display: grid; gap: 2px; margin: 4px 0 8px; }
+.am-row { display: grid; grid-template-columns: 44px repeat(4, minmax(0, 1fr)); gap: 6px; align-items: center; padding: 10px 2px; border-top: 1px solid var(--line); }
+.am-row:first-child { border-top: 0; }
+.am-row b { font-size: 14px; }
+.am-row span { display: grid; gap: 2px; min-width: 0; }
+.am-row small { font-size: 11px; color: var(--ink-3); font-weight: 600; }
+.am-row em { font-style: normal; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

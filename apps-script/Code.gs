@@ -133,6 +133,7 @@ function readAll_() {
     trades: rowsAsObjects_('거래기록', o => !o['날짜']).slice(-200),
     index: readIndex_(),
     household: SpreadsheetApp.getActive().getSheetByName('가계부월별') ? rowsAsObjects_('가계부월별', o => !o['연도']) : [],
+    hhAuto: hhAutoMonths_(),
   };
 }
 
@@ -501,7 +502,9 @@ function 월말기록저장() {
   if (Utilities.formatDate(now, TZ, 'MM') === Utilities.formatDate(tomorrow, TZ, 'MM')) return;
   try { 모빅시세업데이트(); } catch (e) { /* 시세 실패해도 기록은 진행 */ }
   SpreadsheetApp.flush();
-  saveSnapshot_(Utilities.formatDate(now, TZ, 'yyyy-MM'));
+  const ym = Utilities.formatDate(now, TZ, 'yyyy-MM');
+  saveSnapshot_(ym);
+  if (ym >= HH_AUTO_FROM) { try { saveAutoMonth_(ym); } catch (e) { /* 가계부 탭이 없으면 건너뜀 */ } }
 }
 
 function saveSnapshot_(month) {
@@ -526,6 +529,84 @@ function saveSnapshot_(month) {
     '평가손익(원)': Math.round(agg[a].val - agg[a].cost), '저장시각': stamp,
   }));
   return order.length;
+}
+
+/* ───────────────────────── 자동 월 마감 (2차 ②·③) ─────────────────────────
+ * 2026년 10월부터는 가계부 내역으로 달마다 계산:
+ *   저축(근로·기타소득) = 수입 − 지출, 생활 자산 = 투자 계좌를 뺀 가계부 자산 합,
+ *   투자 순투입 = 투자 계좌로 보낸 돈 − 찾은 돈, 전세보증금 = 부동산 그룹, 대출 = 대출·마이너스 통장 그룹
+ * 순자산 = 생활 자산 + 투자 앱 원금 (원금은 월말평가 / 이번 달은 지금 값) */
+const HH_AUTO_FROM = '2026-10';
+function hhAutoMonths_() {
+  const ss = SpreadsheetApp.getActive();
+  if (!ss.getSheetByName('가계부') || !ss.getSheetByName('가계부자산')) return [];
+  const group = {}, inv = {};
+  hhRows_('가계부자산').rows.forEach(r => { const n = String(r[1]).trim(); group[n] = String(r[0]).trim(); if (String(r[4]).trim() === '투자앱') inv[n] = true; });
+  const t = table_('가계부'), c = t.col, months = {}, bal = {};
+  const get = (v, h) => (h in c ? v[c[h]] : '');
+  const rows = [];
+  for (let r = 1; r < t.values.length; r++) {
+    const v = t.values[r];
+    let ts = get(v, '일시'); ts = ts instanceof Date ? Utilities.formatDate(ts, sheetTz_(), 'yyyy-MM-dd HH:mm:ss') : String(ts || '');
+    if (!/^\d{4}-\d{2}/.test(ts)) continue;
+    rows.push([ts.slice(0, 7), String(get(v, '구분')).trim(), num_(get(v, '금액')), String(get(v, '자산')).trim(), String(get(v, '받는자산')).trim()]);
+  }
+  rows.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  const add = (a, x) => { bal[a] = (bal[a] || 0) + x; };
+  const snap = ym => {
+    let life = 0, jeonse = 0, loan = 0;
+    Object.keys(bal).forEach(a => {
+      if (inv[a]) return;
+      life += bal[a];
+      if (group[a] === '부동산') jeonse += bal[a];
+      if (group[a] === '대출' || group[a] === '마이너스 통장') loan -= bal[a];
+    });
+    months[ym].life = Math.round(life); months[ym].jeonse = Math.round(jeonse); months[ym].loan = Math.round(loan);
+  };
+  let cur = '';
+  const now = Utilities.formatDate(new Date(), TZ, 'yyyy-MM');
+  rows.forEach(([ym, ty, amt, a, to]) => {
+    if (ym > now) return;
+    if (cur && ym !== cur && months[cur]) snap(cur);
+    cur = ym;
+    const m = months[ym] || (months[ym] = { inc: 0, exp: 0, flow: 0 });
+    if (ty === '수입') { add(a, amt); m.inc += amt; }      // 가계부 화면의 수입·지출과 같게 (투자 계좌로 받은 수입 포함)
+    else if (ty === '지출') { add(a, -amt); m.exp += amt; }
+    else if (ty === '수정') add(a, amt);
+    else if (ty === '이체') { add(a, -amt); add(to, amt); if (inv[to] && !inv[a]) m.flow += amt; if (inv[a] && !inv[to]) m.flow -= amt; }
+  });
+  if (cur && months[cur]) snap(cur);
+  // 내역이 없는 달은 앞 달 잔액을 이어받음
+  const out = [];
+  let ym = HH_AUTO_FROM, prev = null;
+  const keys = Object.keys(months).sort();
+  const lastBefore = keys.filter(k => k < HH_AUTO_FROM).pop();
+  if (lastBefore) prev = months[lastBefore];
+  while (ym <= now) {
+    const m = months[ym] || { inc: 0, exp: 0, flow: 0, life: prev ? prev.life : 0, jeonse: prev ? prev.jeonse : 0, loan: prev ? prev.loan : 0 };
+    out.push({ y: Number(ym.slice(0, 4)), m: Number(ym.slice(5, 7)), inc: Math.round(m.inc), exp: Math.round(m.exp), flow: Math.round(m.flow), life: m.life, jeonse: m.jeonse, loan: m.loan });
+    prev = m; ym = hhNextYm_(ym);
+  }
+  return out;
+}
+
+/** 말일 자동 저장: 가계부 계산값 + 투자 원금으로 '가계부월별' 한 줄 */
+function saveAutoMonth_(ym) {
+  const a = hhAutoMonths_().find(x => `${x.y}-${('0' + x.m).slice(-2)}` === ym);
+  if (!a) return null;
+  let cost = 0;
+  const t = holdings_();
+  for (let r = 1; r < t.values.length; r++) {
+    const n = String(t.values[r][t.col['자산']]).trim();
+    if (n && n !== '합계') cost += num_(t.values[r][t.col['원금(원)']]);
+  }
+  let pnl = 0;
+  const rz = table_('실현손익');
+  for (let r = 1; r < rz.values.length; r++) {
+    const d = clean_(rz.values[r][rz.col['날짜']]);
+    if (String(d).slice(0, 7) === ym || (d instanceof Date && Utilities.formatDate(d, TZ, 'yyyy-MM') === ym)) pnl += num_(rz.values[r][rz.col['손익(원)']]);
+  }
+  return saveMonth_({ y: a.y, m: a.m, nw: a.life + cost, inc: a.inc, exp: a.exp, pnl, flow: a.flow, book: Math.round(cost), jeonse: a.jeonse, loan: a.loan });
 }
 
 /* ───────────────────────── 월 마감 (가계부월별) ───────────────────────── */

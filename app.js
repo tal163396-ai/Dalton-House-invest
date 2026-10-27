@@ -141,12 +141,30 @@
       rate, rows, assets, comp, realized, years, bad, cashLinked: d.cashLinked || ['ISA', 'TQQQ(나예)', 'ETHU', 'QLD', 'SOXL'],
       total: { ...total, pl: total.value - total.cost, ret: total.cost > 0 ? (total.value - total.cost) / total.cost : null },
       monthly: d.monthly || [], trades: (d.trades || []).slice().reverse(), index: d.index || null, updatedAt: d.updatedAt,
-      household: (d.household || []).map(h => ({
+      household: mergeAuto((d.household || []).map(h => ({
         y: num(h['연도']), m: num(h['월']), nw: num(h['순자산']), inc: num(h['수입(근로·기타)']), exp: num(h['생활 지출']),
         pnl: num(h['투자손익(실현)']), flow: num(h['투자 순투입']), book: num(h['투자 장부잔액']),
         jeonse: isNum(h['전세보증금']) ? num(h['전세보증금']) : null, loan: isNum(h['대출']) ? num(h['대출']) : null,
-      })).filter(h => h.y && h.m).sort((a, b) => a.y - b.y || a.m - b.m),
+      })).filter(h => h.y && h.m), d.hhAuto || [], d.monthly || [], realized, total.cost).sort((a, b) => a.y - b.y || a.m - b.m),
     };
+  }
+
+  // 2026년 10월부터는 가계부 내역으로 자동 계산한 달로 바꿔 넣음 (2차 ②·③)
+  // 순자산 = 생활 자산 + 투자 원금(지난 달 = 월말평가, 이번 달 = 지금 원금), 투자손익 = 그 달 실현손익
+  function mergeAuto(rows, auto, monthly, realized, costNow) {
+    if (!auto.length) return rows;
+    const snap = {};
+    monthly.forEach(r => { const k = String(r['월']).replace(/^'/, '').slice(0, 7); snap[k] = (snap[k] || 0) + num(r['원금(원)']); });
+    const now = new Date(), curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const byKey = new Map(rows.map(h => [`${h.y}-${String(h.m).padStart(2, '0')}`, h]));
+    auto.forEach(a => {
+      const key = `${a.y}-${String(a.m).padStart(2, '0')}`;
+      const old = byKey.get(key);
+      const cost = key === curKey ? costNow : (snap[key] ?? (old ? old.book : costNow));
+      const pnl = realized.filter(r => r.year === a.y && r.month === a.m).reduce((t, r) => t + r.amount, 0);
+      byKey.set(key, { y: a.y, m: a.m, nw: Math.round(a.life + cost), inc: a.inc, exp: a.exp, pnl, flow: a.flow, book: Math.round(cost), jeonse: a.jeonse, loan: a.loan, auto: true });
+    });
+    return [...byKey.values()];
   }
 
   const SUB_ALIASES = { 'NAVER': ['네이버'], 'TQQQ': ['나예 무매'], 'LG에너지솔루션': ['LG엔솔'], '미래에셋증권': ['미래에셋'],
@@ -286,7 +304,7 @@
           <path d="${d}L${P.at(-1)[0]},${Ht}L${P[0][0]},${Ht}Z" fill="url(#nwg)"/>
           <path d="${d}" fill="none" stroke="var(--up)" stroke-width="2.2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
         </svg>
-        <div class="nw-axis num"><span>${ymLabel(first)}</span><span>편한가계부 기준</span><span>${ymLabel(last)}</span></div>
+        <div class="nw-axis num"><span>${ymLabel(first)}</span><span>가계부 기준</span><span>${ymLabel(last)}</span></div>
       </button>`;
   }
 
@@ -835,10 +853,16 @@
   function growthCard() {
     const D = state.data, H = D.household;
     const start = H[0].nw;
-    let saveCum = 0, pnlCum = 0;
+    let saveCum = 0, pnlCum = 0, adjCum = 0;
+    // 2026년 9월까지 = 편한가계부 기록 (저축 = 순자산 변화 − 실현손익), 10월부터 = 가계부 수입 − 지출 (나머지는 기타 보정)
     const pts = H.map((h, i) => {
-      if (i > 0) { pnlCum += h.pnl; saveCum += (h.nw - H[i - 1].nw) - h.pnl; }
-      return { label: ymLabel(h), nw: h.nw, save: start + saveCum, saveCum, pnlCum };
+      if (i > 0) {
+        pnlCum += h.pnl;
+        const d = h.nw - H[i - 1].nw;
+        if (h.auto) { const sv = h.inc - h.exp; saveCum += sv; adjCum += d - sv - h.pnl; }
+        else saveCum += d - h.pnl;
+      }
+      return { label: ymLabel(h), nw: h.nw, save: start + saveCum, saveCum, pnlCum, adjCum };
     });
     const last = pts.at(-1);
     const unreal = D.total.pl;
@@ -848,7 +872,7 @@
     ];
     const meta = {
       nw: [['시작', compact(start)], ['늘어난 돈', won0(last.nw - start), cls(last.nw - start)], ['그중 투자', won0(last.pnlCum), cls(last.pnlCum)]],
-      save: [['시작', compact(start)], ['근로저축', won0(last.saveCum), cls(last.saveCum)], ['월평균', won0(last.saveCum / (pts.length - 1)), '']],
+      save: [['시작', compact(start)], ['저축', won0(last.saveCum), cls(last.saveCum)], ['월평균', won0(last.saveCum / (pts.length - 1)), '']],
     };
     const tot = last.nw - start;
     const wS = Math.max(0, last.saveCum), wP = Math.abs(last.pnlCum);
@@ -858,8 +882,9 @@
         <div class="gw-hero num"><small>순자산</small><b>${compact(start)} → ${compact(last.nw)}</b><span class="${cls(tot)}">${won0(tot)}</span></div>
         <div class="gw-split" aria-hidden="true"><i style="flex:${wS};background:var(--accent)"></i><i style="flex:${wP};background:${last.pnlCum >= 0 ? 'var(--up)' : 'var(--down)'}"></i></div>
         <div class="gw-legend num">
-          <span><i style="background:var(--accent)"></i>근로저축 <small class="lg-sub">(수입 − 지출 ± 보정)</small> <b>${won0(last.saveCum)}</b></span>
+          <span><i style="background:var(--accent)"></i>저축 <small class="lg-sub">(근로·기타소득 − 지출)</small> <b>${won0(last.saveCum)}</b></span>
           <span><i style="background:${last.pnlCum >= 0 ? 'var(--up)' : 'var(--down)'}"></i>투자 손익 (실현) <b class="${cls(last.pnlCum)}">${won0(last.pnlCum)}</b></span>
+          ${Math.round(last.adjCum) ? `<span><i style="background:var(--ink-4)"></i>기타 보정 <small class="lg-sub">(잔액 맞춤·자산 등록 등)</small> <b class="${cls(last.adjCum)}">${won0(last.adjCum)}</b></span>` : ''}
         </div>
         <div class="legend">${series.map(s => `<span><i class="${s.key === 'inv' || s.key === 'save' ? 'dash' : ''}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
         ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, areaKey: 'nw', tagFmt: v => compact(v), valFmt: v => `${compact(v)}원`, meta })}
@@ -1802,9 +1827,37 @@
     return { pnl, gains, flow, book, saved, prev };
   }
 
+  // 월 마감 (자동): 2026년 10월부터 가계부 내역으로 계산, 말일 밤 자동 저장
+  function autoMonthCard() {
+    const D = state.data, H = D.household;
+    const autos = H.filter(h => h.auto);
+    const rows = autos.slice().reverse().map(h => {
+      const i = H.indexOf(h), prev = i > 0 ? H[i - 1] : null;
+      const sv = h.inc - h.exp, adj = prev ? h.nw - prev.nw - sv - h.pnl : 0;
+      return `<div class="am-row num"><b>${String(h.y).slice(2)}.${h.m}</b>
+        <span><small>저축</small><em class="${cls(sv)}">${won0(sv)}</em></span>
+        <span><small>투자손익</small><em class="${cls(h.pnl)}">${won0(h.pnl)}</em></span>
+        <span><small>기타 보정</small><em class="${cls(adj)}">${won0(adj)}</em></span>
+        <span><small>순자산</small><em>${compact(h.nw)}</em></span></div>`;
+    }).join('');
+    return `
+      <div class="card mc-card">
+        <div class="card-head"><h2 class="card-title">월 마감</h2><span class="card-aside">자동</span></div>
+        <p class="help">2026년 10월부터는 가계부 내역으로 자동 계산합니다.<br>매달 말일 밤에 '가계부월별' 탭에 저장됩니다.</p>
+        <div class="am-list">${rows}</div>
+        <dl class="defs">
+          <dt>저축</dt><dd>가계부 수입(근로·기타소득) − 지출</dd>
+          <dt>투자손익</dt><dd>그 달 실현손익 (익절 − 손절)</dd>
+          <dt>기타 보정</dt><dd><span class="nb">순자산 변화 중 위 둘로 설명되지 않는 부분</span> <span class="nb">(잔액 수정, 투자 앱 수정·등록 등)</span></dd>
+          <dt>순자산</dt><dd>가계부 생활 자산 + 투자 앱 원금</dd>
+        </dl>
+      </div>`;
+  }
+
   function monthCloseCard() {
     const D = state.data;
     if (!D.household.length) return '';
+    if (D.household.some(h => h.auto)) return autoMonthCard();
     const last = D.household.at(-1), now = new Date();
     let y = state.mc?.y, m = state.mc?.m;
     if (!y) { y = now.getFullYear(); m = now.getMonth() + 1; if (now.getDate() <= 10) { m -= 1; if (!m) { m = 12; y -= 1; } } }
