@@ -259,8 +259,8 @@ table.grid tr.subsub td:first-child::before { content: "└ "; color: var(--ink-
 
 /* ── 기록 ── */
 .form { display: grid; gap: 16px; }
-.type-seg { display: grid; grid-template-columns: repeat(5, 1fr); background: var(--fill); border-radius: 12px; padding: 3px; }
-.type-seg button { border: 0; background: none; padding: 9px 0; border-radius: 9px; font-size: 14px; font-weight: 600; color: var(--ink-3); }
+.type-seg { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--fill); border-radius: 12px; padding: 3px; }
+.type-seg button { border: 0; background: none; padding: 9px 0; border-radius: 9px; font-size: 15px; font-weight: 600; color: var(--ink-3); }
 .type-seg button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 .type-seg button.on[data-type="매수"] { color: var(--up); }
 .type-seg button.on[data-type="매도"] { color: var(--down); }
@@ -1302,3 +1302,4 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .am-row span { display: grid; gap: 2px; min-width: 0; }
 .am-row small { font-size: 11px; color: var(--ink-3); font-weight: 600; }
 .am-row em { font-style: normal; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.help.mc-help { font-size: 12.5px; line-height: 1.6; letter-spacing: -0.01em; }

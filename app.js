@@ -1843,7 +1843,7 @@
     return `
       <div class="card mc-card">
         <div class="card-head"><h2 class="card-title">월 마감</h2><span class="card-aside">자동</span></div>
-        <p class="help">2026년 10월부터는 가계부 내역으로 자동 계산합니다.<br>매달 말일 밤에 '가계부월별' 탭에 저장됩니다.</p>
+        <p class="help mc-help">26년 10월부터 가계부 내역으로 자동 계산하고,<br>매달 말일 밤 '가계부월별' 탭에 저장합니다.</p>
         <div class="am-list">${rows}</div>
         <dl class="defs">
           <dt>저축</dt><dd>가계부 수입(근로·기타소득) − 지출</dd>
