@@ -54,6 +54,7 @@
     trash: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
     copy: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
     eye: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>',
     eyeOff: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a9.8 9.8 0 0 0 5.4-1.6"/></svg>',
     chev: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
   };
@@ -529,11 +530,13 @@
     return `${from.slice(2).replace(/-/g, '.')} ~ ${to.slice(2).replace(/-/g, '.')}`;
   }
   function openCatDetail(type, cat, from, to) {
+    const winEnd = to.slice(0, 7);
     const build = () => {
       const list = inRange(from, to).filter(t => t.type === type && (t.cat || '미분류') === cat);
       const total = list.reduce((a, t) => a + t.amt, 0);
       const subs = new Map(); list.forEach(t => { const k = t.sub || '(소분류 없음)'; const r = subs.get(k) || { k, v: 0, n: 0 }; r.v += t.amt; r.n++; subs.set(k, r); });
-      const endYm = to.slice(0, 7), months = Array.from({ length: 12 }, (_, i) => addMonths(endYm, i - 11));
+      const endYm = to.slice(0, 7), months = Array.from({ length: 12 }, (_, i) => addMonths(winEnd, i - 11));
+      const oneMonth = from.slice(0, 7) === endYm && from.endsWith('-01');
       const mv = months.map(ym => monthTx(ym).filter(t => t.type === type && (t.cat || '미분류') === cat).reduce((a, t) => a + t.amt, 0));
       const avg = mv.reduce((a, b) => a + b, 0) / 12;
       return `
@@ -544,18 +547,23 @@
         </section>
         <section class="card">
           <h3 class="hh-h3">최근 12개월 <small>월평균 ${won(avg)}</small></h3>
-          ${monthBars(months, mv, type === '수입' ? 'var(--inc)' : 'var(--exp)', endYm)}
+          ${monthBars(months, mv, type === '수입' ? 'var(--inc)' : 'var(--exp)', oneMonth ? endYm : null, true)}
+          <p class="note mb-note">막대를 누르면 그 달 내역을 봅니다.</p>
         </section>
         ${[...groupByDay(list)].map(([ds, l]) => `<section class="card hd">${dayHead(ds, l)}${l.map(t => rowHtml(t)).join('')}</section>`).join('')}`;
     };
-    pushPage({ title: esc(cat), body: build(), refresh: pg => { $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); }, onMount: pg => bindRows(pg) });
+    const bindBars = pg => $$('[data-mb]', pg).forEach(r => r.onclick = () => {
+      const ym = r.dataset.mb; from = `${ym}-01`; to = `${ym}-${pad(daysIn(ym))}`;
+      $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg);
+    });
+    pushPage({ title: esc(cat), body: build(), refresh: pg => { $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg); }, onMount: pg => { bindRows(pg); bindBars(pg); } });
   }
-  function monthBars(months, vals, color, hi) {
+  function monthBars(months, vals, color, hi, tap = false) {
     const W = 336, Hh = 120, bw = W / months.length, mx = Math.max(...vals, 1);
     return `<svg viewBox="0 0 ${W} ${Hh + 18}" class="mbars" role="img" aria-label="월별 금액">${months.map((ym, i) => {
       const h = vals[i] / mx * (Hh - 16), x = i * bw + bw * 0.22;
       return `<rect x="${x.toFixed(1)}" y="${(Hh - h).toFixed(1)}" width="${(bw * 0.56).toFixed(1)}" height="${Math.max(h, vals[i] ? 1.5 : 0).toFixed(1)}" rx="3" fill="${color}" opacity="${ym === hi ? 1 : 0.42}"/>
-        <text x="${(i * bw + bw / 2).toFixed(1)}" y="${Hh + 14}" text-anchor="middle" class="mb-x">${+ym.slice(5)}</text>`;
+        <text x="${(i * bw + bw / 2).toFixed(1)}" y="${Hh + 14}" text-anchor="middle" class="mb-x ${ym === hi ? 'on' : ''}">${+ym.slice(5)}</text>${tap ? `<rect class="mb-hit" data-mb="${ym}" x="${(i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${Hh + 18}" fill="transparent"/>` : ''}`;
     }).join('')}</svg>`;
   }
 
@@ -578,7 +586,6 @@
         <div><span>부채</span><b class="exp">${fmt(-neg)}</b></div>
         <div><span>합계</span><b>${nw < 0 ? '−' : ''}${fmt(Math.abs(nw))}</b></div>
       </div>
-      <div class="ha-tools"><button class="hbud-set" id="hhAAdd">${ico.plus}<span>자산 추가</span></button><button class="hbud-set" id="hhAEdit">${ico.pen}<span>표시·숨김 · 순서 · 삭제</span></button></div>
       <button class="card ha-total" id="hhTotalBtn">
         <span class="ha-tl">순자산 추이 <em>전체통계 ›</em></span>
         <div class="ha-chart">${sparkSvg(ms.map(m => cum.get(m)), ms)}</div>
@@ -607,10 +614,8 @@
       <p class="note ha-note">숨긴 자산은 목록에서 빠지지만 합계에는 들어갑니다.${split ? '<br>투자 계좌는 투자 앱의 원금으로 합계에 들어갑니다.' : ''}</p>`;
     $$('#hh-assets .ha-row').forEach(b => b.onclick = () => openAsset(b.dataset.asset));
     $('#hhTotalBtn').onclick = () => openTotal(ymOf(new Date()));
-    $('#hhAAdd').onclick = () => openAssetEdit(newAsset());
-    $('#hhAEdit').onclick = () => openAssetSettings();
   }
-  const newAsset = () => ({ name: '', group: H.assets.at(-1)?.group || '현금', hidden: false, memo: '', link: '', isNew: true });
+  const newAsset = () => ({ name: '', group: '현금', hidden: false, memo: '', link: '', isNew: true });
   function cumByMonth() {
     const per = new Map();
     H.tx.forEach(t => { let d = nwDelta(t); H.inv.forEach(n => { d -= flowFor(t, n); }); per.set(t.ym, (per.get(t.ym) || 0) + d); });
@@ -721,7 +726,8 @@
             : card ? `<div class="hp-bal num">${won(out - inn)}</div><p class="note">${ymLabel(ym)} 사용 금액입니다. 결제 계좌 <b>${esc(card)}</b> 잔액에서 바로 빠집니다.</p>`
             : `<div class="hp-bal num ${bal < 0 ? 'exp' : ''}">${won(bal)}</div>${linked.length ? `<p class="note">${linked.map(esc).join(', ')} 사용 금액이 이 잔액에 들어 있습니다.</p>` : ''}`}
           ${a && a.memo && !isInv ? `<p class="note">${esc(a.memo)}</p>` : ''}
-          <div class="hp-btns">${isInv ? '<button class="btn sm" id="aInv">투자 화면으로</button>' : card ? '' : '<button class="btn sm" id="aAdj">잔액 수정</button>'}<button class="btn sm" id="aSet">자산 설정</button></div>
+          ${isInv ? `<button class="hp-inv" id="aInv"><span class="hp-inv-ic">${ico.chart}</span><span class="hp-inv-t"><b>투자 화면으로</b><small>종목별 평가금 · 수익률 보기</small></span>${ico.chev}</button>`
+            : `<div class="hp-btns">${card ? '' : '<button class="btn sm" id="aAdj">잔액 수정</button>'}<button class="btn sm" id="aSet">자산 설정</button></div>`}
         </section>
         <div class="hp-nav"><button class="hh-arrow" data-am="-1" aria-label="이전 달">${ico.left}</button><b>${ymLabel(ym)}</b><button class="hh-arrow" data-am="1" aria-label="다음 달">${ico.right}</button></div>
         <div class="card ha-sum num sm">
@@ -737,7 +743,7 @@
       $$('[data-am]', pg).forEach(b => b.onclick = () => { ym = addMonths(ym, Number(b.dataset.am)); $('.hh-pbody', pg).innerHTML = build(); bind(pg); });
       const adj = $('#aAdj', pg); if (adj) adj.onclick = () => adjustBalance(name);
       const iv = $('#aInv', pg); if (iv) iv.onclick = () => (D.openInvHome ? D.openInvHome() : D.setApp('inv'));
-      $('#aSet', pg).onclick = () => { const a = H.assets.find(x => x.name === name); openAssetEdit(a || { ...newAsset(), name, group: '기타' }); };
+      const aSet = $('#aSet', pg); if (aSet) aSet.onclick = () => { const a = H.assets.find(x => x.name === name); openAssetEdit(a || { ...newAsset(), name, group: '기타' }); };
     };
     pushPage({ title: esc(name), body: build(), onMount: bind, refresh: pg => { $('.hh-pbody', pg).innerHTML = build(); bind(pg); } });
   }
@@ -779,7 +785,7 @@
     $$('#hh-more [data-go]').forEach(b => b.onclick = () => {
       const g = b.dataset.go;
       if (g.startsWith('cat-')) openCatSettings(g.slice(4));
-      else if (g === 'assets') openAssetSettings();
+      else if (g === 'assets') openAssetSettings('all');
       else if (g === 'rules') openRules();
       else if (g === 'budget') openBudgetSettings();
       else if (g === 'search') openSearch();
@@ -1063,7 +1069,7 @@
           else done(null);
         });
         $('#pkX', box).onclick = () => back();
-        $('#pkEdit', box).onclick = () => back(1, () => openAssetSettings());
+        $('#pkEdit', box).onclick = () => back(1, () => openAssetSettings('all'));
       }
     }
 
@@ -1370,8 +1376,30 @@
   }
 
   /* ───────────── 설정: 자산 ───────────── */
-  function openAssetSettings() {
-    const pg = pushPage({ title: '자산 편집', actions: `<button class="icon-btn" id="aAdd" aria-label="자산 추가">${ico.plus}</button>`, body: '', refresh: p => draw(p) });
+  // 오른쪽 위 ⋯ (자산 탭에서만): 추가 · 표시/숨김 · 삭제 · 순서 변경
+  function assetMenu() {
+    const old = $('.hh-drop'); if (old) { old.remove(); return; }
+    const m = document.createElement('div');
+    m.className = 'hh-drop';
+    m.innerHTML = `<div class="hh-drop-p" role="menu">
+      <button role="menuitem" data-am="add">추가</button><button role="menuitem" data-am="hide">표시/숨김</button>
+      <button role="menuitem" data-am="del">삭제</button><button role="menuitem" data-am="order">순서 변경</button></div>`;
+    document.body.appendChild(m);
+    m.onclick = e => {
+      const b = e.target.closest('[data-am]'); m.remove();
+      if (!b) return;
+      if (b.dataset.am === 'add') openAssetEdit(newAsset()); else openAssetSettings(b.dataset.am);
+    };
+  }
+  function openAssetSettings(mode = 'hide') {
+    const T = { hide: '표시/숨김', del: '삭제', order: '순서 변경', all: '자산 설정' };
+    const NOTE = {
+      hide: '눈 아이콘으로 표시·숨김을 바꿉니다. 숨긴 자산은 목록과 입력 화면에 나오지 않지만 합계에는 들어갑니다.',
+      del: '⊖ 를 누르면 지웁니다. 내역이 있는 자산은 지울 수 없으니 숨기십시오.',
+      order: '≡ 를 끌어 같은 그룹 안에서 순서를 바꿉니다.',
+      all: '눈 아이콘 = 표시·숨김, ⊖ = 삭제, ≡ 를 끌면 순서를 바꿉니다.',
+    };
+    const pg = pushPage({ title: T[mode] || '자산 편집', cls: `se-mode-${mode}`, body: '', refresh: p => draw(p) });
     let saveT = 0;
     const saveLater = () => { clearTimeout(saveT); saveT = setTimeout(() => saveSettings({ assets: assetsArr() }), 600); };
     function draw(p = pg) {
@@ -1383,7 +1411,7 @@
           <button class="se-ed se-eye ${a.hidden ? '' : 'on'}" data-eye="${esc(a.name)}" aria-pressed="${!a.hidden}" aria-label="${esc(a.name)} ${a.hidden ? '보이기' : '숨기기'}">${a.hidden ? ico.eyeOff : ico.eye}</button>
           <span class="se-drag" aria-label="끌어서 순서 바꾸기">${ico.drag}</span>
         </div>`).join('')}</div>`).join('')
-        + '<p class="note">눈 아이콘으로 표시·숨김을 바꿉니다. 숨긴 자산은 입력할 때 목록에 나오지 않지만 합계에는 들어갑니다. ≡ 를 끌어 순서를 바꾸고, 이름을 누르면 이름·그룹·연결을 고칩니다.</p>';
+        + `<p class="note">${NOTE[mode] || ''} 이름을 누르면 자산 정보를 고칩니다.</p>`;
       $$('[data-edit]', p).forEach(b => b.onclick = () => openAssetEdit(H.assets.find(a => a.name === b.dataset.edit)));
       $$('[data-eye]', p).forEach(b => b.onclick = () => {
         const a = H.assets.find(x => x.name === b.dataset.eye); if (!a) return;
@@ -1401,7 +1429,6 @@
       }));
     }
     draw();
-    $('#aAdd', pg).onclick = () => openAssetEdit(newAsset());
   }
   async function deleteAsset(a, after) {
     if (!a) return false;
@@ -1415,46 +1442,64 @@
     if (ok && after) after();
     return ok;
   }
+  const BASE_GROUPS = ['현금', '은행', '카드', '투자', '부동산', '대출', '적금', '기타', '체크카드', '마이너스 통장'];
+  const isCheckG = g => g === '체크카드';
+  const isDebtG = g => g === '대출' || g === '마이너스 통장';
   function openAssetEdit(a) {
     const isNew = !!a.isNew;
-    const groups = [...new Set(H.assets.map(x => x.group))];
+    const groups = [...new Set([...BASE_GROUPS, ...H.assets.map(x => x.group)])];
+    const curBal = isNew ? 0 : Math.round(H.bal.get(a.name) || 0);
+    let group = a.group || '현금';
+    let invOn = a.link === INVLINK;
+    const payOpts = () => H.assets.filter(x => x.name !== a.name && !x.link && !isCheckG(x.group) && x.group !== '카드');
     const pg = pushPage({
-      title: isNew ? '자산 추가' : '자산 고치기', cls: 'hf-page',
+      title: isNew ? '자산 추가' : '자산 고치기', cls: 'hf-page ae-page',
       actions: !isNew ? `<button class="icon-btn" id="eDel" aria-label="자산 삭제">${ico.trash}</button>` : '',
-      body: `<div class="hf">
+      body: `<div class="hf ae">
+        <button class="hf-row ae-g" id="eGroupBtn" type="button"><span class="hf-l">그룹</span><span class="hf-v" id="eGroupV">${esc(group)}</span>${ico.chev}</button>
         <div class="hf-row"><span class="hf-l">이름</span><div class="hf-v"><input id="eName" value="${esc(a.name)}" maxlength="80" autocomplete="off"></div></div>
-        <div class="hf-row"><span class="hf-l">그룹</span><div class="hf-v"><select id="eGroup" class="hf-sel wide">${groups.map(g => `<option ${g === a.group ? 'selected' : ''}>${esc(g)}</option>`).join('')}<option value="__new">+ 새 그룹</option></select></div></div>
-        ${isNew ? `<div class="hf-row"><span class="hf-l">시작 잔액</span><div class="hf-v"><input id="eBal" inputmode="numeric" placeholder="0" autocomplete="off"><span class="hf-unit">원</span></div></div>
-          <p class="hf-info">대출처럼 갚을 돈은 앞에 −를 붙입니다.</p>` : ''}
-        <div class="hf-row"><span class="hf-l">연결</span><div class="hf-v"><select id="eLink" class="hf-sel wide"><option value="">없음</option><option value="${INVLINK}" ${a.link === INVLINK ? 'selected' : ''}>투자 앱 원금으로 보기</option><optgroup label="결제 계좌 (체크카드)">${H.assets.filter(x => x !== a && x.name !== a.name && !x.link).map(x => `<option ${x.name === a.link ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</optgroup></select></div></div>
-        <p class="hf-info">투자 앱 원금으로 보기: 금액을 투자 앱의 원금으로 보여 주고, 가계부에는 보낸 돈·찾은 돈만 적습니다.<br>결제 계좌: 체크카드처럼 쓰는 즉시 통장에서 빠지는 자산은 그 통장을 고르십시오. 사용 금액이 통장 잔액에서 빠집니다.</p>
-        <label class="hf-switch"><span>숨기기</span><input type="checkbox" id="eHide" ${a.hidden ? 'checked' : ''}><i></i></label>
-        <textarea id="eMemo" class="hf-memo" rows="2" placeholder="메모">${esc(a.memo || '')}</textarea>
+        <div id="eDyn"></div>
+        <div class="hf-row ae-memo"><span class="hf-l">메모</span><div class="hf-v"><input id="eMemo" value="${esc(a.memo || '')}" maxlength="200" autocomplete="off"></div></div>
         <p class="form-error" id="eErr" role="alert"></p>
         <div class="hf-btns"><button class="btn hf-save memo" id="eSave">저장하기</button></div></div>`,
     });
-    const bal = $('#eBal', pg); if (bal) bindMoneyInput(bal, true);
-    $('#eGroup', pg).onchange = async ev => {
-      if (ev.target.value !== '__new') return;
-      const g = await askText('새 그룹 이름', '', { ok: '추가' });
-      const sel = $('#eGroup', pg);
-      if (!g) { sel.value = a.group || groups[0]; return; }
-      const o = document.createElement('option'); o.textContent = g; sel.insertBefore(o, sel.lastElementChild); sel.value = g;
+    let balTxt = isNew ? '' : String(curBal), pay = a.link && a.link !== INVLINK ? a.link : '';
+    function dyn() {
+      const box = $('#eDyn', pg);
+      const check = isCheckG(group), invG = group === '투자', inv = invG && invOn;
+      const amt = !check && !inv;
+      box.innerHTML = `
+        ${amt ? `<div class="hf-row"><span class="hf-l">금액</span><div class="hf-v"><input id="eBal" inputmode="numeric" placeholder="0" autocomplete="off" value="${balTxt === '' ? '' : Number(balTxt).toLocaleString('ko-KR')}"><span class="hf-unit">원</span></div></div>
+          ${isDebtG(group) ? `<p class="hf-info ae-hint">${esc(group)}을 입력하실 때에는 금액에 '−'를 함께 입력하셔야 부채에 합산됩니다. '−'가 없으면 자산에 합산됩니다.</p>` : ''}
+          ${!isNew ? '<p class="hf-info ae-hint">금액을 바꾸면 차액만큼 잔액수정 내역이 들어갑니다.</p>' : ''}` : ''}
+        ${check ? `<div class="hf-row"><span class="hf-l">결제</span><div class="hf-v"><select id="ePay" class="hf-sel wide"><option value="">선택 안 함</option>${payOpts().map(x => `<option ${x.name === pay ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div></div>
+          <p class="hf-info ae-hint">체크카드 그룹은 이월·누적되지 않으며, 쓴 금액은 결제 통장 잔액에서 바로 빠집니다. 금액 이월·누적을 원하시면 그룹을 은행으로 설정하십시오.</p>` : ''}
+        ${invG ? `<label class="hf-switch"><span>투자 앱 원금으로 보기</span><input type="checkbox" id="eInv" ${invOn ? 'checked' : ''}><i></i></label>
+          <p class="hf-info ae-hint">켜면 금액을 투자 앱의 원금으로 보여 주고, 가계부에는 보낸 돈·찾은 돈만 적습니다.</p>` : ''}`;
+      const bal = $('#eBal', pg);
+      if (bal) { bindMoneyInput(bal, true); bal.addEventListener('input', () => { balTxt = String(moneyVal(bal.value) || ''); }); }
+      const ps = $('#ePay', pg); if (ps) ps.onchange = () => { pay = ps.value; };
+      const iv = $('#eInv', pg); if (iv) iv.onchange = () => { invOn = iv.checked; dyn(); };
+    }
+    dyn();
+    $('#eGroupBtn', pg).onclick = () => {
+      D.openSheet(`<h2 id="sheetTitle">자산그룹</h2><div class="ae-gl">${groups.map(g => `<button class="ae-gi ${g === group ? 'on' : ''}" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div>`, 'pop');
+      $$('.ae-gi').forEach(b => b.onclick = () => { group = b.dataset.g; $('#eGroupV', pg).textContent = group; D.closeSheet(); dyn(); });
     };
     $('#eSave', pg).onclick = async () => {
-      const name = $('#eName', pg).value.trim(), group = $('#eGroup', pg).value, hidden = $('#eHide', pg).checked, memo = $('#eMemo', pg).value.trim(), link = $('#eLink', pg).value;
+      const name = $('#eName', pg).value.trim(), memo = $('#eMemo', pg).value.trim();
+      const link = isCheckG(group) ? pay : group === '투자' && invOn ? INVLINK : '';
+      const hidden = !!a.hidden;
       const err = $('#eErr', pg);
       if (!name) { err.textContent = '이름을 입력하십시오.'; return; }
-      if (group === '__new') { err.textContent = '그룹을 고르십시오.'; return; }
       if (H.assets.some(x => x.name === name && x !== a)) { err.textContent = '같은 이름의 자산이 있습니다.'; return; }
+      const balEl = $('#eBal', pg);
+      const target = balEl ? moneyVal(balEl.value) : NaN;
       const payload = {};
       if (isNew) {
-        const exists = H.assets.some(x => x.name === name);
-        if (!exists) {
-          const lastIdx = H.assets.map(x => x.group).lastIndexOf(group);
-          const item = { group, name, hidden, memo, link };
-          if (lastIdx >= 0) H.assets.splice(lastIdx + 1, 0, item); else H.assets.push(item);
-        }
+        const lastIdx = H.assets.map(x => x.group).lastIndexOf(group);
+        const item = { group, name, hidden: false, memo, link };
+        if (lastIdx >= 0) H.assets.splice(lastIdx + 1, 0, item); else H.assets.push(item);
       } else {
         if (name !== a.name) { payload.renames = [{ what: 'asset', from: a.name, to: name }]; renameLocal(payload.renames[0]); }
         if (group !== a.group) {
@@ -1470,10 +1515,10 @@
       const ok = await saveSettings(payload, isNew ? '자산을 추가했습니다' : '자산을 고쳤습니다');
       if (!ok) { btn.disabled = false; btn.textContent = '저장하기'; return; }
       back(); rerender();
-      const v = bal ? moneyVal(bal.value) : NaN;
-      if (isNew && Number.isFinite(v) && v) {
+      const diff = Number.isFinite(target) ? Math.round(target) - (isNew ? 0 : curBal) : 0;
+      if (diff) {
         const d = new Date();
-        commitTx(toTx([newId('n'), `${dOf(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`, '수정', '잔액수정', '', '시작 잔액', v, name, '', '', '', '', '', store.get('dh_name') || '']), null);
+        commitTx(toTx([newId('n'), `${dOf(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`, '수정', '잔액수정', '', isNew ? '시작 잔액' : '잔액 수정', diff, name, '', '', '', '', '', store.get('dh_name') || '']), null);
       }
     };
     const del = $('#eDel', pg);
@@ -1566,6 +1611,7 @@
 
   window.HH = {
     enter, leave, load, render,
+    menu() { if (!H.active || H.view !== 'assets' || stack.length) return false; assetMenu(); return true; },
     invUpdated() { if (H.active && H.view === 'assets') { const y = window.scrollY; render(); window.scrollTo({ top: y }); } refreshPages(); },
     scrollKey: () => `dh_scroll_hh_${H.view}`,
     clear() { H.loaded = false; H.tx = []; reindex(); store.del(CACHE); },

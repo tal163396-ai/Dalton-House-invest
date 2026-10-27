@@ -2107,7 +2107,7 @@
     };
     $('#maskBtn').onclick = () => setMask(!document.body.classList.contains('masked'));
     setMask(store.get('dh_mask') === '1', true);
-    $('#menuBtn').onclick = openMenu;
+    $('#menuBtn').onclick = () => { if (state.app === 'hh' && window.HH && window.HH.menu && window.HH.menu()) return; openMenu(); };
     $('#sheet').addEventListener('click', e => { if (e.target.closest('[data-close]')) closeSheet(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
     let rT; window.addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(() => { if (state.view === 'home') drawPlan(); }, 120); });
