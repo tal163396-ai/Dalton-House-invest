@@ -954,6 +954,62 @@
       $('#askOk').onclick = () => { fin(true); D.closeSheet(); };
     });
   }
+  // 달력 창 (편한가계부 날짜 선택 창과 같은 모양)
+  function pickDate(cur) {
+    return new Promise(res => {
+      let sel = cur || today(), ym = sel.slice(0, 7), mode = 'day', yy = +ym.slice(0, 4);
+      D.openSheet('<div class="cal" id="cal"></div>', 'pop');
+      const box = $('#cal');
+      let done = false;
+      const fin = v => { if (done) return; done = true; obs.disconnect(); res(v); };
+      const sh = $('#sheet');
+      const obs = new MutationObserver(() => { if (!sh.classList.contains('open') || sh.hidden) fin(null); });
+      setTimeout(() => obs.observe(sh, { attributes: true, attributeFilter: ['class', 'hidden'] }), 60);
+      const draw = () => {
+        const td = today();
+        let body;
+        if (mode === 'day') {
+          const first = parseD(ym + '-01').getDay(), n = daysIn(ym);
+          const cells = [];
+          for (let i = 0; i < first; i++) cells.push('<span></span>');
+          for (let d = 1; d <= n; d++) {
+            const ds = `${ym}-${pad(d)}`, w = (first + d - 1) % 7;
+            cells.push(`<button class="cal-d${w === 0 ? ' sun' : w === 6 ? ' sat' : ''}${ds === td ? ' td' : ''}${ds === sel ? ' on' : ''}" data-d="${ds}">${d}</button>`);
+          }
+          body = `<div class="cal-nav"><button class="cal-ar" data-mv="-1" aria-label="이전 달">‹</button><button class="cal-ym" id="calYm">${ymLabel(ym)}</button><button class="cal-ar" data-mv="1" aria-label="다음 달">›</button></div>
+            <div class="cal-wk">${WD.map((w, i) => `<span class="${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}">${w}</span>`).join('')}</div>
+            <div class="cal-grid" id="calGrid">${cells.join('')}</div>`;
+        } else {
+          body = `<div class="cal-nav"><button class="cal-ar" data-yv="-1" aria-label="이전 해">‹</button><button class="cal-ym" id="calYm">${yy}년</button><button class="cal-ar" data-yv="1" aria-label="다음 해">›</button></div>
+            <div class="cal-ms">${Array.from({ length: 12 }, (_, i) => { const m = `${yy}-${pad(i + 1)}`; return `<button class="cal-m${m === ym ? ' on' : ''}${m === td.slice(0, 7) ? ' td' : ''}" data-m="${m}">${i + 1}월</button>`; }).join('')}</div>`;
+        }
+        box.innerHTML = `<div class="cal-hd"><span>${sel.slice(0, 4)}년</span><b>${+sel.slice(5, 7)}월 ${+sel.slice(8, 10)}일 (${WD[wdOf(sel)]})</b></div>${body}
+          <div class="cal-btns"><button class="cal-tb" id="calToday">오늘</button><span></span><button class="cal-tb" data-close>취소</button><button class="cal-tb ok" id="calOk">확인</button></div>`;
+        $$('[data-mv]', box).forEach(b => b.onclick = () => { ym = addMonths(ym, +b.dataset.mv); draw(); });
+        $$('[data-yv]', box).forEach(b => b.onclick = () => { yy += +b.dataset.yv; draw(); });
+        $$('[data-d]', box).forEach(b => b.onclick = () => { sel = b.dataset.d; draw(); });
+        $$('[data-m]', box).forEach(b => b.onclick = () => { ym = b.dataset.m; mode = 'day'; draw(); });
+        $('#calYm', box).onclick = () => { if (mode === 'day') { mode = 'month'; yy = +ym.slice(0, 4); } else mode = 'day'; draw(); };
+        $('#calToday', box).onclick = () => { sel = td; ym = td.slice(0, 7); mode = 'day'; draw(); };
+        $('#calOk', box).onclick = () => { fin(sel); D.closeSheet(); };
+        const g = $('#calGrid', box);
+        if (g) {
+          let x0 = null, y0 = 0;
+          g.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+          g.addEventListener('touchend', e => {
+            if (x0 == null) return;
+            const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null;
+            if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { ym = addMonths(ym, dx < 0 ? 1 : -1); draw(); }
+          });
+        }
+      };
+      draw();
+    });
+  }
+  // 날짜 단추: 누르면 달력 창을 열고, 고른 날짜를 data-v 에 담음
+  function bindDateBtn(btn, onPick) {
+    btn.onclick = async () => { const v = await pickDate(btn.dataset.v); if (v && v !== btn.dataset.v) { btn.dataset.v = v; onPick(v); } };
+  }
   function pickerOnTap(root) {
     $$('input[type="date"], input[type="time"], input[type="month"]', root).forEach(i => {
       if (i.dataset.pk) return; i.dataset.pk = '1';
@@ -1037,7 +1093,7 @@
         : `
         <div class="hf-row"><span class="hf-l">날짜</span>
           <div class="hf-v hf-date">
-            <label class="hf-dt"><span>${dateLabel(f.date)}</span><input type="date" id="hfDate" value="${f.date}" aria-label="날짜"></label>
+            <button type="button" class="hf-dt" id="hfDate" data-v="${f.date}" aria-label="날짜 ${dateLabel(f.date)}"><span>${dateLabel(f.date)}</span></button>
             <label class="hf-dt"><span>${tmLabel(f.time + ':00') || '오전 12:00'}</span><input type="time" id="hfTime" value="${f.time}" aria-label="시간"></label>
           </div>
           ${!e && !adj ? `<button class="hf-rep ${f.repeat ? 'on' : ''}" id="hfRep" aria-pressed="${f.repeat}">${ico.rep}<span>반복</span></button>` : ''}
@@ -1089,7 +1145,7 @@
           openPicker(nk);
         }
       });
-      const fd = $('#hfDate', root); if (fd) fd.onchange = () => { if (fd.value) { readInputs(); f.date = fd.value; f.sec = ''; draw(); } };
+      const fd = $('#hfDate', root); if (fd) bindDateBtn(fd, v => { readInputs(); f.date = v; f.sec = ''; draw(); });
       const ft = $('#hfTime', root); if (ft) ft.onchange = () => { if (ft.value) { readInputs(); f.time = ft.value.slice(0, 5); f.sec = ''; draw(); } };
       const rep = $('#hfRep', root); if (rep) rep.onclick = () => { readInputs(); f.repeat = !f.repeat; draw(); };
       const day = $('#hfDay', root); if (day) day.onchange = () => { f.day = Number(day.value); };
@@ -1341,18 +1397,18 @@
       title: isNew ? '새 메모' : '메모', cls: 'hf-page',
       actions: isNew ? '' : `<button class="icon-btn" id="mDel" aria-label="메모 삭제">${ico.trash}</button>`,
       body: `<div class="hf">
-        <div class="hf-row"><span class="hf-l">날짜</span><div class="hf-v hf-date"><label class="hf-dt"><span id="mDateTxt">${dateLabel(date)}</span><input type="date" id="mDate" value="${date}" aria-label="날짜"></label></div></div>
+        <div class="hf-row"><span class="hf-l">날짜</span><div class="hf-v hf-date"><button type="button" class="hf-dt" id="mDate" data-v="${date}" aria-label="날짜"><span id="mDateTxt">${dateLabel(date)}</span></button></div></div>
         <textarea id="mText" class="hf-memo big" rows="14" placeholder="첫 줄은 제목처럼 굵게 보입니다">${esc(m ? m.text : '')}</textarea>
         <p class="form-error" id="mErr" role="alert"></p>
         <div class="hf-btns"><button class="btn hf-save memo" id="mSave">저장하기</button></div></div>`,
     });
     pickerOnTap(pg);
     const di = $('#mDate', pg);
-    di.onchange = () => { if (di.value) $('#mDateTxt', pg).textContent = dateLabel(di.value); };
+    bindDateBtn(di, v => { $('#mDateTxt', pg).textContent = dateLabel(v); });
     $('#mSave', pg).onclick = async () => {
       const text = $('#mText', pg).value.trim();
       if (!text) { $('#mErr', pg).textContent = '내용을 입력하십시오.'; return; }
-      const obj = { id: m ? m.id : newId('m'), date: di.value || date, text, by: m ? m.by : (store.get('dh_name') || '') };
+      const obj = { id: m ? m.id : newId('m'), date: di.dataset.v || date, text, by: m ? m.by : (store.get('dh_name') || '') };
       const btn = $('#mSave', pg); btn.disabled = true; btn.textContent = '저장 중…';
       try {
         await D.api('hhSave', { memo: { ID: obj.id, 날짜: obj.date, 내용: obj.text, 입력자: obj.by } });
