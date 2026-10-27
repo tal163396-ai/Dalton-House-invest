@@ -1633,3 +1633,7 @@ button.cm-sr:active { background: var(--fill); }
 
 .hb-rule > span { display: grid; gap: 2px; } .hb-rl1 { display: block; }
 .hr-bad { font-style: normal; }
+
+/* 단가 통화 바꾸기 (달러 ⇄ 원) */
+.pcur-btn { border: 1px solid var(--line); background: var(--fill); color: var(--ink-2); border-radius: 8px; font: inherit; font-size: 13px; font-weight: 700; padding: 3px 8px; margin-left: 4px; cursor: pointer; }
+.hf-v .pcur-btn { font-size: 14px; padding: 4px 9px; }

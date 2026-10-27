@@ -1482,6 +1482,13 @@
       const trade = f.inv && (f.inv.type === '매수' || f.inv.type === '매도');
       const item = trade && io ? io.items.find(x => x.asset === f.inv.acct && x.sub === f.inv.sub) : null;
       const usd = item && item.cur === 'USD';
+      // 달러 종목을 원화로 산 경우: 칸에는 원화 단가, 저장은 달러(환율 환산). 종목마다 기억
+      const pKey = () => `dh_pcur_${f.inv ? `${f.inv.acct}|${f.inv.sub}` : ''}`;
+      const pK = () => { try { return store.get(pKey()) === 'KRW'; } catch { return false; } };
+      const rt = () => (D.rate && D.rate()) || 0;
+      const num4 = v => Number(v).toLocaleString('ko-KR', { maximumFractionDigits: 4 });
+      const pShow = () => (!f.inv || !f.inv.price ? '' : usd && pK() ? num4(f.inv.pk || Math.round(f.inv.price * rt())) : num4(f.inv.price));
+      const pPh = () => (usd && pK() ? (f.amt && f.inv && f.inv.qty > 0 ? num4(Math.round(Math.abs(f.amt) / f.inv.qty)) : '비우면 금액 ÷ 수량') : item && item.price ? num4(item.price) : '0');
       const invTxt = !f.inv ? '계좌 고르기' : !f.inv.type ? '연결 안 함' : invLabel({ invType: f.inv.type, invAcct: f.inv.acct, invSub: f.inv.sub }, io);
       root.dataset.type = { 수입: 'in', 지출: 'out', 이체: 'tr', 수정: 'adj' }[f.type];
       $('.hh-ph h2', pg).textContent = isRule ? title : e ? '내역 수정' : f.type;
@@ -1514,7 +1521,8 @@
         ${adj && !isRule ? `<div class="hf-row"><span class="hf-l">투자</span><button class="hf-v hf-pick ${f.inv && f.inv.type === '비용' ? '' : 'ph'}" id="hfCost">${f.inv && f.inv.type === '비용' ? esc(costLabel(f.inv.acct, f.inv.sub)) : '연결 안 함 (보정)'}</button></div>` : ''}
         ${dir ? `<div class="hf-row hf-invrow"><span class="hf-l">투자 앱</span><button class="hf-v hf-pick ${f.inv ? '' : 'ph'}" id="hfInv">${esc(invTxt)}</button></div>
           ${trade ? `<div class="hf-row"><span class="hf-l">수량</span><div class="hf-v"><input id="hfQty" class="dec" type="text" inputmode="decimal" autocomplete="off" placeholder="0" value="${f.inv.qty ? Number(f.inv.qty).toLocaleString('ko-KR', { maximumFractionDigits: 8 }) : ''}"><span class="hf-unit">${item ? item.unit : ''}</span></div></div>
-          <div class="hf-row"><span class="hf-l">단가</span><div class="hf-v"><input id="hfPrice" class="dec" type="text" inputmode="decimal" autocomplete="off" placeholder="${item && item.price ? Number(item.price).toLocaleString('ko-KR', { maximumFractionDigits: 4 }) : '0'}" value="${f.inv.price ? Number(f.inv.price).toLocaleString('ko-KR', { maximumFractionDigits: 4 }) : ''}"><span class="hf-unit">${usd ? '달러' : '원'}</span></div></div>` : ''}
+          <div class="hf-row"><span class="hf-l">단가</span><div class="hf-v"><input id="hfPrice" class="dec" type="text" inputmode="decimal" autocomplete="off" data-krw="${usd && pK() ? 1 : 0}" placeholder="${pPh()}" value="${pShow()}">${usd ? `<button type="button" class="hf-unit pcur-btn" id="hfPcur" aria-label="단가 통화 바꾸기">${pK() ? '원' : '달러'} ⇄</button>` : '<span class="hf-unit">원</span>'}</div></div>
+          ${usd && pK() ? `<p class="hf-info">원화로 산 단가입니다. 평단은 환율 ${fmt(D.rate ? D.rate() || 0 : 0)}원으로 달러 환산해 기록합니다.</p>` : ''}` : ''}
           <p class="hf-info">${!f.inv ? `투자 계좌${dir === 'in' ? '로 보내는' : '에서 찾는'} 이체입니다. 투자 앱의 어느 계좌${dir === 'in' ? '에 들어가는지' : '에서 나오는지'} 고르십시오.<br>투자 앱에 따로 적을 거면 '연결 안 함'을 고르십시오.`
             : !f.inv.type ? '투자 앱에는 기록하지 않습니다.'
             : `${isRule ? '매달 자동으로 들어갈 때 투자 앱에도 같은 금액으로 기록됩니다.' : '저장하면 투자 앱에도 같은 금액으로 기록됩니다.'}${item && f.inv.type === '매도' ? `<br>지금 보유 ${item.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}주` : ''}${trade ? `<br>금액은 투자 앱의 실제 원화 금액(원금)으로 들어갑니다.` : ''}`}</p>` : ''}
@@ -1534,9 +1542,22 @@
       const t = $('#hfText', root); if (t) f.text = t.value;
       const m = $('#hfMemo', root); if (m) f.memo = m.value;
       const q = $('#hfQty', root); if (q && f.inv) f.inv.qty = q.value === '' ? '' : Number(q.value.replace(/,/g, ''));
-      const pr = $('#hfPrice', root); if (pr && f.inv) f.inv.price = pr.value === '' ? '' : Number(pr.value.replace(/,/g, ''));
+      const pr = $('#hfPrice', root);
+      if (pr && f.inv) {
+        let v = pr.value === '' ? '' : Number(pr.value.replace(/,/g, ''));
+        if (v === '' && pr.dataset.krw === '1' && f.amt && f.inv.qty > 0) v = Math.round(Math.abs(f.amt) / f.inv.qty);   // 원화 칸을 비우면 금액 ÷ 수량
+        if (pr.dataset.krw === '1' && v !== '') { const r = (D.rate && D.rate()) || 0; f.inv.pk = v; f.inv.price = r ? Math.round(v / r * 10000) / 10000 : ''; }
+        else { f.inv.pk = ''; f.inv.price = v; }
+      }
     }
     function bind() {
+      const pc = $('#hfPcur', root);
+      if (pc) pc.onclick = () => {
+        readInputs();
+        const k = `dh_pcur_${f.inv.acct}|${f.inv.sub}`, toKrw = store.get(k) !== 'KRW';
+        try { store.set(k, toKrw ? 'KRW' : 'USD'); } catch { /* */ }
+        f.inv.pk = ''; draw();
+      };
       $$('.hf-types [data-t]', root).forEach(b => b.onclick = () => {
         readInputs();
         const was = f.type; f.type = b.dataset.t;

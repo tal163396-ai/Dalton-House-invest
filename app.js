@@ -1635,6 +1635,9 @@
   const rowKey = r => `${r.asset}|${r.sub}`;
   const findRow = key => state.data.rows.find(r => rowKey(r) === key);
 
+  // 달러 종목 단가 통화: 종목마다 기억 (원화로 사는 종목이 많음)
+  const pcurKey = F => `dh_pcur_${F.key || ''}`;
+  const pcurOf = F => { try { return store.get(pcurKey(F)) === 'KRW' ? 'KRW' : 'USD'; } catch { return 'USD'; } };
   function renderRecord() {
     const D = state.data, F = state.form;
     const el = $('#view-record');
@@ -1720,7 +1723,7 @@
           <p class="preview num">${row ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''}</p>`}
         <div class="two">
           <label class="field"><span>수량</span><input id="fQty" class="dec" type="text" inputmode="decimal" autocomplete="off"></label>
-          <label class="field"><span>단가 (${curr === 'USD' ? '달러' : '원'})</span><input id="fPrice" class="dec" type="text" inputmode="decimal" autocomplete="off"></label>
+          <label class="field"><span>단가 ${curr === 'USD' ? `<button type="button" class="pcur-btn" id="fPcur" aria-label="단가 통화 바꾸기">${pcurOf(F) === 'KRW' ? '원' : '달러'} ⇄</button>` : '(원)'}</span><input id="fPrice" class="dec" type="text" inputmode="decimal" autocomplete="off"></label>
         </div>
         <p class="preview num" id="fPreview"></p>
         <label class="field"><span>실제 원화 금액 (선택)</span>
@@ -1788,8 +1791,10 @@
       const p = $('#fPreview', el); if (!p) return;
       const q = num($('#fQty').value), pr = num($('#fPrice').value);
       const usd = (F.key === '__new' ? (F.newCur || 'KRW') : findRow(F.key)?.cur) === 'USD';
+      if (usd && pcurOf(F) === 'KRW') { p.textContent = q && pr ? `원화로 매수 · ${won(q * pr)} (평단은 $${(pr / D.rate).toLocaleString('en-US', { maximumFractionDigits: 4 })}로 기록)` : '원화로 산 단가를 넣으십시오. 평단은 환율로 달러 환산합니다.'; return; }
       p.textContent = q && pr ? `${usd ? `$${(q * pr).toLocaleString('en-US', { maximumFractionDigits: 2 })} · ` : ''}약 ${won(q * pr * (usd ? D.rate : 1))}` : '';
     };
+    on('#fPcur', 'click', e => { e.preventDefault(); const k = pcurKey(F); try { store.set(k, pcurOf(F) === 'KRW' ? 'USD' : 'KRW'); } catch { /* */ } const q = $('#fQty').value, pr = $('#fPrice').value; renderRecord(); $('#fQty').value = q; upd(); });
     on('#fQty', 'input', upd); on('#fPrice', 'input', upd);
     const fxUpd = () => {
       const h = $('#fxHint', el); if (!h) return;
@@ -2098,6 +2103,9 @@
       const krw = String($('#fKrw').value).replace(/,/g, '');
       if (krw !== '') t.amountKrw = Number(krw);
       t.qty = num($('#fQty').value); t.price = num($('#fPrice').value);
+      // 달러 종목을 원화로 산 경우: 평단은 환율로 달러 환산, 원화 금액을 비우면 수량 × 원화 단가
+      const usdRow = (F.key === '__new' ? $('#fNewCur').value : findRow(F.key)?.cur) === 'USD';
+      if (usdRow && pcurOf(F) === 'KRW' && t.price > 0) { if (!(t.amountKrw > 0)) t.amountKrw = Math.round(t.qty * t.price); t.price = Math.round(t.price / D.rate * 10000) / 10000; }
       if (!(t.qty > 0)) { err.textContent = '수량을 입력하십시오.'; return; }
       if (!(t.price > 0)) { err.textContent = '단가를 입력하십시오.'; return; }
       if (F.key === '__new') {
@@ -2334,6 +2342,7 @@
   // 가계부(hh.js)가 쓰는 공용 도구
   window.DH = {
     invTotal: () => (state.data ? state.data.total : null),
+    rate: () => (state.data ? state.data.rate : null),
     ensureInv: () => { if (store.get(LS.pw) && (!state.data || Date.now() - state.loadedAt > 300000)) load({ quiet: true }); },
     household: () => (state.data ? state.data.household : []),
     reloadInv: () => { if (store.get(LS.pw)) load({ quiet: true }); },
