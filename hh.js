@@ -1457,7 +1457,7 @@
           <button class="se-ed se-eye ${a.hidden ? '' : 'on'}" data-eye="${esc(a.name)}" aria-pressed="${!a.hidden}" aria-label="${esc(a.name)} ${a.hidden ? '보이기' : '숨기기'}">${a.hidden ? ico.eyeOff : ico.eye}</button>
           <span class="se-drag" aria-label="끌어서 순서 바꾸기">${ico.drag}</span>
         </div>`).join('')}</div>`).join('')
-        + `<p class="note">${NOTE[mode] || ''} 이름을 누르면 자산 정보를 고칩니다.</p>`;
+;
       $$('[data-edit]', p).forEach(b => b.onclick = () => openAssetEdit(H.assets.find(a => a.name === b.dataset.edit)));
       $$('[data-eye]', p).forEach(b => b.onclick = () => {
         const a = H.assets.find(x => x.name === b.dataset.eye); if (!a) return;
