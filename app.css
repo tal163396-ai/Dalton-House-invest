@@ -1234,3 +1234,13 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .bs-chip { display: inline-block; min-width: 64px; text-align: center; padding: 5px 10px; border: 1.5px solid var(--line); border-radius: 8px; color: var(--ink-3); font-size: 15px; }
 .bs-chip.own { color: var(--ink); border-color: var(--ink-4); }
 .bs-chip.cur { color: var(--hh); border-color: var(--hh); }
+/* 자산 편집 줄: 버튼을 숨겨도 오른쪽 끝 정렬 */
+.hh-page .se-row { display: flex; align-items: center; }
+.hh-page .se-row > .se-name { flex: 1 1 auto; }
+.se-mode-hide .se-row, .se-mode-order .se-row { padding-left: 10px; }
+.se-mode-order .se-drag, .se-mode-hide .se-eye { margin-right: 4px; }
+/* 분류 상세: 12개월 넘기기 */
+.mb-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 10px; }
+.mb-head .hh-h3 { margin: 0; }
+.mb-nav { display: flex; align-items: center; gap: 2px; }
+.mb-nav .hh-arrow:disabled { opacity: .25; }

@@ -566,7 +566,7 @@
     return `${from.slice(2).replace(/-/g, '.')} ~ ${to.slice(2).replace(/-/g, '.')}`;
   }
   function openCatDetail(type, cat, from, to) {
-    const winEnd = to.slice(0, 7);
+    let winEnd = to.slice(0, 7);
     const build = () => {
       const list = inRange(from, to).filter(t => t.type === type && (t.cat || '미분류') === cat);
       const total = list.reduce((a, t) => a + t.amt, 0);
@@ -582,16 +582,24 @@
           ${barRows([...subs.values()].sort((a, b) => b.v - a.v), total, type === '수입' ? 'var(--inc)' : 'var(--exp)')}
         </section>
         <section class="card">
-          <h3 class="hh-h3">최근 12개월 <small>월평균 ${won(avg)}</small></h3>
+          <div class="mb-head"><h3 class="hh-h3">${months[0].slice(2, 4)}.${+months[0].slice(5)} ~ ${months[11].slice(2, 4)}.${+months[11].slice(5)} <small>월평균 ${won(avg)}</small></h3>
+            <span class="mb-nav"><button class="hh-arrow" data-mw="-12" aria-label="이전 12개월">${ico.left}</button><button class="hh-arrow" data-mw="12" aria-label="다음 12개월" ${winEnd >= ymOf(new Date()) ? 'disabled' : ''}>${ico.right}</button></span></div>
           ${monthBars(months, mv, type === '수입' ? 'var(--inc)' : 'var(--exp)', oneMonth ? endYm : null, true)}
           <p class="note mb-note">막대를 누르면 그 달 내역을 봅니다.</p>
         </section>
         ${[...groupByDay(list)].map(([ds, l]) => `<section class="card hd">${dayHead(ds, l)}${l.map(t => rowHtml(t)).join('')}</section>`).join('')}`;
     };
-    const bindBars = pg => $$('[data-mb]', pg).forEach(r => r.onclick = () => {
-      const ym = r.dataset.mb; from = `${ym}-01`; to = `${ym}-${pad(daysIn(ym))}`;
-      $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg);
-    });
+    const bindBars = pg => {
+      $$('[data-mb]', pg).forEach(r => r.onclick = () => {
+        const ym = r.dataset.mb; from = `${ym}-01`; to = `${ym}-${pad(daysIn(ym))}`;
+        $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg);
+      });
+      $$('[data-mw]', pg).forEach(b => b.onclick = () => {
+        const cur = ymOf(new Date());
+        winEnd = addMonths(winEnd, Number(b.dataset.mw)); if (winEnd > cur) winEnd = cur;
+        const y = window.scrollY; $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg);
+      });
+    };
     pushPage({ title: esc(cat), body: build(), refresh: pg => { $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg); }, onMount: pg => { bindRows(pg); bindBars(pg); } });
   }
   function monthBars(months, vals, color, hi, tap = false) {
