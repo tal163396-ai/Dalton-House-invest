@@ -652,6 +652,22 @@
     }
     return d;
   }
+  // 비교 표의 금액을 누르면: 그 연도(또는 고른 달)의 해당 분류 내역을 팝업으로 (화면 전환 없이 스크롤)
+  function cmpDetail(y, mon, k, keysOf, cn, monthsOf) {
+    const C = H.cmp, keys = keysOf(k), all = keys.includes('__all');
+    const pre = mon ? `${y}-${pad(mon)}` : `${y}-`;
+    const list = H.tx.filter(t => t.type === C.type && t.d.startsWith(pre) && (all || keys.includes(t.cat || '미분류')));
+    const tot = list.reduce((a, t) => a + t.amt, 0), mn = monthsOf(y);
+    const byM = new Map(); list.forEach(t => { const m = t.d.slice(0, 7); if (!byM.has(m)) byM.set(m, []); byM.get(m).push(t); });
+    const head = mon ? `${y}년 ${mon}월` : `${y}년`;
+    const calc = !mon && C.avg ? `<div class="cmd-calc num"><span>합계</span><b>${won(tot)}</b><span>÷ ${mn}개월</span><b class="cmd-eq">= 월평균 ${won(tot / mn)}</b></div>` : '';
+    const body = [...byM.keys()].sort().reverse().map(m => `<div class="cmd-m"><span>${+m.slice(5)}월</span><b class="num">${won(byM.get(m).reduce((a, t) => a + t.amt, 0))}</b></div>${byM.get(m).map(t => rowHtml(t, { showDate: true })).join('')}`).join('') || '<p class="empty">내역이 없습니다.</p>';
+    D.openSheet(`<div class="cmd"><div class="cmd-h"><small>${esc(cn(k))} · ${esc(C.type)}</small><h2 id="sheetTitle">${head}</h2>
+        <div class="cmd-tot num">${won(tot)}<small>${list.length}건</small></div>${calc}</div>
+      <div class="cmd-list">${body}</div>
+      <div class="sheet-actions cmd-act"><button class="btn" data-close>닫기</button></div></div>`, 'pop');
+    $$('#sheetBody .hr[data-tx]').forEach(r => r.onclick = () => { const t = H.byId.get(r.dataset.tx); if (t) { D.closeSheet(); openForm({ tx: t }); } });
+  }
   function renderCmp() {
     const C = H.cmp, D0 = cmpData(C.type);
     if (!C.years.length) C.years = D0.years.slice(-3);
@@ -675,15 +691,21 @@
       const W = 340, Hh = 200, L = 40, R = 8, T = 12, B = 22, x = i => L + i * (W - L - R) / 11, yv = v => T + (1 - v / mx) * (Hh - T - B);
       const grid = [0, 0.5, 1].map(f => `<line x1="${L}" x2="${W - R}" y1="${yv(mx * f)}" y2="${yv(mx * f)}" class="cm-grid"/><text x="${L - 6}" y="${yv(mx * f) + 4}" text-anchor="end" class="cm-ax">${compactWon(mx * f)}</text>`).join('');
       const xs = Array.from({ length: 12 }, (_, i) => `<text x="${x(i)}" y="${Hh - 6}" text-anchor="middle" class="cm-ax">${i + 1}</text>`).join('');
-      const lines = ser.map((a, j) => `<path d="${smoothPath(a.map((v, i) => [x(i), yv(v)]))}" fill="none" stroke="${YC[j]}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>${C.sel != null && C.sel < a.length ? `<circle cx="${x(C.sel)}" cy="${yv(a[C.sel])}" r="4" fill="${YC[j]}"/>` : ''}`).join('');
+      // 월평균 보기: 연도마다 평균 높이에 점선
+      const avgLines = C.avg ? ys.map((y, j) => { const v = yv(totOf(y, k) / monthsOf(y)); return `<line x1="${L}" x2="${W - R}" y1="${v.toFixed(1)}" y2="${v.toFixed(1)}" stroke="${YC[j]}" stroke-width="1.6" stroke-dasharray="5 4" opacity=".9"/>`; }).join('') : '';
+      const lines = avgLines + ser.map((a, j) => `<path d="${smoothPath(a.map((v, i) => [x(i), yv(v)]))}" fill="none" stroke="${YC[j]}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" opacity="${C.avg ? 0.55 : 1}"/>${C.sel != null && C.sel < a.length ? `<circle cx="${x(C.sel)}" cy="${yv(a[C.sel])}" r="4" fill="${YC[j]}"/>` : ''}`).join('');
       const hits = Array.from({ length: 12 }, (_, i) => `<rect x="${x(i) - 13}" y="0" width="26" height="${Hh}" fill="transparent" data-mi="${i}"/>`).join('');
       const selV = j => (C.sel != null && C.sel < ser[j].length ? won(ser[j][C.sel]) : '—');
       body = `<button class="cm-back" id="cmBack">${ico.left}<span>연도 비교로 돌아가기</span></button>
         <div class="cm-chips">${(C.mode === 'sum' && C.cats.length > 1 ? ['__sel', ...C.cats] : C.cats).map(c => `<button class="${c === k ? 'on' : ''}" data-tk="${esc(c)}">${esc(cn(c))}</button>`).join('')}</div>
         ${k === '__sel' ? `<p class="note cm-tip">${esc(C.cats.map(cn).join(' + '))}</p>` : ''}
-        <div class="cm-legend">${ys.map((y, j) => `<span><i style="background:${YC[j]}"></i>${y}</span>`).join('')}</div>
+        <div class="cm-head cm-th"><div class="cm-legend">${ys.map((y, j) => `<span><i style="background:${YC[j]}"></i>${y}</span>`).join('')}</div>${pill}</div>
+        ${C.avg ? '<p class="note cm-tip">점선이 연도별 월평균입니다.</p>' : ''}
         <div class="card cm-chart"><svg viewBox="0 0 ${W} ${Hh}" width="100%">${grid}${xs}${lines}${C.sel != null ? `<line x1="${x(C.sel)}" x2="${x(C.sel)}" y1="${T}" y2="${Hh - B}" class="cm-cur"/>` : ''}${hits}</svg></div>
-        <div class="card cm-sum">${C.sel != null ? `<div class="cm-sh"><span>연도</span><span>${C.sel + 1}월</span><span>연간 합계</span></div>` : '<p class="note cm-tip">그래프를 누르면 그 달 금액이 아래 표에 나옵니다.</p>'}${ys.map((y, j) => `<div class="cm-sr ${C.sel != null ? 'w-sel' : ''}"><span><i style="background:${YC[j]}"></i>${y}${y === new Date().getFullYear() ? ` <small>(${monthsOf(y)}월까지)</small>` : ''}</span>${C.sel != null ? `<b class="num cm-mv">${selV(j)}</b>` : ''}<span><b class="num">${won(totOf(y, k))}</b></span></div>`).join('')}</div>`;
+        <div class="card cm-sum">${C.sel != null ? `<div class="cm-sh"><span>연도</span><span>${C.sel + 1}월</span><span>${C.avg ? '월평균' : '연간 합계'}</span></div>` : `<p class="note cm-tip">그래프를 누르면 그 달 금액이 아래 표에 나옵니다.<br>금액을 누르면 상세 내역이 나옵니다.</p>`}${ys.map((y, j) => {
+          const tot = totOf(y, k), mn = monthsOf(y);
+          return `<button class="cm-sr ${C.sel != null ? 'w-sel' : ''}" data-cmy="${y}"><span><i style="background:${YC[j]}"></i>${y}${y === new Date().getFullYear() ? ` <small>(${mn}월까지)</small>` : ''}</span>${C.sel != null ? `<b class="num cm-mv" data-cmm="${y}">${selV(j)}</b>` : ''}<span>${C.avg ? `<b class="num">${won(tot / mn)}</b><small class="num">합계 ${won(tot)} ÷ ${mn}개월</small>` : `<b class="num">${won(tot)}</b>`}</span></button>`;
+        }).join('')}</div>`;
     } else {
       const blocks = shown.map(k => {
         const vs = C.years.map(y => val(y, k)), mx = Math.max(1, ...vs);
@@ -717,6 +739,10 @@
     $$('#hh-stats [data-tk]').forEach(b => b.onclick = () => { C.trend = b.dataset.tk; render(); });
     $$('#hh-stats [data-mi]').forEach(b => b.onclick = () => { const i = +b.dataset.mi; C.sel = C.sel === i ? null : i; render(); });
     const bk = $('#cmBack'); if (bk) bk.onclick = () => { C.trend = null; C.sel = null; render(); };
+    $$('#hh-stats [data-cmy]').forEach(b => b.onclick = ev => {
+      const mEl = ev.target.closest('[data-cmm]');
+      cmpDetail(+b.dataset.cmy, mEl && C.sel != null ? C.sel + 1 : null, C.trend, keysOf, cn, monthsOf);
+    });
   }
 
   function renderStats() {
