@@ -587,14 +587,14 @@
     C.years = C.years.filter(y => D0.years.includes(y)).sort();
     const catList = ['__all', ...(H.cats[C.type] || []).map(c => c.name)];
     C.cats = C.cats.filter(c => catList.includes(c)); if (!C.cats.length) C.cats = ['__all'];
-    const cn = k => (k === '__all' ? `전체 ${C.type}` : k === '__sel' ? '선택 합계' : k);
+    const cn = k => (k === '__all' ? `전체 ${C.type}` : k === '__sel' ? '선택 합산' : k);
     const keysOf = k => (k !== '__sel' ? [k] : C.cats.includes('__all') ? ['__all'] : C.cats);   // 합쳐 보기: 고른 대분류의 합 (전체가 있으면 전체만)
     const totOf = (y, k) => keysOf(k).reduce((a, x) => a + (D0.tot.get(`${y}|${x}`) || 0), 0);
     const monOf = (y, m, k) => keysOf(k).reduce((a, x) => a + (D0.mon.get(`${y}|${m}|${x}`) || 0), 0);
     const val = (y, k) => { const v = totOf(y, k); return C.avg ? v / monthsOf(y) : v; };
     const shown = C.mode === 'sum' && C.cats.length > 1 ? ['__sel'] : C.cats;
     const catSummary = C.cats.length ? `${cn(C.cats[0])}${C.cats.length > 1 ? ` 외 ${C.cats.length - 1}개` : ''}` : '고르기';
-    const modeSeg = `<span class="cm-pill"><button data-mode="each" class="${C.mode !== 'sum' ? 'on' : ''}">개별</button><button data-mode="sum" class="${C.mode === 'sum' ? 'on' : ''}">합쳐서</button></span>`;
+    const modeSeg = `<span class="cm-pill"><button data-mode="each" class="${C.mode !== 'sum' ? 'on' : ''}">개별</button><button data-mode="sum" class="${C.mode === 'sum' ? 'on' : ''}">합산</button></span>`;
     const pill = `<span class="cm-pill"><button data-avg="0" class="${C.avg ? '' : 'on'}">합계</button><button data-avg="1" class="${C.avg ? 'on' : ''}">월평균</button></span>`;
     let body;
     if (C.trend) {
@@ -607,7 +607,7 @@
       const lines = ser.map((a, j) => `<polyline points="${a.map((v, i) => `${x(i).toFixed(1)},${yv(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${YC[j]}" stroke-width="2.6" stroke-linejoin="round"/>${C.sel != null && C.sel < a.length ? `<circle cx="${x(C.sel)}" cy="${yv(a[C.sel])}" r="4" fill="${YC[j]}"/>` : ''}`).join('');
       const hits = Array.from({ length: 12 }, (_, i) => `<rect x="${x(i) - 13}" y="0" width="26" height="${Hh}" fill="transparent" data-mi="${i}"/>`).join('');
       const selRow = C.sel != null ? `<div class="cm-selm"><b>${C.sel + 1}월</b>${ys.map((y, j) => `<span><i style="background:${YC[j]}"></i>${y} <b class="num">${C.sel < ser[j].length ? won(ser[j][C.sel]) : '—'}</b></span>`).join('')}</div>` : '<p class="note cm-tip">그래프를 누르면 그 달 금액이 연도별로 나옵니다.</p>';
-      body = `<button class="cm-back" id="cmBack">${ico.left}<span>연도 비교로</span></button>
+      body = `<button class="cm-back" id="cmBack">${ico.left}<span>연도 비교로 돌아가기</span></button>
         <div class="cm-chips">${(C.mode === 'sum' && C.cats.length > 1 ? ['__sel', ...C.cats] : C.cats).map(c => `<button class="${c === k ? 'on' : ''}" data-tk="${esc(c)}">${esc(cn(c))}</button>`).join('')}</div>
         ${k === '__sel' ? `<p class="note cm-tip">${esc(C.cats.map(cn).join(' + '))}</p>` : ''}
         <div class="cm-legend">${ys.map((y, j) => `<span><i style="background:${YC[j]}"></i>${y}</span>`).join('')}</div>
