@@ -766,7 +766,9 @@
       return `
         <section class="card hp-asset">
           <span class="hp-ag">${esc(a ? a.group : '목록에 없는 자산')}${a && a.hidden ? ' · 숨김' : ''}</span>
-          ${isInv ? (() => { const t = invTotal(); return `<div class="hp-bal num">${t ? won(t.cost) : '—'}</div><p class="note">투자 앱의 원금입니다.${t ? `<br>평가금 ${won(t.value)}<br>평가손익 ${t.value - t.cost >= 0 ? '+' : ''}${compactWon(t.value - t.cost)}원` : ''}</p>`; })()
+          ${isInv ? (() => { const t = invTotal(); const pl = t ? t.value - t.cost : 0, r = t && t.cost ? pl / t.cost * 100 : 0;
+              return `<div class="hp-invrow"><div class="hp-invl"><span class="hp-invlb">투자 앱 원금</span><div class="hp-bal sm num">${t ? won(t.cost) : '—'}</div></div>
+                ${t ? `<div class="hp-chips"><span class="hp-chip num">평가금 ${compactWon(t.value)}</span><span class="hp-chip num ${pl < 0 ? 'neg' : 'pos'}">${pl >= 0 ? '+' : ''}${compactWon(pl)} · ${pl >= 0 ? '+' : '−'}${Math.abs(r).toFixed(1)}%</span></div>` : ''}</div>`; })()
             : card ? `<div class="hp-bal num">${won(out - inn)}</div><p class="note">${ymLabel(ym)} 사용 금액입니다. 결제 계좌 <b>${esc(card)}</b> 잔액에서 바로 빠집니다.</p>`
             : `<div class="hp-bal num ${bal < 0 ? 'exp' : ''}">${won(bal)}</div>${linked.length ? `<p class="note">${linked.map(esc).join(', ')} 사용 금액이 이 잔액에 들어 있습니다.</p>` : ''}`}
           ${a && a.memo && !isInv ? `<p class="note">${esc(a.memo)}</p>` : ''}

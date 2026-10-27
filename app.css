@@ -1244,3 +1244,13 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .mb-head .hh-h3 { margin: 0; }
 .mb-nav { display: flex; align-items: center; gap: 2px; }
 .mb-nav .hh-arrow:disabled { opacity: .25; }
+/* 투자 계좌: 원금 옆에 평가금·손익 배지 */
+.hp-invrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; margin-top: 6px; }
+.hp-invl { min-width: 0; }
+.hp-invlb { font-size: 12.5px; font-weight: 700; color: var(--ink-3); }
+.hp-bal.sm { font-size: 23px; margin: 2px 0 0; white-space: nowrap; letter-spacing: -.02em; }
+.hp-chips { display: grid; gap: 6px; justify-items: end; flex-shrink: 0; }
+.hp-chip { font-size: 12.5px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--fill); color: var(--ink-2); white-space: nowrap; }
+.hp-chip.neg { color: var(--exp); background: color-mix(in srgb, var(--exp) 14%, transparent); }
+.hp-chip.pos { color: var(--inc); background: color-mix(in srgb, var(--inc) 14%, transparent); }
+@media (max-width: 380px) { .hp-bal.sm { font-size: 20px; } .hp-chip { font-size: 12px; padding: 4px 8px; } .hp-invrow { gap: 8px; } }
