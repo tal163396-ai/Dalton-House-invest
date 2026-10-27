@@ -1097,6 +1097,20 @@
   // 메모 칸: 안쪽 스크롤 없이 내용만큼 늘어남 (작은 스크롤바 대신 화면 전체로 스크롤)
   function autoGrow(ta) { if (!ta) return; ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight + 2}px`; }
   document.addEventListener('input', ev => { if (ev.target.matches && ev.target.matches('textarea.hf-memo')) autoGrow(ev.target); });
+  // 수량·단가 칸(.dec): 소수점은 그대로, 천 단위마다 콤마 (원화·달러 모두)
+  document.addEventListener('input', ev => {
+    const i = ev.target;
+    if (!i.classList || !i.classList.contains('dec')) return;
+    const pos = i.selectionStart, before = i.value.slice(0, pos).replace(/[^\d.]/g, '').length;
+    let v = i.value.replace(/[^\d.]/g, '');
+    const dot = v.indexOf('.');
+    if (dot >= 0) v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, '');
+    const [ip, fp] = v.split('.');
+    const ipf = ip === '' ? (fp !== undefined ? '0' : '') : Number(ip).toLocaleString('ko-KR');
+    i.value = ipf + (fp !== undefined ? `.${fp}` : '');
+    let k = 0, n = 0; while (k < i.value.length && n < before) { if (/[\d.]/.test(i.value[k])) n++; k++; }
+    try { i.setSelectionRange(k, k); } catch { /* 일부 브라우저 */ }
+  }, true);
   // 앱 안의 모든 고르기 칸(select): 휴대폰 기본 목록(화면을 꽉 채움) 대신 작은 팝업 목록
   document.addEventListener('mousedown', ev => { if (ev.target.closest && ev.target.closest('select')) ev.preventDefault(); }, true);
   document.addEventListener('click', ev => {
@@ -1231,8 +1245,8 @@
         <div class="hf-row"><span class="hf-l">${tr ? '입금' : '자산'}</span><button class="hf-v hf-pick ${(tr ? f.to : f.asset) ? '' : 'ph'}" id="hfAsset">${tr ? esc(f.to || '입금 자산') : esc(f.asset || '자산 고르기')}</button></div>
         ${adj && !isRule ? `<div class="hf-row"><span class="hf-l">투자</span><button class="hf-v hf-pick ${f.inv && f.inv.type === '비용' ? '' : 'ph'}" id="hfCost">${f.inv && f.inv.type === '비용' ? esc(costLabel(f.inv.acct, f.inv.sub)) : '연결 안 함 (보정)'}</button></div>` : ''}
         ${dir ? `<div class="hf-row hf-invrow"><span class="hf-l">투자 앱</span><button class="hf-v hf-pick ${f.inv ? '' : 'ph'}" id="hfInv">${esc(invTxt)}</button></div>
-          ${trade ? `<div class="hf-row"><span class="hf-l">수량</span><div class="hf-v"><input id="hfQty" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="0" value="${f.inv.qty || ''}"><span class="hf-unit">${item ? item.unit : ''}</span></div></div>
-          <div class="hf-row"><span class="hf-l">단가</span><div class="hf-v"><input id="hfPrice" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${item && item.price ? item.price : '0'}" value="${f.inv.price || ''}"><span class="hf-unit">${usd ? '달러' : '원'}</span></div></div>` : ''}
+          ${trade ? `<div class="hf-row"><span class="hf-l">수량</span><div class="hf-v"><input id="hfQty" class="dec" type="text" inputmode="decimal" autocomplete="off" placeholder="0" value="${f.inv.qty ? Number(f.inv.qty).toLocaleString('ko-KR', { maximumFractionDigits: 8 }) : ''}"><span class="hf-unit">${item ? item.unit : ''}</span></div></div>
+          <div class="hf-row"><span class="hf-l">단가</span><div class="hf-v"><input id="hfPrice" class="dec" type="text" inputmode="decimal" autocomplete="off" placeholder="${item && item.price ? Number(item.price).toLocaleString('ko-KR', { maximumFractionDigits: 4 }) : '0'}" value="${f.inv.price ? Number(f.inv.price).toLocaleString('ko-KR', { maximumFractionDigits: 4 }) : ''}"><span class="hf-unit">${usd ? '달러' : '원'}</span></div></div>` : ''}
           <p class="hf-info">${!f.inv ? `투자 계좌${dir === 'in' ? '로 보내는' : '에서 찾는'} 이체입니다. 투자 앱의 어느 계좌${dir === 'in' ? '에 들어가는지' : '에서 나오는지'} 고르십시오.<br>투자 앱에 따로 적을 거면 '연결 안 함'을 고르십시오.`
             : !f.inv.type ? '투자 앱에는 기록하지 않습니다.'
             : `${isRule ? '매달 자동으로 들어갈 때 투자 앱에도 같은 금액으로 기록됩니다.' : '저장하면 투자 앱에도 같은 금액으로 기록됩니다.'}${item && f.inv.type === '매도' ? `<br>지금 보유 ${item.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}주` : ''}${trade ? `<br>금액은 투자 앱의 실제 원화 금액(원금)으로 들어갑니다.` : ''}`}</p>` : ''}
@@ -1251,8 +1265,8 @@
       kpCommit();
       const t = $('#hfText', root); if (t) f.text = t.value;
       const m = $('#hfMemo', root); if (m) f.memo = m.value;
-      const q = $('#hfQty', root); if (q && f.inv) f.inv.qty = q.value === '' ? '' : Number(q.value);
-      const pr = $('#hfPrice', root); if (pr && f.inv) f.inv.price = pr.value === '' ? '' : Number(pr.value);
+      const q = $('#hfQty', root); if (q && f.inv) f.inv.qty = q.value === '' ? '' : Number(q.value.replace(/,/g, ''));
+      const pr = $('#hfPrice', root); if (pr && f.inv) f.inv.price = pr.value === '' ? '' : Number(pr.value.replace(/,/g, ''));
     }
     function bind() {
       $$('.hf-types [data-t]', root).forEach(b => b.onclick = () => {

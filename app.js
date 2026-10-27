@@ -1657,8 +1657,8 @@
         ${trad ? `
         <p class="fix-note">증권사 앱의 <b>체결잔고·매입단가·매입금액</b>을<br>그대로 넣으십시오. 비워 둔 칸은 바뀌지 않습니다.</p>
         <div class="two">
-          <label class="field"><span>수량</span><input id="fxQty" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.qty}"></label>
-          <label class="field"><span id="fxAvgL">평단가 (${usd ? '달러' : '원'})</span><input id="fxAvg" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.avg || ''}"></label>
+          <label class="field"><span>수량</span><input id="fxQty" class="dec" type="text" inputmode="decimal" autocomplete="off" placeholder="${cur.qty.toLocaleString('ko-KR', { maximumFractionDigits: 8 })}"></label>
+          <label class="field"><span id="fxAvgL">평단가 (${usd ? '달러' : '원'})</span><input id="fxAvg" class="dec" type="text" inputmode="decimal" autocomplete="off" placeholder="${Number(cur.avg || '' || 0).toLocaleString('ko-KR', { maximumFractionDigits: 4 })}"></label>
         </div>
         <div class="two">
           <label class="field"><span>통화</span><select id="fxCur"><option ${usd ? '' : 'selected'}>KRW</option><option ${usd ? 'selected' : ''}>USD</option></select></label>
@@ -1719,8 +1719,8 @@
           <p class="help">자산 이름을 비우면 ${inKind.length && new Set(inKind.map(r => r.asset)).size === 1 ? `'${esc(inKind[0].asset)}' 안에` : '종목 이름으로 새 자산을 만들어'} 넣습니다.<br>새 계좌면 이름을 적으십시오.<br><span class="nw">예: 나예 주식(NH증권)</span></p>` : `
           <p class="preview num">${row ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''}</p>`}
         <div class="two">
-          <label class="field"><span>수량</span><input id="fQty" type="number" inputmode="decimal" step="any" min="0"></label>
-          <label class="field"><span>단가 (${curr === 'USD' ? '달러' : '원'})</span><input id="fPrice" type="number" inputmode="decimal" step="any" min="0"></label>
+          <label class="field"><span>수량</span><input id="fQty" class="dec" type="text" inputmode="decimal" autocomplete="off"></label>
+          <label class="field"><span>단가 (${curr === 'USD' ? '달러' : '원'})</span><input id="fPrice" class="dec" type="text" inputmode="decimal" autocomplete="off"></label>
         </div>
         <p class="preview num" id="fPreview"></p>
         <label class="field"><span>실제 원화 금액 (선택)</span>
@@ -1951,7 +1951,7 @@
     if (F.type === '금액 수정' && $('#fxQty')) {
       const row = findRow($('#fManual').value);
       if (!row) { err.textContent = '수정할 항목을 선택하십시오.'; return; }
-      const fix = {}; const q = $('#fxQty').value.trim(), a = $('#fxAvg').value.trim(), c = String($('#fxCost').value).replace(/,/g, '').trim();
+      const fix = {}; const q = $('#fxQty').value.replace(/,/g, '').trim(), a = $('#fxAvg').value.replace(/,/g, '').trim(), c = String($('#fxCost').value).replace(/,/g, '').trim();
       if (q !== '') fix.qty = Number(q); if (a !== '') fix.avg = Number(a); if (c !== '') fix.cost = Number(c);
       const nc = $('#fxCur').value, na = $('#fxAsset').value.trim();
       if (nc !== (row.cur || 'KRW')) { fix.cur = nc; if (!('avg' in fix)) { err.textContent = `통화를 바꾸면 평단가도 ${nc === 'USD' ? '달러' : '원화'}로 다시 넣으십시오.`; return; } }
@@ -1975,7 +1975,7 @@
       const t = base();
       const krw = String($('#fKrw').value).replace(/,/g, '');
       if (krw !== '') t.amountKrw = Number(krw);
-      t.qty = Number($('#fQty').value); t.price = Number($('#fPrice').value);
+      t.qty = num($('#fQty').value); t.price = num($('#fPrice').value);
       if (!(t.qty > 0)) { err.textContent = '수량을 입력하십시오.'; return; }
       if (!(t.price > 0)) { err.textContent = '단가를 입력하십시오.'; return; }
       if (F.key === '__new') {
