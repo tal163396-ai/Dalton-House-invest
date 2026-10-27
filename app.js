@@ -2227,7 +2227,10 @@
         if (!ks.has(r.kind)) { ks.add(r.kind); kinds.push({ kind: r.kind, asset: r.asset, sub: r.sub, items: [] }); }
         if (!isCashRow(r)) kinds.find(k => k.kind === r.kind).items.push({ asset: r.asset, sub: r.sub, label: r.asset !== r.sub && r.asset !== r.kind ? `${r.sub} · ${r.asset}` : r.sub });
       });
-      return { acc, items, kinds };
+      // 금·현용주화처럼 금액만 직접 관리하는 항목: 이체로 원금(평가금 함께) 늘리고 줄임
+      const manual = D.rows.filter(r => r.asset && !isCashRow(r) && !isTradable(r))
+        .map(r => ({ asset: r.asset, sub: r.sub, kind: r.kind, cost: r.cost, label: r.asset !== r.sub && r.asset !== r.kind ? `${r.sub} · ${r.asset}` : r.sub }));
+      return { acc, items, kinds, manual };
     },
     // 가계부 '투자 화면으로' → 포트폴리오의 '투자 자산' 쪽
     openInvHome: () => { state.view = 'home'; state.hPage = 1; sess.set('dh_hpage', 1); sess.set('dh_scroll_home', 0); setApp('inv'); homePagerApi.align(1); window.scrollTo({ top: 0 }); },
