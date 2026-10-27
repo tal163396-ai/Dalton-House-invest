@@ -1635,7 +1635,7 @@
         <p class="fix-note">증권사 앱의 <b>체결잔고·매입단가·매입금액</b>을 그대로 넣으십시오. 비워 둔 칸은 바뀌지 않습니다.</p>
         <div class="two">
           <label class="field"><span>수량</span><input id="fxQty" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.qty}"></label>
-          <label class="field"><span>평단가 (${usd ? '달러' : '원'})</span><input id="fxAvg" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.avg || ''}"></label>
+          <label class="field"><span id="fxAvgL">평단가 (${usd ? '달러' : '원'})</span><input id="fxAvg" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.avg || ''}"></label>
         </div>
         <div class="two">
           <label class="field"><span>통화</span><select id="fxCur"><option ${usd ? '' : 'selected'}>KRW</option><option ${usd ? 'selected' : ''}>USD</option></select></label>
@@ -1760,9 +1760,17 @@
       const h = $('#fxHint', el); if (!h) return;
       const row = findRow(F.key); if (!row) return;
       const q = $('#fxQty').value === '' ? row.qty : num($('#fxQty').value), a = $('#fxAvg').value === '' ? row.avg : num($('#fxAvg').value);
-      h.textContent = ($('#fxQty').value || $('#fxAvg').value) && q && a ? `수량×평단 = ${row.cur === 'USD' ? `$${(q * a).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : won(q * a)}` : '';
+      const usdNow = $('#fxCur').value === 'USD';
+      $('#fxAvgL', el).textContent = `평단가 (${usdNow ? '달러' : '원'})`;
+      h.textContent = ($('#fxQty').value || $('#fxAvg').value) && q && a ? `수량×평단 = ${usdNow ? `$${(q * a).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : won(q * a)}` : '';
     };
     on('#fxQty', 'input', fxUpd); on('#fxAvg', 'input', fxUpd);
+    on('#fxCur', 'change', () => {
+      const row = findRow(F.key); const a = $('#fxAvg', el);
+      if (row && $('#fxCur').value !== (row.cur || 'KRW')) { a.value = ''; a.placeholder = $('#fxCur').value === 'USD' ? '달러 평단 (예: 327.18)' : '원화 평단'; }
+      else if (row) a.placeholder = row.avg || '';
+      fxUpd();
+    });
     on('#fSubmit', 'click', submitForm);
     bindMonthClose(el);
     bindMoney(el);
@@ -1876,7 +1884,7 @@
       const fix = {}; const q = $('#fxQty').value.trim(), a = $('#fxAvg').value.trim(), c = String($('#fxCost').value).replace(/,/g, '').trim();
       if (q !== '') fix.qty = Number(q); if (a !== '') fix.avg = Number(a); if (c !== '') fix.cost = Number(c);
       const nc = $('#fxCur').value, na = $('#fxAsset').value.trim();
-      if (nc !== (row.cur || 'KRW')) fix.cur = nc;
+      if (nc !== (row.cur || 'KRW')) { fix.cur = nc; if (!('avg' in fix)) { err.textContent = `통화를 바꾸면 평단가도 ${nc === 'USD' ? '달러' : '원화'}로 다시 넣으십시오.`; return; } }
       if (na && na !== row.asset) fix.asset = na;
       if (!Object.keys(fix).length) { err.textContent = '바꿀 값을 하나 이상 입력하십시오.'; return; }
       if (['qty', 'avg', 'cost'].some(k => k in fix && (!Number.isFinite(fix[k]) || fix[k] < 0))) { err.textContent = '숫자를 올바르게 입력하십시오.'; return; }
