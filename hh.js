@@ -547,7 +547,7 @@
     return [...m].map(([k, v]) => ({ k, v })).sort((a, b) => b.v - a.v || order.indexOf(a.k) - order.indexOf(b.k));
   }
   /* ── 연도 비교 (수입·지출, 대분류, 합계/월평균) ── */
-  const YC = ['#3b82f6', '#22c55e', '#f5a524'];
+  const YC = ['#3b82f6', '#22c55e', '#ef4444'];
   function monthsOf(y) { const n = new Date(), cy = n.getFullYear(); return y < cy ? 12 : y === cy ? n.getMonth() + 1 : 12; }
   function cmpData(type) {
     const tot = new Map(), mon = new Map(), years = new Set();
@@ -581,6 +581,25 @@
       draw();
     });
   }
+  // 부드러운 곡선 (단조 3차 보간: 점 사이에서 위아래로 튀지 않음)
+  function smoothPath(P) {
+    const n = P.length; if (!n) return ''; if (n < 3) return `M${P.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join('L')}`;
+    const dx = [], m = [], t = [];
+    for (let i = 0; i < n - 1; i++) { dx[i] = P[i + 1][0] - P[i][0]; m[i] = (P[i + 1][1] - P[i][1]) / dx[i]; }
+    t[0] = m[0]; t[n - 1] = m[n - 2];
+    for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+    for (let i = 0; i < n - 1; i++) {
+      if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+      const a = t[i] / m[i], b = t[i + 1] / m[i], h = a * a + b * b;
+      if (h > 9) { const k = 3 / Math.sqrt(h); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+    }
+    let d = `M${P[0][0].toFixed(1)},${P[0][1].toFixed(1)}`;
+    for (let i = 0; i < n - 1; i++) {
+      const h = dx[i] / 3;
+      d += `C${(P[i][0] + h).toFixed(1)},${(P[i][1] + t[i] * h).toFixed(1)} ${(P[i + 1][0] - h).toFixed(1)},${(P[i + 1][1] - t[i + 1] * h).toFixed(1)} ${P[i + 1][0].toFixed(1)},${P[i + 1][1].toFixed(1)}`;
+    }
+    return d;
+  }
   function renderCmp() {
     const C = H.cmp, D0 = cmpData(C.type);
     if (!C.years.length) C.years = D0.years.slice(-3);
@@ -604,15 +623,15 @@
       const W = 340, Hh = 200, L = 40, R = 8, T = 12, B = 22, x = i => L + i * (W - L - R) / 11, yv = v => T + (1 - v / mx) * (Hh - T - B);
       const grid = [0, 0.5, 1].map(f => `<line x1="${L}" x2="${W - R}" y1="${yv(mx * f)}" y2="${yv(mx * f)}" class="cm-grid"/><text x="${L - 6}" y="${yv(mx * f) + 4}" text-anchor="end" class="cm-ax">${compactWon(mx * f)}</text>`).join('');
       const xs = Array.from({ length: 12 }, (_, i) => `<text x="${x(i)}" y="${Hh - 6}" text-anchor="middle" class="cm-ax">${i + 1}</text>`).join('');
-      const lines = ser.map((a, j) => `<polyline points="${a.map((v, i) => `${x(i).toFixed(1)},${yv(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${YC[j]}" stroke-width="2.6" stroke-linejoin="round"/>${C.sel != null && C.sel < a.length ? `<circle cx="${x(C.sel)}" cy="${yv(a[C.sel])}" r="4" fill="${YC[j]}"/>` : ''}`).join('');
+      const lines = ser.map((a, j) => `<path d="${smoothPath(a.map((v, i) => [x(i), yv(v)]))}" fill="none" stroke="${YC[j]}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>${C.sel != null && C.sel < a.length ? `<circle cx="${x(C.sel)}" cy="${yv(a[C.sel])}" r="4" fill="${YC[j]}"/>` : ''}`).join('');
       const hits = Array.from({ length: 12 }, (_, i) => `<rect x="${x(i) - 13}" y="0" width="26" height="${Hh}" fill="transparent" data-mi="${i}"/>`).join('');
-      const selRow = C.sel != null ? `<div class="cm-selm"><b>${C.sel + 1}월</b>${ys.map((y, j) => `<span><i style="background:${YC[j]}"></i>${y} <b class="num">${C.sel < ser[j].length ? won(ser[j][C.sel]) : '—'}</b></span>`).join('')}</div>` : '<p class="note cm-tip">그래프를 누르면 그 달 금액이 연도별로 나옵니다.</p>';
+      const selV = j => (C.sel != null && C.sel < ser[j].length ? won(ser[j][C.sel]) : '—');
       body = `<button class="cm-back" id="cmBack">${ico.left}<span>연도 비교로 돌아가기</span></button>
         <div class="cm-chips">${(C.mode === 'sum' && C.cats.length > 1 ? ['__sel', ...C.cats] : C.cats).map(c => `<button class="${c === k ? 'on' : ''}" data-tk="${esc(c)}">${esc(cn(c))}</button>`).join('')}</div>
         ${k === '__sel' ? `<p class="note cm-tip">${esc(C.cats.map(cn).join(' + '))}</p>` : ''}
         <div class="cm-legend">${ys.map((y, j) => `<span><i style="background:${YC[j]}"></i>${y}</span>`).join('')}</div>
-        <div class="card cm-chart"><svg viewBox="0 0 ${W} ${Hh}" width="100%">${grid}${xs}${lines}${C.sel != null ? `<line x1="${x(C.sel)}" x2="${x(C.sel)}" y1="${T}" y2="${Hh - B}" class="cm-cur"/>` : ''}${hits}</svg>${selRow}</div>
-        <div class="card cm-sum">${ys.map((y, j) => `<div class="cm-sr"><span><i style="background:${YC[j]}"></i>${y}${y === new Date().getFullYear() ? ` <small>(${monthsOf(y)}월까지)</small>` : ''}</span><span><b class="num">${won(totOf(y, k))}</b><small class="num">월평균 ${won(totOf(y, k) / monthsOf(y))}</small></span></div>`).join('')}</div>`;
+        <div class="card cm-chart"><svg viewBox="0 0 ${W} ${Hh}" width="100%">${grid}${xs}${lines}${C.sel != null ? `<line x1="${x(C.sel)}" x2="${x(C.sel)}" y1="${T}" y2="${Hh - B}" class="cm-cur"/>` : ''}${hits}</svg></div>
+        <div class="card cm-sum">${C.sel != null ? `<div class="cm-sh"><span>연도</span><span>${C.sel + 1}월</span><span>합계 · 월평균</span></div>` : '<p class="note cm-tip">그래프를 누르면 그 달 금액이 아래 표에 나옵니다.</p>'}${ys.map((y, j) => `<div class="cm-sr ${C.sel != null ? 'w-sel' : ''}"><span><i style="background:${YC[j]}"></i>${y}${y === new Date().getFullYear() ? ` <small>(${monthsOf(y)}월까지)</small>` : ''}</span>${C.sel != null ? `<b class="num cm-mv">${selV(j)}</b>` : ''}<span><b class="num">${won(totOf(y, k))}</b><small class="num">월평균 ${won(totOf(y, k) / monthsOf(y))}</small></span></div>`).join('')}</div>`;
     } else {
       const blocks = shown.map(k => {
         const vs = C.years.map(y => val(y, k)), mx = Math.max(1, ...vs);
@@ -1249,14 +1268,16 @@
     if (!H.loaded || !H.ready) return null;
     const L = monthTx(ym), inv = H.inv;
     const adj = L.filter(t => t.type === '수정' && t.invType !== '비용' && !inv.has(t.asset))
-      .map(t => ({ d: t.d, text: t.text || '잔액 수정', sub: t.asset, amt: t.amt }));
+      .map(t => ({ id: t.id, d: t.d, text: t.text || '잔액 수정', sub: t.asset, amt: t.amt }));
     const onInv = L.filter(t => (t.type === '수입' || t.type === '지출') && inv.has(t.asset))
-      .map(t => ({ d: t.d, text: `${t.type} · ${t.cat || ''}${t.text ? ` · ${t.text}` : ''}`, sub: `${t.asset}에 기록 (생활 자산은 그대로)`, amt: t.type === '수입' ? -t.amt : t.amt }));
+      .map(t => ({ id: t.id, d: t.d, text: `${t.type} · ${t.cat || ''}${t.text ? ` · ${t.text}` : ''}`, sub: `${t.asset}에 기록 (생활 자산은 그대로)`, amt: t.type === '수입' ? -t.amt : t.amt }));
     const unlinked = L.filter(t => t.type === '이체' && !t.invType && (inv.has(t.to) !== inv.has(t.asset)))
-      .map(t => ({ d: t.d, text: t.text || '이체', sub: `${t.asset} → ${t.to} · 투자 앱 연결 안 함`, amt: inv.has(t.to) ? -t.amt : t.amt }));
+      .map(t => ({ id: t.id, d: t.d, text: t.text || '이체', sub: `${t.asset} → ${t.to} · 투자 앱 연결 안 함`, amt: inv.has(t.to) ? -t.amt : t.amt }));
     const cost = L.filter(t => t.type === '수정' && t.invType === '비용').reduce((a, t) => a + t.amt, 0);
     return { adj, onInv, unlinked, cost };
   };
+  // 보정 상세에서 내역을 누르면 바로 그 내역 수정 화면
+  D.hhOpenTx = id => { const t = H.byId.get(id); if (!t) return false; openForm({ tx: t }); return true; };
   // 메모 칸: 안쪽 스크롤 없이 내용만큼 늘어남 (작은 스크롤바 대신 화면 전체로 스크롤)
   function autoGrow(ta) { if (!ta) return; ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight + 2}px`; }
   document.addEventListener('input', ev => { if (ev.target.matches && ev.target.matches('textarea.hf-memo')) autoGrow(ev.target); });

@@ -1860,7 +1860,7 @@
         return { h, prev, ym, d, sv, adj };
       }).filter(x => (only ? x.ym === only : Math.abs(x.adj) >= 1)).reverse();
     const W = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(Math.round(v)).toLocaleString('ko-KR')}원`;
-    const item = (t, sub, v, cls2 = '') => `<div class="ad-it ${cls2}"><span><b>${esc(t)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><em class="num ${cls(v)}">${W(v)}</em></div>`;
+    const item = (t, sub, v, id = '') => { const tag = id ? 'button' : 'div'; return `<${tag} class="ad-it${id ? ' ad-go' : ''}"${id ? ` data-adjtx="${esc(id)}"` : ''}><span><b>${esc(t)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><em class="num ${cls(v)}">${W(v)}</em>${id ? '<i class="ad-chev">›</i>' : ''}</${tag}>`; };
     const body = blocks.map(({ h, prev, ym, d, sv, adj }) => {
       const it = window.DH.hhAdjItems ? window.DH.hhAdjItems(ym) : null;
       let rows = '';
@@ -1871,7 +1871,7 @@
         const invPart = (h.book - prev.book) - h.flow - (h.pnl - it.cost);
         const direct = invPart - unl;
         const rest = adj - hhSum - invPart;
-        const g = (title, list) => (list.length ? `<div class="ad-g">${title}</div>${list.map(x => item(x.text, `${x.d.slice(5).replace('-', '/')} · ${x.sub}`, x.amt)).join('')}` : '');
+        const g = (title, list) => (list.length ? `<div class="ad-g">${title}</div>${list.map(x => item(x.text, `${x.d.slice(5).replace('-', '/')} · ${x.sub}`, x.amt, x.id)).join('')}` : '');
         rows = g('가계부 잔액 보정', it.adj) + g('투자 계좌에 적은 수입·지출', it.onInv) + g('투자 앱에 연결 안 된 이체', it.unlinked)
           + (Math.abs(direct) >= 1 ? `<div class="ad-g">투자 앱</div>${item('원금을 직접 고친 금액', '수정 탭 원금·새 종목 등록 등 (가계부와 연결 없이)', direct)}` : '')
           + (Math.abs(rest) >= 1 ? `<div class="ad-g">그 외</div>${item('지난달 기준과의 차이', prev.auto ? '반올림 등' : '지난달은 편한가계부 월별 기록, 이번 달은 앱 계산 (첫 자동 달)', rest)}` : '');
@@ -1880,11 +1880,17 @@
       return `<section class="ad-m"><div class="ad-h"><b>${String(h.y).slice(2)}.${h.m}</b><em class="num ${cls(adj)}">기타 보정 ${W(adj)}</em></div>
         <div class="ad-f num">순자산 변화 ${W(d)} − 저축 ${W(sv)} − 투자손익 ${W(h.pnl)}</div>${rows}</section>`;
     }).join('') || '<p class="note">기타 보정이 없습니다.</p>';
-    openSheet(`<div class="ask ad-box"><h2 id="sheetTitle">기타 보정 내역</h2><p class="note ask-note">순자산 변화 중 저축·투자손익으로<br>설명되지 않는 금액입니다.<br>아래 내역을 고치면 보정이 줄어듭니다.</p>${body}
+    openSheet(`<div class="ask ad-box"><h2 id="sheetTitle">기타 보정 내역</h2><p class="note ask-note">순자산 변화 중 저축·투자손익으로<br>설명되지 않는 금액입니다.<br>내역을 누르면 바로 고칠 수 있습니다.</p>${body}
       <div class="sheet-actions"><button class="btn" data-close>닫기</button></div></div>`, 'pop');
   }
 
   document.addEventListener('click', ev => { const b = ev.target.closest && ev.target.closest('[data-adjopen]'); if (b && state.data) openAdjDetail(b.dataset.adjopen || null); });
+  document.addEventListener('click', ev => {
+    const b = ev.target.closest && ev.target.closest('[data-adjtx]');
+    if (!b || !window.DH.hhOpenTx) return;
+    closeSheet();
+    if (!window.DH.hhOpenTx(b.dataset.adjtx)) toast('가계부를 한 번 연 뒤 다시 누르십시오', true);
+  });
 
   function autoMonthCard() {
     const D = state.data, H = D.household;
