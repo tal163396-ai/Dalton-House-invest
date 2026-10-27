@@ -1623,3 +1623,10 @@ button.cm-sr:active { background: var(--fill); }
 .cmd-m b { color: var(--ink-2); }
 .cmd-act { margin: 10px 16px 0; }
 .sheet.pop .sheet-panel:has(.cmd) { overflow: hidden; display: flex; flex-direction: column; padding-bottom: 14px; }
+
+/* 정산 완료 버튼: 저장되는 동안 왼쪽부터 차오름 */
+.hb-settle { position: relative; overflow: hidden; }
+.hb-settle > span { position: relative; z-index: 1; }
+.hb-settle.busy { border-style: solid; color: var(--ink); pointer-events: none; }
+.hb-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: color-mix(in srgb, var(--inc) 28%, transparent); transition: width 4.5s cubic-bezier(.15,.75,.3,1); }
+

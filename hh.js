@@ -2048,12 +2048,18 @@
     $$('[data-hday]', root).forEach(b => b.onclick = () => openHabitDay(b.dataset.hday));
     const se = $('#hbSettle', root); if (se) se.onclick = async () => {
       const ym = H.ym, st = H.settled.get(ym), id = `gs-${ym}`;
+      if (se.classList.contains('busy')) return;
       if (st) { if (!(await askConfirm(`${+ym.slice(5)}월 정산 완료 표시를 지울까요?`, '', '지우기'))) return; }
+      // 서버 저장(2~4초) 동안 버튼이 왼쪽부터 차오르며 진행 중임을 보여 줌
+      se.classList.add('busy'); se.innerHTML = `<i class="hb-fill"></i><span>${st ? '표시 지우는 중…' : '정산 완료 저장 중…'}</span>`;
+      const fill = $('.hb-fill', se);
+      requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = '92%'; }));
+      const finish = () => new Promise(r => { fill.style.transition = 'width .25s ease-out'; fill.style.width = '100%'; setTimeout(r, 280); });
       try {
         if (st) { await D.api('hhDel', { kind: 'habit', id }); H.settled.delete(ym); }
         else { const by = store.get('dh_name') || ''; await D.api('hhSave', { habit: { ID: id, 날짜: ym, 값: '', 면제: '', 메모: '정산 완료', 입력자: by } }); H.settled.set(ym, { id, memo: '정산 완료', by }); }
-        saveCache(); rerender(); toast(st ? '정산 완료 표시를 지웠습니다' : `${+ym.slice(5)}월 정산 완료로 표시했습니다`);
-      } catch (ex) { toast(`실패: ${ex.message}`, true); }
+        await finish(); saveCache(); rerender(); toast(st ? '정산 완료 표시를 지웠습니다' : `${+ym.slice(5)}월 정산 완료로 표시했습니다`);
+      } catch (ex) { rerender(); toast(`실패: ${ex.message}`, true); }
     };
   }
   function openHabitDay(d) {
