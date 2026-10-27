@@ -125,6 +125,7 @@ function readAll_() {
   return {
     updatedAt: Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm'),
     rate: rate_(),
+    cashLinked: Object.keys(CASH),
     holdings: applyLiveQuotes_(rowsAsObjects_('보유현황', o => !o['자산'] || o['자산'] === '합계')),
     composition: rowsAsObjects_('연도별구성', o => !o['연도']),
     realized: rowsAsObjects_('실현손익', o => !o['날짜']),
@@ -321,17 +322,18 @@ function recordTrade_(tr) {
     }
   }
 
+  if (tr.nolog) return { ok: true, amountKrw, realized };
   appendByHeader_('거래기록', {
     '날짜': kstWall_(date), '자산': asset, '세부종목': sub, '구분': type, '수량': qty, '단가': price,
     '통화': cur, '금액(원)': amountKrw, '실현손익(원)': realized === null ? '' : realized,
-    '입력자': tr.by || '', '메모': tr.memo || '',
+    '입력자': tr.by || '', '메모': tr.memo || '', '연결': tr.link || '',
   });
 
   if (realized !== null) {
     const row = appendByHeader_('실현손익', {
       '날짜': kstWall_(date), '자산': asset, '세부종목': sub,
       '내용': `${sub} ${qty}주 매도 ${realized >= 0 ? '익절' : '손절'}`,
-      '손익(원)': realized, '구분': realized >= 0 ? '익절' : '손절', '출처': '앱', '메모': tr.memo || '',
+      '손익(원)': realized, '구분': realized >= 0 ? '익절' : '손절', '출처': tr.link ? '가계부' : '앱', '메모': tr.memo || '', '연결': tr.link || '',
     });
     const rt = table_('실현손익');
     const A = colLetter_(rt.col['날짜'] + 1);
@@ -584,10 +586,10 @@ function ensureHeaders_(name, headers) {
  * 일시·ID 칸은 글자 서식(구글 시트가 날짜로 바꾸지 않게) */
 
 const HH_TABS = {
-  '가계부':     ['ID', '일시', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '화폐', '외화금액', '반복', '입력자'],
+  '가계부':     ['ID', '일시', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '화폐', '외화금액', '반복', '입력자', '투자구분', '투자계좌', '투자종목', '투자수량', '투자단가'],
   '가계부분류': ['구분', '분류', '소분류'],
   '가계부자산': ['그룹', '자산', '숨김', '메모', '연결'],
-  '가계부반복': ['ID', '주기', '일', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '시작', '종료', '마지막생성'],
+  '가계부반복': ['ID', '주기', '일', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '시작', '종료', '마지막생성', '투자구분', '투자계좌', '투자종목'],
   '가계부메모': ['ID', '날짜', '내용', '입력자'],
   '가계부예산': ['분류', '소분류', '금액', '월'],
 };
@@ -608,6 +610,7 @@ function readHH_() {
 /** 탭이 없으면 만들고, 머리글이 빠졌으면 채움 */
 function hhEnsure_() {
   const ss = SpreadsheetApp.getActive();
+  ['거래기록', '실현손익'].forEach(n => { if (ss.getSheetByName(n)) ensureHeaders_(n, ['연결']); });
   Object.keys(HH_TABS).forEach(name => {
     const sh = ss.getSheetByName(name);
     if (!sh) {
@@ -702,12 +705,107 @@ function hhTx_(t) {
     if (o['받는자산'] === o['자산']) throw new Error('출금·입금 자산이 같습니다');
     o['분류'] = ''; o['소분류'] = '';
   } else o['받는자산'] = '';
+  // 투자 앱 연결 (이체만): 입금·매수 = 투자 계좌로 보냄, 출금·매도 = 투자 계좌에서 찾음
+  o['투자구분'] = o['구분'] === '이체' ? hhStr_(t['투자구분'], 4) : '';
+  if (o['투자구분'] && ['입금', '출금', '매수', '매도'].indexOf(o['투자구분']) < 0) throw new Error('투자 앱 연결 구분이 올바르지 않습니다');
+  o['투자계좌'] = o['투자구분'] ? hhStr_(t['투자계좌'], 80) : '';
+  o['투자종목'] = o['투자구분'] ? hhStr_(t['투자종목'], 80) : '';
+  const tq = o['투자구분'] === '매수' || o['투자구분'] === '매도';
+  o['투자수량'] = tq ? Number(t['투자수량']) : '';
+  o['투자단가'] = tq ? Number(t['투자단가']) : '';
+  if (o['투자구분']) {
+    if (!o['투자계좌']) throw new Error('투자 앱 계좌를 고르세요');
+    if (tq && !(o['투자수량'] > 0 && o['투자단가'] > 0)) throw new Error('수량과 단가를 입력하세요');
+    const inv = hhInvAssets_(), into = o['투자구분'] === '입금' || o['투자구분'] === '매수';
+    if (!inv[into ? o['받는자산'] : o['자산']]) throw new Error(into ? '투자 앱 입금·매수는 투자 계좌로 보내는 이체에만 쓸 수 있습니다' : '투자 앱 출금·매도는 투자 계좌에서 찾는 이체에만 쓸 수 있습니다');
+  }
+  return o;
+}
+
+/** 가계부자산 중 '연결'이 투자앱인 자산 이름 */
+let HH_INV_ = null;
+function hhInvAssets_() {
+  if (HH_INV_) return HH_INV_;
+  HH_INV_ = {};
+  hhRows_('가계부자산').rows.forEach(r => { if (String(r[4]).trim() === '투자앱') HH_INV_[String(r[1]).trim()] = true; });
+  return HH_INV_;
+}
+
+/** 내역 한 줄 → 투자 앱 거래 (없으면 null) */
+function hhLinkSpec_(o) {
+  const ty = String(o['투자구분'] || '').trim();
+  if (!ty || String(o['구분']).trim() !== '이체') return null;
+  const ts = String(o['일시'] || '').replace(' ', 'T') + '+09:00';
+  const spec = { type: ty, asset: String(o['투자계좌']).trim(), sub: String(o['투자종목'] || o['투자계좌']).trim(), amountKrw: Math.round(num_(o['금액'])), date: ts, by: o['입력자'] || '' };
+  if (ty === '매수' || ty === '매도') { spec.qty = num_(o['투자수량']); spec.price = num_(o['투자단가']); }
+  spec.memo = `가계부: ${String(o['내용'] || '').trim() || (ty === '입금' || ty === '매수' ? '투자 계좌로 이체' : '투자 계좌에서 찾음')}`;
+  return spec;
+}
+const hhSpecKey_ = s => (s ? [s.type, s.asset, s.sub, s.amountKrw, s.qty || '', s.price || ''].join('|') : '');
+
+/** 내역 ID에 연결된 투자 앱 거래를 되돌리고 기록을 지움 */
+function hhUndoLink_(id) {
+  const lt = table_('거래기록');
+  if (!('연결' in lt.col)) return false;
+  let r = -1;
+  for (let i = lt.values.length - 1; i >= 1; i--) if (String(lt.values[i][lt.col['연결']]).trim() === id) { r = i; break; }
+  if (r < 0) return false;
+  const v = h => lt.values[r][lt.col[h]];
+  const type = String(v('구분')).trim(), asset = String(v('자산')).trim(), sub = String(v('세부종목')).trim();
+  const amt = Math.round(num_(v('금액(원)'))), qty = num_(v('수량')), price = num_(v('단가'));
+  if (type === '입금' || type === '출금') {
+    recordTrade_({ type: type === '입금' ? '출금' : '입금', asset, sub, amountKrw: amt, nolog: true });
+  } else {
+    const t = holdings_(), rate = rate_(), cash = CASH[asset] || { mode: 'none' };
+    const h = findRow_(t, asset, sub);
+    if (h < 0) throw new Error(`되돌릴 종목 '${asset} / ${sub}'을 보유현황에서 찾지 못했습니다`);
+    const cur = String(t.values[h][t.col['통화']]).trim() || 'KRW';
+    const Q = num_(t.values[h][t.col['수량']]), A = num_(t.values[h][t.col['평단가']]), C = num_(t.values[h][t.col['원금(원)']]);
+    const cashRow = resolveCash_(t, cash);
+    if (type === '매수') {
+      const nq = round_(Q - qty, 8);
+      if (nq < -1e-9) throw new Error('되돌릴 수량이 보유 수량보다 많습니다');
+      setCell_(t, h, '수량', Math.max(0, nq));
+      if (nq > 1e-9 && A > 0) setCell_(t, h, '평단가', round_((Q * A - qty * price) / nq, 4));
+      if (cash.mode !== 'internal') setCell_(t, h, '원금(원)', Math.round(C - amt));
+      moveCash_(t, cash, cashRow, qty * price, amt, cur, rate);
+    } else {
+      const realized = num_(v('실현손익(원)'));
+      setCell_(t, h, '수량', round_(Q + qty, 8));
+      if (cash.mode !== 'internal') setCell_(t, h, '원금(원)', Math.round(C + (amt - realized)));
+      moveCash_(t, cash, cashRow, -qty * price, -amt, cur, rate);
+      const rt = table_('실현손익');
+      if ('연결' in rt.col) for (let i = rt.values.length - 1; i >= 1; i--) if (String(rt.values[i][rt.col['연결']]).trim() === id) { rt.sh.deleteRow(i + 1); break; }
+    }
+  }
+  lt.sh.deleteRow(r + 1);
+  return true;
+}
+
+/** 내역 저장 전후 비교: 연결이 바뀌었으면 예전 것을 되돌리고 새로 기록 */
+function hhSyncLink_(id, oldSpec, newSpec) {
+  if (hhSpecKey_(oldSpec) === hhSpecKey_(newSpec)) return null;
+  const undone = oldSpec ? hhUndoLink_(id) : false;
+  if (!newSpec) return null;
+  try { return recordTrade_(Object.assign({}, newSpec, { link: id })); }
+  catch (e) {
+    if (undone) { try { recordTrade_(Object.assign({}, oldSpec, { link: id })); } catch (e2) { /* 되살리기 실패 */ } }
+    throw new Error(`투자 앱 기록 실패: ${e.message}`);
+  }
+}
+
+function hhTxRowObj_(id) {
+  const sh = sheet_('가계부'), head = hhHead_(sh), row = hhFindRow_(sh, head, id);
+  if (!row) return null;
+  const vals = sh.getRange(row, 1, 1, head.length).getValues()[0], o = {};
+  head.forEach((h, i) => { o[h] = hhVal_(vals[i], h); });
   return o;
 }
 
 function hhRule_(t) {
   const o = hhTx_(Object.assign({}, t, { '일시': '2000-01-01 00:00:00' }));
-  delete o['일시']; delete o['반복']; delete o['입력자']; delete o['화폐']; delete o['외화금액'];
+  delete o['일시']; delete o['반복']; delete o['입력자']; delete o['화폐']; delete o['외화금액']; delete o['투자수량']; delete o['투자단가'];
+  if (o['투자구분'] === '매수' || o['투자구분'] === '매도') throw new Error('반복 내역은 투자 앱 입금·출금만 연결할 수 있습니다');
   o['주기'] = '매월';
   o['일'] = Math.min(31, Math.max(1, Math.round(Number(t['일'])) || 1));
   ['시작', '종료', '마지막생성'].forEach(h => {
@@ -730,7 +828,12 @@ function hhSave_(req) {
   hhEnsure_();
   const out = { ok: true };
   if (req.rule) out.rule = hhUpsert_('가계부반복', hhRule_(req.rule));
-  if (req.tx) out.tx = hhUpsert_('가계부', hhTx_(req.tx));
+  if (req.tx) {
+    const o = hhTx_(req.tx), prev = hhTxRowObj_(o.ID);
+    const r = hhSyncLink_(o.ID, prev && hhLinkSpec_(prev), hhLinkSpec_(o));   // 투자 앱 먼저 (실패하면 내역도 저장 안 함)
+    out.tx = hhUpsert_('가계부', o);
+    if (r) out.inv = { type: o['투자구분'], amountKrw: r.amountKrw, realized: r.realized };
+  }
   if (req.memo) out.memo = hhUpsert_('가계부메모', hhMemo_(req.memo));
   return out;
 }
@@ -742,8 +845,10 @@ function hhDel_(req) {
   const id = hhId_(req.id), sh = sheet_(name);
   const row = hhFindRow_(sh, hhHead_(sh), id);
   if (!row) return { ok: true, message: '이미 지워진 내역입니다' };
+  let undone = false;
+  if (req.kind === 'tx') { const prev = hhTxRowObj_(id); if (prev && hhLinkSpec_(prev)) undone = hhUndoLink_(id); }
   sh.deleteRow(row);
-  return { ok: true };
+  return { ok: true, invUndone: undone };
 }
 
 /** req = { renames?: [{what:'asset'|'cat'|'sub', type, cat, from, to}], cats?: [[구분,분류,소분류]], assets?: [[그룹,자산,숨김,메모,연결]], budgets?: [[분류,소분류,금액,월]] } */
@@ -837,6 +942,7 @@ function hhRunRules_() {
         'ID': `${id}-${m.replace('-', '')}`, '일시': `${m}-${('0' + day).slice(-2)} 00:00:00`, '구분': g('구분'),
         '분류': g('분류'), '소분류': g('소분류'), '내용': g('내용'), '금액': num_(g('금액')), '자산': g('자산'),
         '받는자산': g('받는자산'), '메모': g('메모'), '반복': id, '입력자': '자동',
+        '투자구분': g('구분') === '이체' ? g('투자구분') : '', '투자계좌': g('투자계좌'), '투자종목': g('투자종목'),
       });
       made = m; m = hhNextYm_(m);
     }
@@ -847,11 +953,14 @@ function hhRunRules_() {
     const sh = sheet_('가계부'), head = hhHead_(sh), idc = head.indexOf('ID') + 1, last = sh.getLastRow();
     const have = {};
     if (idc && last > 1) sh.getRange(2, idc, last - 1, 1).getValues().forEach(x => { have[String(x[0]).trim()] = true; });
-    const rows = add.filter(o => !have[o.ID]).map(o => head.map(h => (h in o ? o[h] : '')));
+    const fresh = add.filter(o => !have[o.ID]);
+    const rows = fresh.map(o => head.map(h => (h in o ? o[h] : '')));
     if (rows.length) {
       hhTextFormat_(sh, '가계부', head, last + 1, rows.length);
       sh.getRange(last + 1, 1, rows.length, head.length).setValues(rows);
       n = rows.length;
+      // 투자 앱 연결된 반복 이체 (예: 매월 ISA 입금)
+      fresh.forEach(o => { const sp = hhLinkSpec_(o); if (sp) { try { recordTrade_(Object.assign({}, sp, { link: o.ID })); } catch (e) { /* 투자 앱 기록 실패는 내역 생성을 막지 않음 */ } } });
     }
   }
   done.forEach(([row, m]) => rt.sh.getRange(row, c['마지막생성'] + 1).setNumberFormat('@').setValue(m));

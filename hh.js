@@ -6,7 +6,7 @@
   const { $, $$, esc, store, sess } = D;
   const toast = (m, e) => D.toast(m, e);
 
-  const F_TX = ['ID', '일시', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '화폐', '외화금액', '반복', '입력자'];
+  const F_TX = ['ID', '일시', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '화폐', '외화금액', '반복', '입력자', '투자구분', '투자계좌', '투자종목', '투자수량', '투자단가'];
   const WD = ['일', '월', '화', '수', '목', '금', '토'];
   const COLORS = ['#F87171', '#FB923C', '#FBBF24', '#FDE047', '#A3E635', '#4ADE80', '#2DD4BF', '#38BDF8', '#60A5FA', '#A78BFA', '#E879F9', '#F472B6'];
   const CACHE = 'dh_hh_cache';
@@ -89,13 +89,26 @@
       cat: String(a[3] || ''), sub: String(a[4] || ''), text: String(a[5] || ''), amt: Number(a[6]) || 0,
       asset: String(a[7] || ''), to: String(a[8] || ''), memo: String(a[9] || ''), cur: String(a[10] || ''), famt,
       rule: String(a[12] || ''), by: String(a[13] || ''),
+      invType: String(a[14] || ''), invAcct: String(a[15] || ''), invSub: String(a[16] || ''),
+      invQty: a[17] === '' || a[17] == null ? '' : Number(a[17]), invPrice: a[18] === '' || a[18] == null ? '' : Number(a[18]),
     };
   }
-  const txArr = t => [t.id, t.ts, t.type, t.cat, t.sub, t.text, t.amt, t.asset, t.to, t.memo, t.cur, t.famt, t.rule, t.by];
+  const txArr = t => [t.id, t.ts, t.type, t.cat, t.sub, t.text, t.amt, t.asset, t.to, t.memo, t.cur, t.famt, t.rule, t.by, t.invType || '', t.invAcct || '', t.invSub || '', t.invQty ?? '', t.invPrice ?? ''];
   const txObj = t => Object.fromEntries(F_TX.map((h, i) => [h, txArr(t)[i]]));
-  const ruleArr = r => [r.id, '매월', r.day, r.type, r.cat, r.sub, r.text, r.amt, r.asset, r.to, r.memo, r.start, r.end, r.last];
-  const ruleObj = r => ({ ID: r.id, 주기: '매월', 일: r.day, 구분: r.type, 분류: r.cat, 소분류: r.sub, 내용: r.text, 금액: r.amt, 자산: r.asset, 받는자산: r.to, 메모: r.memo, 시작: r.start, 종료: r.end, 마지막생성: r.last });
-  const toRule = a => ({ id: String(a[0]), day: Number(a[2]) || 1, type: String(a[3] || ''), cat: String(a[4] || ''), sub: String(a[5] || ''), text: String(a[6] || ''), amt: Number(a[7]) || 0, asset: String(a[8] || ''), to: String(a[9] || ''), memo: String(a[10] || ''), start: String(a[11] || ''), end: String(a[12] || ''), last: String(a[13] || '') });
+  const ruleArr = r => [r.id, '매월', r.day, r.type, r.cat, r.sub, r.text, r.amt, r.asset, r.to, r.memo, r.start, r.end, r.last, r.invType || '', r.invAcct || '', r.invSub || ''];
+  const ruleObj = r => ({ ID: r.id, 주기: '매월', 일: r.day, 구분: r.type, 분류: r.cat, 소분류: r.sub, 내용: r.text, 금액: r.amt, 자산: r.asset, 받는자산: r.to, 메모: r.memo, 시작: r.start, 종료: r.end, 마지막생성: r.last, 투자구분: r.invType || '', 투자계좌: r.invAcct || '', 투자종목: r.invSub || '' });
+  const toRule = a => ({ id: String(a[0]), day: Number(a[2]) || 1, type: String(a[3] || ''), cat: String(a[4] || ''), sub: String(a[5] || ''), text: String(a[6] || ''), amt: Number(a[7]) || 0, asset: String(a[8] || ''), to: String(a[9] || ''), memo: String(a[10] || ''), start: String(a[11] || ''), end: String(a[12] || ''), last: String(a[13] || ''), invType: String(a[14] || ''), invAcct: String(a[15] || ''), invSub: String(a[16] || '') });
+  // 투자 앱 연결 표시: 'ISA 입금', 'TIGER … 3주 매수'
+  const invLabel = (t, opts) => {
+    if (!t.invType) return '';
+    const o = opts || (D.invOptions && D.invOptions());
+    let name = t.invSub || t.invAcct;
+    if (o) {
+      const a = (t.invType === '입금' || t.invType === '출금') ? o.acc.find(x => x.asset === t.invAcct) : o.items.find(x => x.asset === t.invAcct && x.sub === t.invSub);
+      if (a) name = a.label;
+    }
+    return `${name} ${t.invQty ? `${t.invQty}주 ` : ''}${t.invType}`;
+  };
   const toMemo = a => ({ id: String(a[0]), date: String(a[1] || ''), text: String(a[2] || ''), by: String(a[3] || '') });
   const catsArr = () => ['수입', '지출'].flatMap(t => H.cats[t].map(c => [t, c.name, c.subs.join(' | ')]));
   const assetsArr = () => H.assets.map(a => [a.group, a.name, a.hidden ? 'Y' : '', a.memo, a.link || '']);
@@ -320,7 +333,7 @@
 
   function rowHtml(t, { balAfter = null, forAsset = null, showDate = false, raw = false } = {}) {
     let left, cls = '', amtTxt;
-    if (t.type === '이체') { left = '<span class="hr-cat">이체</span>'; cls = 'tr'; }
+    if (t.type === '이체') { left = `<span class="hr-cat">이체</span>${t.invType ? `<small class="hr-invs">투자 앱 ${esc(t.invType)}</small>` : ''}`; cls = 'tr'; }
     else if (t.type === '수정') { left = '<span class="hr-cat">잔액수정</span>'; cls = 'adj'; }
     else { left = `<span class="hr-cat">${esc(t.cat || '미분류')}</span>${t.sub ? `<small>${esc(t.sub)}</small>` : ''}`; cls = t.type === '수입' ? 'inc' : 'exp'; }
     if (forAsset) {
@@ -979,6 +992,20 @@
       repeat: false,
       day: rule ? rule.day : +(opts.date || today()).slice(8, 10),
       start: rule ? rule.start : ymOf(new Date()), end: rule ? rule.end : '',
+      // 투자 앱 연결: null = 아직 안 고름, { type: '' } = 연결 안 함
+      inv: (() => {
+        const x = e || rule;
+        if (!x || x.type !== '이체') return null;
+        if (x.invType) return { type: x.invType, acct: x.invAcct, sub: x.invSub, qty: x.invQty || '', price: x.invPrice || '' };
+        return { type: '' };
+      })(),
+    };
+    const invDir = () => (f.type !== '이체' ? '' : H.inv.has(f.to) ? 'in' : H.inv.has(f.asset) ? 'out' : '');
+    const invOk = () => {
+      const d = invDir();
+      if (!d || !f.inv || !f.inv.type) return;
+      const into = f.inv.type === '입금' || f.inv.type === '매수';
+      if ((d === 'in') !== into || (isRule && (f.inv.type === '매수' || f.inv.type === '매도'))) f.inv = null;
     };
     if (!src && !isRule) f.asset = lastAsset(f.type);
     if (f.type === '수정' && !e) f.type = '지출';
@@ -990,6 +1017,12 @@
 
     function draw() {
       const tr = f.type === '이체', adj = f.type === '수정';
+      invOk();
+      const dir = invDir(), io = dir && D.invOptions ? D.invOptions() : null;
+      const trade = f.inv && (f.inv.type === '매수' || f.inv.type === '매도');
+      const item = trade && io ? io.items.find(x => x.asset === f.inv.acct && x.sub === f.inv.sub) : null;
+      const usd = item && item.cur === 'USD';
+      const invTxt = !f.inv ? '계좌 고르기' : !f.inv.type ? '연결 안 함' : invLabel({ invType: f.inv.type, invAcct: f.inv.acct, invSub: f.inv.sub }, io);
       root.dataset.type = { 수입: 'in', 지출: 'out', 이체: 'tr', 수정: 'adj' }[f.type];
       $('.hh-ph h2', pg).textContent = isRule ? title : e ? '내역 수정' : f.type;
       root.innerHTML = `
@@ -1015,6 +1048,12 @@
         ${f.cur && f.famt !== '' ? `<p class="hf-info">외화 ${f.cur === 'USD' ? 'US$' : f.cur} ${Number(f.famt).toLocaleString('ko-KR', { minimumFractionDigits: 2 })} 내역입니다. 앱은 원화 금액으로 계산합니다.</p>` : ''}
         ${adj ? '' : `<div class="hf-row"><span class="hf-l">${tr ? '출금' : '분류'}</span><button class="hf-v hf-pick ${(tr ? f.asset : f.cat) ? '' : 'ph'}" id="hfCat">${tr ? esc(f.asset || '출금 자산') : esc(f.cat ? `${f.cat}${f.sub ? ` / ${f.sub}` : ''}` : '분류 고르기')}</button></div>`}
         <div class="hf-row"><span class="hf-l">${tr ? '입금' : '자산'}</span><button class="hf-v hf-pick ${(tr ? f.to : f.asset) ? '' : 'ph'}" id="hfAsset">${tr ? esc(f.to || '입금 자산') : esc(f.asset || '자산 고르기')}</button></div>
+        ${dir ? `<div class="hf-row hf-invrow"><span class="hf-l">투자 앱</span><button class="hf-v hf-pick ${f.inv ? '' : 'ph'}" id="hfInv">${esc(invTxt)}</button></div>
+          ${trade ? `<div class="hf-row"><span class="hf-l">수량</span><div class="hf-v"><input id="hfQty" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="0" value="${f.inv.qty || ''}"><span class="hf-unit">주</span></div></div>
+          <div class="hf-row"><span class="hf-l">단가</span><div class="hf-v"><input id="hfPrice" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${item && item.price ? item.price : '0'}" value="${f.inv.price || ''}"><span class="hf-unit">${usd ? '달러' : '원'}</span></div></div>` : ''}
+          <p class="hf-info">${!f.inv ? `투자 계좌${dir === 'in' ? '로 보내는' : '에서 찾는'} 이체입니다. 투자 앱의 어느 계좌${dir === 'in' ? '에 들어가는지' : '에서 나오는지'} 고르십시오.<br>투자 앱에 따로 적을 거면 '연결 안 함'을 고르십시오.`
+            : !f.inv.type ? '투자 앱에는 기록하지 않습니다.'
+            : `${isRule ? '매달 자동으로 들어갈 때 투자 앱에도 같은 금액으로 기록됩니다.' : '저장하면 투자 앱에도 같은 금액으로 기록됩니다.'}${item && f.inv.type === '매도' ? `<br>지금 보유 ${item.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}주` : ''}${trade ? `<br>금액은 투자 앱의 실제 원화 금액(원금)으로 들어갑니다.` : ''}`}</p>` : ''}
         <div class="hf-row"><span class="hf-l">내용</span><div class="hf-v"><input id="hfText" maxlength="200" autocomplete="off" enterkeyhint="done" value="${esc(f.text)}" placeholder="${tr ? '예: 생활비 이체' : '예: 점심'}"></div></div>
         <div class="hf-sugg" id="hfSugg"></div>
         <textarea id="hfMemo" class="hf-memo" rows="2" placeholder="메모">${esc(f.memo)}</textarea>
@@ -1029,6 +1068,8 @@
       const a = $('#hfAmt', root); if (a) { const v = moneyVal(a.value); f.amt = Number.isFinite(v) ? Math.abs(v) : 0; f.neg = v < 0; }
       const t = $('#hfText', root); if (t) f.text = t.value;
       const m = $('#hfMemo', root); if (m) f.memo = m.value;
+      const q = $('#hfQty', root); if (q && f.inv) f.inv.qty = q.value === '' ? '' : Number(q.value);
+      const pr = $('#hfPrice', root); if (pr && f.inv) f.inv.price = pr.value === '' ? '' : Number(pr.value);
     }
     function bind() {
       $$('.hf-types [data-t]', root).forEach(b => b.onclick = () => {
@@ -1059,6 +1100,7 @@
       amt.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); readInputs(); amt.blur(); if (f.type === '수정') $('#hfText', root).focus(); else openPicker(f.type === '이체' ? 'from' : 'cat'); } };
       const cat = $('#hfCat', root); if (cat) cat.onclick = () => { readInputs(); openPicker(f.type === '이체' ? 'from' : 'cat'); };
       $('#hfAsset', root).onclick = () => { readInputs(); openPicker(f.type === '이체' ? 'to' : 'asset'); };
+      const iv = $('#hfInv', root); if (iv) iv.onclick = () => { readInputs(); openPicker('inv'); };
       const txt = $('#hfText', root);
       txt.oninput = () => sugg(txt.value);
       txt.onfocus = () => sugg(txt.value);
@@ -1107,6 +1149,29 @@
         back();
         setTimeout(() => { const t = $('#hfText', root); if (t && !f.text) t.focus(); }, 260);
       };
+      if (kind === 'inv') {
+        const dir = invDir(), o = D.invOptions ? D.invOptions() : null;
+        if (!o) { box.innerHTML = `<div class="pk-head"><b>투자 앱</b><button class="icon-btn" id="pkX" aria-label="닫기">${ico.close}</button></div><p class="empty">투자 앱 자료를 불러오는 중입니다.<br>잠시 뒤 다시 누르십시오.</p>`; $('#pkX', box).onclick = () => back(); if (D.ensureInv) D.ensureInv(); return; }
+        const inT = dir === 'in' ? '입금' : '출금', trT = dir === 'in' ? '매수' : '매도';
+        const items = isRule ? [] : o.items.filter(x => dir === 'in' || x.qty > 0);
+        const cur = f.inv || {};
+        const btn = (ty, a, sb, lab, sm) => `<button class="pk-inv ${cur.type === ty && cur.acct === a && (cur.sub || '') === (sb || '') ? 'on' : ''}" data-ty="${ty}" data-a="${esc(a)}" data-s="${esc(sb)}"><span>${esc(lab)}</span>${sm ? `<small>${esc(sm)}</small>` : ''}</button>`;
+        box.innerHTML = `<div class="pk-head"><b>투자 앱 ${dir === 'in' ? '(들어가는 곳)' : '(나오는 곳)'}</b><button class="icon-btn" id="pkX" aria-label="닫기">${ico.close}</button></div>
+          <div class="pk-assets">
+            <div class="pk-g">예수금 ${inT}</div><div class="pk-list">${o.acc.map(x => btn(inT, x.asset, x.sub, x.label, x.cur === 'USD' ? '원화 금액을 환율로 달러로 바꿔 넣습니다' : '')).join('')}</div>
+            ${items.length ? `<div class="pk-g">바로 ${trT} <small>예수금 없이 사고파는 종목 · 수량·단가 입력</small></div><div class="pk-list">${items.map(x => btn(trT, x.asset, x.sub, x.label, `${x.kind} · 보유 ${x.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}`)).join('')}</div>` : ''}
+            <div class="pk-list"><button class="pk-inv none ${f.inv && !f.inv.type ? 'on' : ''}" data-ty="" data-a="" data-s=""><span>연결 안 함</span><small>투자 앱에 따로 적거나 기록하지 않을 때</small></button></div>
+          </div>`;
+        $$('[data-ty]', box).forEach(b => b.onclick = () => {
+          const ty = b.dataset.ty;
+          const keep = f.inv && f.inv.type === ty && f.inv.acct === b.dataset.a && f.inv.sub === b.dataset.s;
+          f.inv = ty ? { type: ty, acct: b.dataset.a, sub: b.dataset.s, qty: keep ? f.inv.qty : '', price: keep ? f.inv.price : '' } : { type: '' };
+          done(null);
+          if (ty === '매수' || ty === '매도') setTimeout(() => { const q = $('#hfQty', root); if (q && !q.value) q.focus(); }, 280);
+        });
+        $('#pkX', box).onclick = () => back();
+        return;
+      }
       if (kind === 'cat') {
         const list = H.cats[f.type] || [];
         let active = list.find(c => c.name === f.cat) || null;
@@ -1135,8 +1200,9 @@
         $$('[data-a]', box).forEach(b => b.onclick = () => {
           const a = b.dataset.a;
           if (kind === 'to') f.to = a; else f.asset = a;
-          if (kind === 'from') done(!f.to ? 'to' : null);
-          else done(null);
+          invOk();
+          if (kind === 'from') done(!f.to ? 'to' : (invDir() && !f.inv ? 'inv' : null));
+          else done(kind === 'to' && invDir() && !f.inv ? 'inv' : null);
         });
         $('#pkX', box).onclick = () => back();
         $('#pkEdit', box).onclick = () => back(1, () => openAssetSettings('all'));
@@ -1153,6 +1219,16 @@
         if (!f.asset) return fail('출금 자산을 고르십시오.');
         if (!f.to) return fail('입금 자산을 고르십시오.');
         if (f.asset === f.to) return fail('출금·입금 자산이 같습니다.');
+        if (invDir()) {
+          if (!f.inv) return fail('투자 앱 계좌를 고르십시오. 기록하지 않으려면 연결 안 함을 고르십시오.');
+          if (f.inv.type === '매수' || f.inv.type === '매도') {
+            if (!(f.inv.qty > 0)) return fail('수량을 입력하십시오.');
+            if (!(f.inv.price > 0)) return fail('단가를 입력하십시오.');
+            const o = D.invOptions && D.invOptions(), it = o && o.items.find(x => x.asset === f.inv.acct && x.sub === f.inv.sub);
+            const had = e && e.invType === '매도' && e.invAcct === f.inv.acct && e.invSub === f.inv.sub ? Number(e.invQty) || 0 : 0;
+            if (f.inv.type === '매도' && it && f.inv.qty > it.qty + had + 1e-9) return fail(`보유 수량(${it.qty})보다 많이 팔 수 없습니다.`);
+          }
+        }
       } else {
         if (f.type !== '수정' && !f.cat) return fail('분류를 고르십시오.');
         if (!f.asset) return fail('자산을 고르십시오.');
@@ -1161,7 +1237,8 @@
       if (isRule) {
         if (!f.start) return fail('시작 달을 고르십시오.');
         if (f.end && f.end < f.start) return fail('끝 달이 시작 달보다 앞입니다.');
-        const r = { id: rule ? rule.id : newId('r'), day: f.day, type: f.type, cat: f.type === '이체' ? '' : f.cat, sub: f.type === '이체' ? '' : f.sub, text: f.text.trim(), amt: f.amt, asset: f.asset, to: f.type === '이체' ? f.to : '', memo: f.memo.trim(), start: f.start, end: f.end, last: rule ? rule.last : '' };
+        const li = invDir() && f.inv && f.inv.type ? f.inv : null;
+        const r = { id: rule ? rule.id : newId('r'), day: f.day, type: f.type, cat: f.type === '이체' ? '' : f.cat, sub: f.type === '이체' ? '' : f.sub, text: f.text.trim(), amt: f.amt, asset: f.asset, to: f.type === '이체' ? f.to : '', memo: f.memo.trim(), start: f.start, end: f.end, last: rule ? rule.last : '', invType: li ? li.type : '', invAcct: li ? li.acct : '', invSub: li ? li.sub : '' };
         if (!rule) {
           // 지난 달 것은 채우지 않음. 이번 달 날짜가 이미 지났으면 다음 달부터 자동 입력
           const cur = ymOf(new Date());
@@ -1179,17 +1256,19 @@
       const sec = f.sec && e && e.d === f.date && e.tm.slice(0, 5) === f.time ? f.sec : pad(new Date().getSeconds());
       const t = toTx([f.id || newId('n'), `${f.date} ${f.time}:${sec}`, f.type, f.type === '이체' || f.type === '수정' ? (f.type === '수정' ? (e ? e.cat : '잔액수정') : '') : f.cat,
         f.type === '이체' || f.type === '수정' ? '' : f.sub, f.text.trim(), amount, f.asset, f.type === '이체' ? f.to : '', f.memo.trim(),
-        e && e.amt === amount ? f.cur : '', e && e.amt === amount ? f.famt : '', f.rule, e ? (e.by || by) : by]);
+        e && e.amt === amount ? f.cur : '', e && e.amt === amount ? f.famt : '', f.rule, e ? (e.by || by) : by,
+        ...(invDir() && f.inv && f.inv.type ? [f.inv.type, f.inv.acct, f.inv.sub, f.inv.qty === '' ? '' : f.inv.qty, f.inv.price === '' ? '' : f.inv.price] : ['', '', '', '', ''])]);
       let newRule = null;
       if (f.repeat && !e) {
-        newRule = { id: newId('r'), day: +f.date.slice(8), type: t.type, cat: t.cat, sub: t.sub, text: t.text, amt: t.amt, asset: t.asset, to: t.to, memo: t.memo, start: t.ym, end: '', last: t.ym };
+        const rl = t.invType === '입금' || t.invType === '출금';
+        newRule = { id: newId('r'), day: +f.date.slice(8), type: t.type, cat: t.cat, sub: t.sub, text: t.text, amt: t.amt, asset: t.asset, to: t.to, memo: t.memo, start: t.ym, end: '', last: t.ym, invType: rl ? t.invType : '', invAcct: rl ? t.invAcct : '', invSub: rl ? t.invSub : '' };
         t.rule = newRule.id;
       }
       store.set('dh_hlt', f.type);
       if (f.type !== '수정') store.set(`dh_hla_${f.type}`, f.asset);
       if (cont) {
         commitTx(t, e, newRule);
-        Object.assign(f, { amt: 0, neg: false, cat: '', sub: '', text: '', memo: '', repeat: false, to: '' });
+        Object.assign(f, { amt: 0, neg: false, cat: '', sub: '', text: '', memo: '', repeat: false, to: '', inv: null });
         draw();
         setTimeout(() => $('#hfAmt', root).focus(), 50);
         toast('저장했습니다. 이어서 입력하십시오');
@@ -1231,7 +1310,9 @@
       const k = H.tx.findIndex(x => x.id === t.id);
       if (k >= 0) H.tx[k] = saved; else H.tx.push(saved);
       reindex(); rerender(); saveCache();
-      toast(old ? '수정했습니다' : '저장했습니다');
+      const linked = t.invType || (old && old.invType);
+      if (linked && D.reloadInv) D.reloadInv();
+      toast(`${old ? '수정했습니다' : '저장했습니다'}${j.inv ? ` · 투자 앱 ${j.inv.type} 기록${j.inv.realized != null && j.inv.realized !== '' ? ` (${j.inv.realized >= 0 ? '익절' : '손절'} ${swon(j.inv.realized)})` : ''}` : ''}`);
     } catch (ex) {
       H.pending.delete(t.id);
       const k = H.tx.findIndex(x => x.id === t.id);
@@ -1247,7 +1328,7 @@
     const i = H.tx.findIndex(x => x.id === t.id);
     if (i < 0) return;
     H.tx.splice(i, 1); reindex(); rerender();
-    try { await D.api('hhDel', { kind: 'tx', id: t.id }); saveCache(); toast('지웠습니다'); }
+    try { const j = await D.api('hhDel', { kind: 'tx', id: t.id }); saveCache(); if (t.invType && D.reloadInv) D.reloadInv(); toast(j && j.invUndone ? '지웠습니다 · 투자 앱 기록도 되돌렸습니다' : '지웠습니다'); }
     catch (ex) { H.tx.push(t); reindex(); rerender(); toast(`삭제 실패: ${ex.message}`, true); }
   }
   function rerender() { const y = window.scrollY; render(); window.scrollTo({ top: y }); refreshPages(); }

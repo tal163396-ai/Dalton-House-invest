@@ -1283,3 +1283,14 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 /* 결산: 큰 금액이 카드 밖으로 넘치지 않게 */
 .hbud { overflow: hidden; }
 .bud-r, .bud-bar { max-width: 100%; }
+/* 가계부 ↔ 투자 앱 연결 (2차 ①) */
+.pk-list { display: grid; gap: 6px; margin-bottom: 6px; }
+.pk-inv { display: grid; gap: 2px; width: 100%; text-align: left; border: 1.5px solid var(--line); background: none; color: var(--ink); font: inherit; border-radius: 12px; padding: 11px 14px; }
+.pk-inv span { font-size: 15px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-inv small { font-size: 12px; color: var(--ink-3); font-weight: 550; }
+.pk-inv.on { border-color: var(--hh); background: color-mix(in srgb, var(--hh) 10%, transparent); }
+.pk-inv.none { border-style: dashed; margin-top: 6px; }
+.pk-g small { font-weight: 550; color: var(--ink-4); margin-left: 4px; font-size: 11.5px; }
+.hr-inv { font-style: normal; font-size: 11px; font-weight: 700; color: var(--accent, #3b82f6); background: color-mix(in srgb, var(--accent, #3b82f6) 14%, transparent); padding: 1px 6px; border-radius: 6px; margin-left: 4px; white-space: nowrap; }
+.tag.hh-link { background: color-mix(in srgb, var(--hh, #F0605A) 16%, transparent); color: var(--hh, #F0605A); margin-left: 4px; }
+.hr-invs { color: var(--accent, #3b82f6) !important; font-weight: 700; }

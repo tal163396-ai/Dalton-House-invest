@@ -138,7 +138,7 @@
       .filter(Boolean).sort((a, b) => a - b);
 
     return {
-      rate, rows, assets, comp, realized, years, bad,
+      rate, rows, assets, comp, realized, years, bad, cashLinked: d.cashLinked || ['ISA', 'TQQQ(나예)', 'ETHU', 'QLD', 'SOXL'],
       total: { ...total, pl: total.value - total.cost, ret: total.cost > 0 ? (total.value - total.cost) / total.cost : null },
       monthly: d.monthly || [], trades: (d.trades || []).slice().reverse(), index: d.index || null, updatedAt: d.updatedAt,
       household: (d.household || []).map(h => ({
@@ -1605,7 +1605,8 @@
   function renderRecord() {
     const D = state.data, F = state.form;
     const el = $('#view-record');
-    const types = ['매수', '매도', '입금', '출금', '금액 수정'];
+    const types = ['매수', '매도', '금액 수정'];   // 입금·출금은 가계부 이체에서 자동 기록 (2차 ①)
+    if (!types.includes(F.type)) F.type = '매수';
     const kindsOf = rows => [...new Set(rows.map(r => r.kind))];
 
     let body = '';
@@ -1723,7 +1724,7 @@
         <div class="card-head"><h2 class="card-title">최근 기록</h2></div>
         ${D.trades.length ? D.trades.slice(0, 15).map(t => `
           <div class="trade">
-            <span><span class="tag ${t['구분'] === '매수' ? 'buy' : t['구분'] === '매도' ? 'sell' : ''}">${esc(t['구분'])}</span>${esc(t['세부종목'] || t['자산'])}${t['수량'] ? ` ${esc(t['수량'])}주` : ''}<br>
+            <span><span class="tag ${t['구분'] === '매수' ? 'buy' : t['구분'] === '매도' ? 'sell' : ''}">${esc(t['구분'])}</span>${esc(t['세부종목'] || t['자산'])}${t['수량'] ? ` ${esc(t['수량'])}주` : ''}${t['연결'] ? ' <span class="tag hh-link">가계부</span>' : ''}<br>
               <small>${fmtDate(new Date(t['날짜']))}${t['입력자'] ? ` · ${esc(t['입력자'])}` : ''}${t['메모'] ? ` · ${esc(t['메모'])}` : ''}</small></span>
             <span class="num" style="text-align:right">${won(num(t['금액(원)']))}${isNum(t['실현손익(원)']) && t['실현손익(원)'] !== '' ? `<br><small class="${cls(num(t['실현손익(원)']))}">${signWon(num(t['실현손익(원)']))}</small>` : ''}</span>
           </div>`).join('') : `<p class="empty">아직 앱에서 기록한 거래가 없습니다.<br>매수·매도를 기록하면<br>보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
@@ -2138,6 +2139,17 @@
     invTotal: () => (state.data ? state.data.total : null),
     ensureInv: () => { if (store.get(LS.pw) && (!state.data || Date.now() - state.loadedAt > 300000)) load({ quiet: true }); },
     household: () => (state.data ? state.data.household : []),
+    reloadInv: () => { if (store.get(LS.pw)) load({ quiet: true }); },
+    // 가계부 이체와 연결할 투자 앱 계좌·종목
+    invOptions: () => {
+      const D = state.data; if (!D) return null;
+      const acc = [], seen = new Set();
+      D.rows.filter(isCashRow).forEach(r => { if (seen.has(r.asset)) return; seen.add(r.asset); acc.push({ asset: r.asset, sub: r.sub, label: r.kind === '현금' ? r.sub : `${r.kind} · ${r.sub}`, cur: r.cur }); });
+      const items = D.rows.filter(r => isTradable(r) && !D.cashLinked.includes(r.asset))
+        .map(r => ({ asset: r.asset, sub: r.sub, kind: r.kind, cur: r.cur, qty: r.qty, avg: r.avg, price: r.price, label: r.asset !== r.sub && r.asset !== r.kind ? `${r.sub} · ${r.asset}` : r.sub }));
+      acc.sort((a, b) => (a.asset === '예수금' ? -1 : b.asset === '예수금' ? 1 : 0));
+      return { acc, items };
+    },
     // 가계부 '투자 화면으로' → 포트폴리오의 '투자 자산' 쪽
     openInvHome: () => { state.view = 'home'; state.hPage = 1; sess.set('dh_hpage', 1); sess.set('dh_scroll_home', 0); setApp('inv'); homePagerApi.align(1); window.scrollTo({ top: 0 }); },
     $, $$, esc, api, toast, openSheet, closeSheet, store, sess, logout: msg => logout(msg), spin, setApp: m => setApp(m) };
