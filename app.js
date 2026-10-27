@@ -1860,7 +1860,7 @@
         return { h, prev, ym, d, sv, adj };
       }).filter(x => (only ? x.ym === only : Math.abs(x.adj) >= 1)).reverse();
     const W = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(Math.round(v)).toLocaleString('ko-KR')}원`;
-    const item = (t, sub, v, id = '') => { const tag = id ? 'button' : 'div'; return `<${tag} class="ad-it${id ? ' ad-go' : ''}"${id ? ` data-adjtx="${esc(id)}"` : ''}><span><b>${esc(t)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><em class="num ${cls(v)}">${W(v)}</em>${id ? '<i class="ad-chev">›</i>' : ''}</${tag}>`; };
+    const item = (t, sub, v, id = '') => { const tag = id ? 'button' : 'div'; return `<${tag} class="ad-it${id ? ' ad-go' : ''}"${id ? ` data-adjtx="${esc(id)}"` : ''}><span><b>${esc(t)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><em class="num ${cls(v)}">${W(v)}</em><i class="ad-chev">${id ? '›' : ''}</i></${tag}>`; };
     const body = blocks.map(({ h, prev, ym, d, sv, adj }) => {
       const it = window.DH.hhAdjItems ? window.DH.hhAdjItems(ym) : null;
       let rows = '';
