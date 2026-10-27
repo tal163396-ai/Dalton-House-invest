@@ -1270,3 +1270,7 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .ha-sep { display: flex; align-items: center; gap: 10px; margin: 22px 4px 12px; color: var(--ink-3); font-size: 12.5px; font-weight: 700; }
 .ha-sep::before, .ha-sep::after { content: ''; flex: 1; border-top: 1.5px dashed var(--ink-4); opacity: .7; }
 .ha-group.nonliq { background: color-mix(in srgb, var(--card) 70%, var(--bg)); }
+/* 분류수정 · 소분류 수정 */
+.ce-sw { border: 1.5px solid var(--ink-4); background: none; color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 10px; white-space: nowrap; }
+.ce-sw:active { background: var(--fill); }
+.ce-page .hf-row.ce-one { grid-template-columns: minmax(0, 1fr); }

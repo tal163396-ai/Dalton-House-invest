@@ -1302,6 +1302,17 @@
     catch (ex) { toast(`저장하지 못했습니다: ${ex.message}`, true); load(); return false; }
   }
   function renameLocal(rn) {
+    if (rn.what === 'move') {
+      const hit = o => o.type === rn.type && o.cat === rn.fromCat && (rn.fromSub === null || (o.sub || '') === rn.fromSub);
+      const mv = o => { if (hit(o)) { o.cat = rn.toCat; o.sub = rn.toSub; } };
+      H.tx.forEach(mv); H.rules.forEach(mv);
+      if (rn.type === '지출') {
+        const k0 = rn.fromSub === null ? BK(rn.fromCat, '') : BK(rn.fromCat, rn.fromSub);
+        if (H.budgets.has(k0)) { const e = H.budgets.get(k0); H.budgets.delete(k0); H.budgets.set(BK(rn.toCat, rn.toSub), e); }
+        if (rn.fromSub === null) [...H.budgets.keys()].filter(k => k.startsWith(rn.fromCat + '\u0001')).forEach(k => H.budgets.delete(k));
+      }
+      reindex(); return;
+    }
     const fix = o => {
       if (rn.what === 'asset') { if (o.asset === rn.from) o.asset = rn.to; if (o.to === rn.from) o.to = rn.to; }
       else if (o.type === rn.type) {
@@ -1377,14 +1388,7 @@
       listEditor(p, {
         items: list, label: c => `${c.name} (${c.subs.length})`, sub: c => c.subs.join(', '),
         onOpen: i => openSubSettings(type, list[i]),
-        onRename: async i => {
-          const c = list[i], v = await askText('분류 이름 바꾸기', c.name, { note: '이모지도 이름에 함께 넣을 수 있습니다.' });
-          if (!v || v === c.name) return;
-          if (list.some(x => x.name === v)) { toast('같은 이름의 분류가 있습니다', true); return; }
-          const rn = { what: 'cat', type, from: c.name, to: v };
-          c.name = v; renameLocal(rn); draw(); rerender();
-          saveSettings({ renames: [rn], cats: catsArr(), budgets: budgetsArr() }, '이름을 바꿨습니다');
-        },
+        onRename: i => openCatEdit(type, list[i]),
         onDelete: async i => {
           const c = list[i];
           if (!(await askConfirm(`'${c.name}' 분류를 지울까요?`, used(c.name) ? '이 분류로 적힌 지난 내역은 그대로 남습니다. 새로 입력할 때 목록에서만 빠집니다.' : '', '삭제'))) return;
@@ -1402,18 +1406,11 @@
     };
   }
   function openSubSettings(type, cat) {
-    const pg = pushPage({ title: esc(cat.name), actions: `<button class="icon-btn" id="sAdd" aria-label="소분류 추가">${ico.plus}</button>`, body: '', refresh: p => draw(p) });
+    const pg = pushPage({ title: esc(cat.name), actions: `<button class="icon-btn" id="sRen" aria-label="분류 수정">${ico.pen}</button><button class="icon-btn" id="sAdd" aria-label="소분류 추가">${ico.plus}</button>`, body: '', refresh: p => { $('.hh-ph h2', p).textContent = cat.name; draw(p); } });
     function draw(p = pg) {
       listEditor(p, {
         items: cat.subs, label: s => s, sub: null, onOpen: null,
-        onRename: async i => {
-          const s = cat.subs[i], v = await askText('소분류 이름 바꾸기', s);
-          if (!v || v === s) return;
-          if (cat.subs.includes(v)) { toast('같은 이름이 있습니다', true); return; }
-          const rn = { what: 'sub', type, cat: cat.name, from: s, to: v };
-          cat.subs[i] = v; renameLocal(rn); draw(); rerender();
-          saveSettings({ renames: [rn], cats: catsArr(), budgets: budgetsArr() }, '이름을 바꿨습니다');
-        },
+        onRename: i => openSubEdit(type, cat, cat.subs[i]),
         onDelete: async i => {
           if (!(await askConfirm(`'${cat.subs[i]}' 소분류를 지울까요?`, '지난 내역은 그대로 남습니다.', '삭제'))) return;
           cat.subs.splice(i, 1); draw(); saveSettings({ cats: catsArr() }, '소분류를 지웠습니다');
@@ -1422,13 +1419,94 @@
       });
     }
     draw();
+    $('#sRen', pg).onclick = () => openCatEdit(type, cat);
     $('#sAdd', pg).onclick = async () => {
       const v = await askText('소분류 추가', '', { ok: '추가' });
       if (!v) return;
       if (cat.subs.includes(v)) { toast('같은 이름이 있습니다', true); return; }
       cat.subs.push(v); draw(); saveSettings({ cats: catsArr() }, '소분류를 추가했습니다');
     };
+  }  // 분류 고르기 시트 (분류수정 → 소분류로, 소분류 수정 → 분류)
+  function pickCat(type, title, exclude, cur) {
+    return new Promise(res => {
+      const list = H.cats[type].filter(c => c.name !== exclude);
+      D.openSheet(`<h2 id="sheetTitle">${esc(title)}</h2><div class="ae-gl">${list.map(c => `<button class="ae-gi ${c.name === cur ? 'on' : ''}" data-pc="${esc(c.name)}">${esc(c.name)}</button>`).join('')}</div>`, 'pop');
+      let done = false; const fin = v => { if (done) return; done = true; obs.disconnect(); res(v); };
+      const sh = $('#sheet'); const obs = new MutationObserver(() => { if (!sh.classList.contains('open') || sh.hidden) fin(null); });
+      setTimeout(() => obs.observe(sh, { attributes: true, attributeFilter: ['class', 'hidden'] }), 60);
+      $$('#sheet [data-pc]').forEach(b => b.onclick = () => { fin(H.cats[type].find(c => c.name === b.dataset.pc)); D.closeSheet(); });
+    });
   }
+  // 분류수정 (편한가계부처럼: 이름 고치기 + '소분류로')
+  function openCatEdit(type, cat) {
+    const pg = pushPage({
+      title: '분류수정', cls: 'hf-page ce-page',
+      actions: `<button class="ce-sw" id="ceToSub">소분류로</button>`,
+      body: `<div class="hf"><div class="hf-row ce-one"><div class="hf-v"><input id="ceName" value="${esc(cat.name)}" maxlength="60" autocomplete="off"></div></div>
+        <p class="form-error" id="ceErr" role="alert"></p>
+        <div class="hf-btns"><button class="btn hf-save memo" id="ceSave">저장하기</button></div></div>`,
+    });
+    const err = $('#ceErr', pg);
+    $('#ceSave', pg).onclick = async () => {
+      const v = $('#ceName', pg).value.trim();
+      if (!v) { err.textContent = '이름을 입력하십시오.'; return; }
+      if (v === cat.name) { back(); return; }
+      if (H.cats[type].some(x => x !== cat && x.name === v)) { err.textContent = '같은 이름의 분류가 있습니다.'; return; }
+      const rn = { what: 'cat', type, from: cat.name, to: v };
+      cat.name = v; renameLocal(rn); rerender(); back(); refreshPages();
+      saveSettings({ renames: [rn], cats: catsArr(), budgets: budgetsArr() }, '분류를 고쳤습니다');
+    };
+    $('#ceToSub', pg).onclick = async () => {
+      if (cat.subs.length) { toast('소분류가 있는 분류는 소분류로 옮길 수 없습니다. 먼저 소분류를 지우거나 옮기십시오.', true); return; }
+      const to = await pickCat(type, '어느 분류의 소분류로 옮길까요?', cat.name);
+      if (!to) return;
+      const name = cat.name;
+      if (to.subs.includes(name)) { toast(`'${to.name}'에 같은 이름의 소분류가 있습니다`, true); return; }
+      if (!(await askConfirm(`'${name}'을 '${to.name}'의 소분류로 옮길까요?`, '지난 내역도 함께 옮겨집니다.', '옮기기', false))) return;
+      const rn = { what: 'move', type, fromCat: name, fromSub: null, toCat: to.name, toSub: name };
+      to.subs.push(name); H.cats[type].splice(H.cats[type].indexOf(cat), 1);
+      renameLocal(rn); rerender();
+      back(stack.length && stack.at(-2)?.pg?.querySelector('#sRen') ? 2 : 1, () => refreshPages());
+      saveSettings({ renames: [rn], cats: catsArr(), budgets: budgetsArr() }, '소분류로 옮겼습니다');
+    };
+    setTimeout(() => $('#ceName', pg).focus(), 280);
+  }
+  // 소분류 수정 (분류 바꾸기 + 이름 고치기 + '대분류로')
+  function openSubEdit(type, cat, sub) {
+    let parent = cat;
+    const pg = pushPage({
+      title: '소분류 수정', cls: 'hf-page ce-page',
+      actions: `<button class="ce-sw" id="ceToCat">대분류로</button>`,
+      body: `<div class="hf">
+        <button class="hf-row ae-g" id="cePar" type="button"><span class="hf-l">분류</span><span class="hf-v" id="ceParV">${esc(cat.name)}</span>${ico.chev}</button>
+        <div class="hf-row"><span class="hf-l">소분류</span><div class="hf-v"><input id="ceSub" value="${esc(sub)}" maxlength="60" autocomplete="off"></div></div>
+        <p class="form-error" id="ceErr" role="alert"></p>
+        <div class="hf-btns"><button class="btn hf-save memo" id="ceSave">저장하기</button></div></div>`,
+    });
+    const err = $('#ceErr', pg);
+    $('#cePar', pg).onclick = async () => { const c = await pickCat(type, '분류', null, parent.name); if (c) { parent = c; $('#ceParV', pg).textContent = c.name; } };
+    $('#ceSave', pg).onclick = async () => {
+      const v = $('#ceSub', pg).value.trim();
+      if (!v) { err.textContent = '소분류 이름을 입력하십시오.'; return; }
+      if (parent === cat && v === sub) { back(); return; }
+      if (parent.subs.some(x => x === v && !(parent === cat && x === sub))) { err.textContent = '같은 이름의 소분류가 있습니다.'; return; }
+      let rn;
+      if (parent === cat) { rn = { what: 'sub', type, cat: cat.name, from: sub, to: v }; cat.subs[cat.subs.indexOf(sub)] = v; }
+      else { rn = { what: 'move', type, fromCat: cat.name, fromSub: sub, toCat: parent.name, toSub: v }; cat.subs.splice(cat.subs.indexOf(sub), 1); parent.subs.push(v); }
+      renameLocal(rn); rerender(); back(); refreshPages();
+      saveSettings({ renames: [rn], cats: catsArr(), budgets: budgetsArr() }, parent === cat ? '소분류를 고쳤습니다' : `'${parent.name}'으로 옮겼습니다`);
+    };
+    $('#ceToCat', pg).onclick = async () => {
+      if (H.cats[type].some(x => x.name === sub)) { toast('같은 이름의 대분류가 있습니다', true); return; }
+      if (!(await askConfirm(`'${sub}'을 대분류로 올릴까요?`, '지난 내역도 새 대분류로 옮겨집니다.', '올리기', false))) return;
+      const rn = { what: 'move', type, fromCat: cat.name, fromSub: sub, toCat: sub, toSub: '' };
+      cat.subs.splice(cat.subs.indexOf(sub), 1);
+      H.cats[type].splice(H.cats[type].indexOf(cat) + 1, 0, { name: sub, subs: [] });
+      renameLocal(rn); rerender(); back(); refreshPages();
+      saveSettings({ renames: [rn], cats: catsArr(), budgets: budgetsArr() }, '대분류로 올렸습니다');
+    };
+  }
+
 
   /* ───────────── 설정: 자산 ───────────── */
   // 오른쪽 위 ⋯ (자산 탭에서만): 추가 · 표시/숨김 · 삭제 · 순서 변경

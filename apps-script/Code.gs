@@ -771,6 +771,7 @@ function hhRewrite_(name, rows) {
 
 /** 이름 바꾸기: 지난 내역·반복 내역에 적힌 이름도 함께 바꿈 */
 function hhRename_(rn) {
+  if (rn.what === 'move') return hhMove_(rn);
   const from = hhStr_(rn.from, 80), to = hhStr_(rn.to, 80);
   if (!from || !to || from === to) return;
   ['가계부', '가계부반복'].forEach(name => {
@@ -789,6 +790,28 @@ function hhRename_(rn) {
       const col = c[h];
       t.sh.getRange(2, col + 1, t.values.length - 1, 1).setValues(t.values.slice(1).map(v => [v[col]]));
     });
+  });
+}
+
+/** 분류 옮기기: { what:'move', type, fromCat, fromSub(null = 그 분류 전체), toCat, toSub }
+ *  소분류 → 다른 분류, 소분류 → 대분류로, 대분류 → 다른 분류의 소분류로 */
+function hhMove_(rn) {
+  const type = hhStr_(rn.type, 4), fc = hhStr_(rn.fromCat, 60), tc = hhStr_(rn.toCat, 60), ts = hhStr_(rn.toSub, 60);
+  const fs = rn.fromSub === null || rn.fromSub === undefined ? null : hhStr_(rn.fromSub, 60);
+  if (!type || !fc || !tc) return;
+  ['가계부', '가계부반복'].forEach(name => {
+    const t = table_(name), c = t.col;
+    if (!('분류' in c) || !('소분류' in c)) return;
+    const get = (v, h) => (h in c ? String(v[c[h]]).trim() : '');
+    let n = 0;
+    for (let r = 1; r < t.values.length; r++) {
+      const v = t.values[r];
+      if (get(v, '구분') !== type || get(v, '분류') !== fc) continue;
+      if (fs !== null && get(v, '소분류') !== fs) continue;
+      v[c['분류']] = tc; v[c['소분류']] = ts; n++;
+    }
+    if (!n) return;
+    ['분류', '소분류'].forEach(h => { const col = c[h]; t.sh.getRange(2, col + 1, t.values.length - 1, 1).setValues(t.values.slice(1).map(v => [v[col]])); });
   });
 }
 
