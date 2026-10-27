@@ -1053,7 +1053,7 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .hf-v { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 16.5px; font-weight: 600; }
 .hf-v input { background: none; border: 0; padding: 13px 0; font-size: 17px; font-weight: 600; border-radius: 0; }
 .hf-v input:focus { background: none; }
-.hf-unit { color: var(--ink-3); font-size: 15px; }
+.hf-unit { color: var(--ink-3); font-size: 15px; flex: none; white-space: nowrap; }
 .hf-pick { border: 0; background: none; text-align: left; padding: 15px 0; color: var(--ink); font-size: 16.5px; font-weight: 600; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .hf-pick.ph { color: var(--ink-4); }
 .hf-date { gap: 14px; }
@@ -1438,3 +1438,5 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .sel-list button:first-child { border-top: 0; }
 .sel-list button.on { color: var(--hh); }
 body:not(.hh-mode) .sel-list button.on { color: var(--accent); }
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }

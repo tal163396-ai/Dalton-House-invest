@@ -109,7 +109,8 @@
       const a = (t.invType === '입금' || t.invType === '출금') ? (o.acc.find(x => x.asset === t.invAcct) || (o.manual || []).find(x => x.asset === t.invAcct && x.sub === t.invSub)) : o.items.find(x => x.asset === t.invAcct && x.sub === t.invSub);
       if (a) name = a.label;
     }
-    return `${name} ${t.invQty ? `${t.invQty}주 ` : ''}${t.invType}`;
+    const it = o && o.items.find(x => x.asset === t.invAcct && x.sub === t.invSub);
+    return `${name} ${t.invQty ? `${t.invQty}${it ? it.unit : ''} ` : ''}${t.invType}`;
   };
   const toMemo = a => ({ id: String(a[0]), date: String(a[1] || ''), text: String(a[2] || ''), by: String(a[3] || '') });
   const catsArr = () => ['수입', '지출'].flatMap(t => H.cats[t].map(c => [t, c.name, c.subs.join(' | ')]));
@@ -1230,7 +1231,7 @@
         <div class="hf-row"><span class="hf-l">${tr ? '입금' : '자산'}</span><button class="hf-v hf-pick ${(tr ? f.to : f.asset) ? '' : 'ph'}" id="hfAsset">${tr ? esc(f.to || '입금 자산') : esc(f.asset || '자산 고르기')}</button></div>
         ${adj && !isRule ? `<div class="hf-row"><span class="hf-l">투자</span><button class="hf-v hf-pick ${f.inv && f.inv.type === '비용' ? '' : 'ph'}" id="hfCost">${f.inv && f.inv.type === '비용' ? esc(costLabel(f.inv.acct, f.inv.sub)) : '연결 안 함 (보정)'}</button></div>` : ''}
         ${dir ? `<div class="hf-row hf-invrow"><span class="hf-l">투자 앱</span><button class="hf-v hf-pick ${f.inv ? '' : 'ph'}" id="hfInv">${esc(invTxt)}</button></div>
-          ${trade ? `<div class="hf-row"><span class="hf-l">수량</span><div class="hf-v"><input id="hfQty" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="0" value="${f.inv.qty || ''}"><span class="hf-unit">주</span></div></div>
+          ${trade ? `<div class="hf-row"><span class="hf-l">수량</span><div class="hf-v"><input id="hfQty" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="0" value="${f.inv.qty || ''}"><span class="hf-unit">${item ? item.unit : ''}</span></div></div>
           <div class="hf-row"><span class="hf-l">단가</span><div class="hf-v"><input id="hfPrice" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${item && item.price ? item.price : '0'}" value="${f.inv.price || ''}"><span class="hf-unit">${usd ? '달러' : '원'}</span></div></div>` : ''}
           <p class="hf-info">${!f.inv ? `투자 계좌${dir === 'in' ? '로 보내는' : '에서 찾는'} 이체입니다. 투자 앱의 어느 계좌${dir === 'in' ? '에 들어가는지' : '에서 나오는지'} 고르십시오.<br>투자 앱에 따로 적을 거면 '연결 안 함'을 고르십시오.`
             : !f.inv.type ? '투자 앱에는 기록하지 않습니다.'
@@ -1422,7 +1423,7 @@
           <div class="pk-assets">
             <div class="pk-g">예수금 ${inT}</div><div class="pk-list">${o.acc.map(x => btn(inT, x.asset, x.sub, x.label, x.cur === 'USD' ? '원화 금액을 환율로 달러로 바꿔 넣습니다' : '')).join('')}</div>
             ${(o.manual || []).length ? `<div class="pk-g">원금 ${dir === 'in' ? '추가' : '빼기'} <small>금액만 직접 관리하는 항목 · 원금과 평가금이 함께 바뀜</small></div><div class="pk-list">${o.manual.map(x => btn(inT, x.asset, x.sub, x.label, `${x.kind} · 원금 ${won(x.cost)}`)).join('')}</div>` : ''}
-            ${items.length ? `<div class="pk-g">바로 ${trT} <small>예수금 없이 사고파는 종목 · 수량·단가 입력</small></div><div class="pk-list">${items.map(x => btn(trT, x.asset, x.sub, x.label, `${x.kind} · 보유 ${x.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}`)).join('')}</div>` : ''}
+            ${items.length ? `<div class="pk-g">바로 ${trT} <small>예수금 없이 사고파는 종목 · 수량·단가 입력</small></div><div class="pk-list">${items.map(x => btn(trT, x.asset, x.sub, x.label, `${x.kind} · 보유 ${x.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${x.unit || ''}`)).join('')}</div>` : ''}
             <div class="pk-list"><button class="pk-inv none ${f.inv && !f.inv.type ? 'on' : ''}" data-ty="" data-a="" data-s=""><span>연결 안 함</span><small>투자 앱에 따로 적거나 기록하지 않을 때</small></button></div>
           </div>`;
         $$('[data-ty]', box).forEach(b => b.onclick = () => {

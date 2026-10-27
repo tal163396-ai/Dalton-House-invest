@@ -692,7 +692,7 @@
       const isCash = /예수금/.test(r.sub) || r.method.startsWith('수동');
       const unitRet = r.avg > 0 && r.price > 0 ? (r.price - r.avg) / r.avg : null;
       const money = r.cur === 'USD' ? v => `$${v.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : v => won(v);
-      const unit = r.ticker === 'ETH' || r.ticker === 'BMB' ? '개' : '주';
+      const unit = qtyUnit(r);
       return `
         <div class="holding">
           <div class="holding-top"><span>${esc(r.sub)}</span><span class="num">${won(r.value)}</span></div>
@@ -1340,7 +1340,7 @@
             const ret = r.avg > 0 && r.price > 0 && isTradable(r) ? (r.price - r.avg) / r.avg : (r.cost > 0 ? (r.value - r.cost) / r.cost : null);
             return `<button class="stat-row tap" data-asset="${esc(r.asset)}">
               <div class="stat-row-top"><span class="stat-row-name">${esc(r.sub)}</span><b class="num">${won(r.value)}</b></div>
-              <div class="stat-row-sub num">${r.qty && isTradable(r) ? `${r.qty.toLocaleString('ko-KR')}주 · ` : ''}원금 ${compact(r.cost)}원 · <span class="${cls(ret)}">${pct(ret, 1)}</span></div>
+              <div class="stat-row-sub num">${r.qty && isTradable(r) ? `${r.qty.toLocaleString('ko-KR')}${qtyUnit(r)} · ` : ''}원금 ${compact(r.cost)}원 · <span class="${cls(ret)}">${pct(ret, 1)}</span></div>
             </button>`;
           }).join('')}` : ''}
       </div>
@@ -1628,6 +1628,8 @@
     '금액 수정': '증권사 화면과 다를 때 지금 값으로 맞춥니다.<br>종목은 수량·평단·원금을,<br>예수금·금처럼 직접 관리하는 항목은<br>금액을 고칩니다.',
   };
 
+  // 수량 단위: 코인 = 개, 티커가 있는 주식·ETF = 주, 애매하면 비움
+  const qtyUnit = r => (!r ? '' : (r.kind === '코인' || /^(ETH|BMB|BTC|XRP|SOL|USDT)$/i.test(String(r.ticker || '')) ? '개' : String(r.ticker || '').trim() ? '주' : ''));
   const isTradable = r => !/예수금/.test(r.sub) && !r.method.startsWith('수동') && r.kind !== '현금';
   const isCashRow = r => /예수금/.test(r.sub) || r.kind === '현금';
   const rowKey = r => `${r.asset}|${r.sub}`;
@@ -1663,7 +1665,7 @@
           <label class="field"><span>자산(계좌) 이름</span><input id="fxAsset" autocomplete="off" placeholder="${esc(cur.asset)}"></label>
         </div>
         <label class="field"><span>원금 = 매입금액 (원)</span><input id="fxCost" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="${Math.round(cur.cost).toLocaleString('ko-KR')}"></label>
-        <p class="preview num">지금 기록: ${cur.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}주 · 평단 ${sym}${(cur.avg || 0).toLocaleString('ko-KR')}${usd ? '' : '원'} · 원금 ${won(cur.cost)}</p>
+        <p class="preview num">지금 기록: ${cur.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${qtyUnit(cur)} · 평단 ${sym}${(cur.avg || 0).toLocaleString('ko-KR')}${usd ? '' : '원'} · 원금 ${won(cur.cost)}</p>
         <p class="preview num" id="fxHint"></p>` : `
         <label class="field"><span>${usd ? '지금 금액 (달러)' : '지금 금액 (원)'}</span>
           <input id="fValue" class="${usd ? '' : 'money'}" type="${usd ? 'number' : 'text'}" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur ? (usd ? cur.qty : Math.round(cur.value).toLocaleString('ko-KR')) : ''}">
@@ -1699,7 +1701,7 @@
       if (F.type !== '매수' && F.key === '__new') F.key = inKind[0] ? rowKey(inKind[0]) : '';
       const row = findRow(F.key);
       const curr = F.key === '__new' ? (F.newCur || 'KRW') : (row?.cur || 'KRW');
-      const unit = row && (row.ticker === 'ETH' || row.ticker === 'BMB') ? '개' : '주';
+      const unit = row ? qtyUnit(row) : (F.kind === '코인' ? '개' : '주');
       body = `
         <div class="field"><span>종목</span>
           <button type="button" class="pick-btn" id="fRowBtn"><small>${esc(F.kind)}</small><b>${F.key === '__new' ? '+ 새 종목 추가' : row ? esc(row.sub) : '선택'}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>
@@ -2219,7 +2221,7 @@
       const acc = [], seen = new Set();
       D.rows.filter(isCashRow).forEach(r => { if (seen.has(r.asset)) return; seen.add(r.asset); acc.push({ asset: r.asset, sub: r.sub, label: r.kind === '현금' ? r.sub : `${r.kind} · ${r.sub}`, cur: r.cur }); });
       const items = D.rows.filter(r => isTradable(r) && !D.cashLinked.includes(r.asset))
-        .map(r => ({ asset: r.asset, sub: r.sub, kind: r.kind, cur: r.cur, qty: r.qty, avg: r.avg, price: r.price, label: r.asset !== r.sub && r.asset !== r.kind ? `${r.sub} · ${r.asset}` : r.sub }));
+        .map(r => ({ asset: r.asset, sub: r.sub, kind: r.kind, cur: r.cur, qty: r.qty, avg: r.avg, price: r.price, unit: qtyUnit(r), label: r.asset !== r.sub && r.asset !== r.kind ? `${r.sub} · ${r.asset}` : r.sub }));
       acc.sort((a, b) => (a.asset === '예수금' ? -1 : b.asset === '예수금' ? 1 : 0));
       // 투자 비용(구독료 등)을 넣을 구성: 구성마다 대표 자산 하나 (실현손익은 자산 → 구성으로 묶임)
       const kinds = [], ks = new Set();

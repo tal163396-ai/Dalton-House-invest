@@ -267,7 +267,7 @@ function recordTrade_(tr) {
   let t = holdings_();
   const rate = rate_();
   const cash = CASH[asset] || { mode: 'none' };
-  let realized = null, amountKrw = 0, qty = '', price = '', cur = 'KRW';
+  let realized = null, amountKrw = 0, qty = '', price = '', cur = 'KRW'; let unitTxt = '';
 
   if (type === '매수' || type === '매도') {
     qty = num_(tr.qty); price = num_(tr.price);
@@ -280,6 +280,8 @@ function recordTrade_(tr) {
       t = holdings_();
     }
     cur = String(t.values[r][t.col['통화']]).trim() || 'KRW';
+    { const kd = String(t.values[r][t.col['종류']]).trim(), tk = String(t.values[r][t.col['티커']]).trim();
+      unitTxt = kd === '코인' || /^(ETH|BMB|BTC|XRP|SOL|USDT)$/i.test(tk) ? '개' : tk ? '주' : ''; }
     const fx = cur === 'USD' ? rate : 1;
     amountKrw = num_(tr.amountKrw) > 0 ? Math.round(num_(tr.amountKrw)) : Math.round(qty * price * fx);
 
@@ -335,7 +337,7 @@ function recordTrade_(tr) {
   if (realized !== null) {
     appendRealized_({
       '날짜': kstWall_(date), '자산': asset, '세부종목': sub,
-      '내용': `${sub} ${qty}주 매도 ${realized >= 0 ? '익절' : '손절'}`,
+      '내용': `${sub} ${qty}${unitTxt} 매도 ${realized >= 0 ? '익절' : '손절'}`,
       '손익(원)': realized, '구분': realized >= 0 ? '익절' : '손절', '출처': tr.link ? '가계부' : '앱', '메모': tr.memo || '', '연결': tr.link || '',
     });
   }
