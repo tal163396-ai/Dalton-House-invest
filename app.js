@@ -1638,7 +1638,7 @@
         </label>
         <p class="preview">${cur ? `기록된 값 ${usd ? `$${cur.qty.toLocaleString('en-US')}` : won(cur.value)}` : ''}</p>`}
         <p class="form-error" id="fErr" role="alert"></p>
-        <button class="btn primary" id="fSubmit">금액 저장하기</button>`;
+        <button class="btn primary" id="fSubmit">저장하기</button>`;
     } else if (F.type === '입금' || F.type === '출금') {
       // 돈을 넣고 뺄 수 있는 계좌 = 예수금 줄이 있는 자산
       const accts = [...new Set(D.rows.filter(isCashRow).map(r => r.asset))].map(a => ({ a, kind: D.rows.find(r => r.asset === a).kind }));
@@ -1713,7 +1713,7 @@
       <div class="card">
         <div class="form">
           <div class="type-seg" role="group" aria-label="거래 종류">
-            ${types.map(t => `<button data-type="${t}" class="${F.type === t ? 'on' : ''}">${t === '금액 수정' ? '금액수정' : t}</button>`).join('')}
+            ${types.map(t => `<button data-type="${t}" class="${F.type === t ? 'on' : ''}">${t === '금액 수정' ? '수정' : t}</button>`).join('')}
           </div>
           <p class="help">${TYPE_HELP[F.type]}</p>
           ${body}
@@ -1928,7 +1928,7 @@
     } catch (e) {
       if (e.code === 'auth') { logout('비밀번호를 다시 입력하십시오.'); return; }
       err.textContent = e.message;
-      btn.disabled = false; btn.textContent = F.type === '금액 수정' ? '금액 저장하기' : `${F.type} 기록하기`;
+      btn.disabled = false; btn.textContent = F.type === '금액 수정' ? '저장하기' : `${F.type} 기록하기`;
     }
   }
 
