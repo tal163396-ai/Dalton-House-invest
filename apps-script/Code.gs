@@ -736,13 +736,43 @@ const HH_KIND = { tx: '가계부', rule: '가계부반복', memo: '가계부메�
 
 function readHH_() {
   if (!SpreadsheetApp.getActive().getSheetByName('가계부')) return { ready: false };
-  const made = withLock_(() => { hhEnsure_(); return hhRunRules_(); });
-  const read = name => hhRows_(name).rows;
+  const made = withLock_(() => { hhEnsureDaily_(); return hhRunRules_(); });
+  const read = name => {
+    try { return hhRows_(name).rows; }
+    catch (e) { withLock_(() => hhEnsure_()); return hhRows_(name).rows; }   // 그날 탭이 지워졌으면 다시 만들고 읽음
+  };
   return {
     ready: true, made,
     tx: read('가계부'), cats: read('가계부분류'), assets: read('가계부자산'), rules: read('가계부반복'), memos: read('가계부메모'),
     budgets: read('가계부예산'), hrules: read('공약규칙'), habits: read('공약기록'),
   };
+}
+
+/* ── 탭·머리글 점검은 하루에 한 번만 (2026-10-28 변경) ──────────────────────────
+ * 예전: 저장할 때마다 가계부 탭 8개 + 거래기록·실현손익의 머리글을 모두 열어 확인 → 저장마다 0.5~1초 더 걸림
+ * 지금: 아래 HH_SCHEMA_VER + 날짜(한국)가 바뀌었을 때만 점검. 기록은 스크립트 속성 'HH_ENSURED'.
+ *   · 새 칸·새 탭이 필요한 업데이트를 하면 HH_SCHEMA_VER 를 바꿀 것 → 배포하자마자 바로 한 번 점검됨
+ *   · 그날 시트에서 탭·머리글을 직접 지우거나 바꿔도: hhUpsert_ / hhUpsertMany_ / readHH_ 가 필요한 칸이
+ *     없는 것을 발견하면 그 자리에서 hhEnsure_() 를 돌리고 다시 저장함 (값이 빠진 채 저장되지 않음)
+ *   · 바로 다시 점검하고 싶으면 스크립트 속성 'HH_ENSURED' 를 지우면 됨 */
+const HH_SCHEMA_VER = '2026-10-28';
+function hhEnsureDaily_() {
+  const key = HH_SCHEMA_VER + '|' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('HH_ENSURED') === key) return;
+  hhEnsure_();
+  props.setProperty('HH_ENSURED', key);
+}
+/** 저장 직전: 이 탭에 필요한 칸이 다 있는지 (머리글은 어차피 읽으므로 추가 비용 거의 없음). 없으면 즉시 점검 */
+function hhSheetReady_(name) {
+  let sh = SpreadsheetApp.getActive().getSheetByName(name);
+  let head = sh ? hhHead_(sh) : [];
+  if (!sh || (HH_TABS[name] || []).some(h => head.indexOf(h) < 0)) {
+    hhEnsure_();
+    PropertiesService.getScriptProperties().deleteProperty('HH_ENSURED');
+    sh = sheet_(name); head = hhHead_(sh);
+  }
+  return { sh, head };
 }
 
 /** 탭이 없으면 만들고, 머리글이 빠졌으면 채움 */
@@ -803,7 +833,7 @@ function hhFindRow_(sh, head, id) {
 
 /** ID가 같은 줄은 고치고, 없으면 맨 아래에 추가 */
 function hhUpsert_(name, obj) {
-  const sh = sheet_(name), head = hhHead_(sh);
+  const { sh, head } = hhSheetReady_(name);
   let row = hhFindRow_(sh, head, obj.ID), vals;
   if (row) vals = sh.getRange(row, 1, 1, head.length).getValues()[0];
   else { row = sh.getLastRow() + 1; vals = head.map(() => ''); }
@@ -1068,7 +1098,7 @@ function hhMemo_(t) {
 
 /** req = { tx?, rule?, memo? } — 반복 내역을 새로 만들 때는 tx와 rule을 함께 보냄 */
 function hhSave_(req) {
-  hhEnsure_();
+  hhEnsureDaily_();
   const out = { ok: true };
   if (req.rule) out.rule = hhUpsert_('가계부반복', hhRule_(req.rule));
   if (req.tx) {
@@ -1103,7 +1133,7 @@ function hhHRule_(t) {
 /** 여러 줄 한 번에 저장 (지난 기록 가져오기). 같은 ID는 덮어씀 */
 function hhUpsertMany_(name, objs) {
   if (!objs.length) return 0;
-  const sh = sheet_(name), head = hhHead_(sh), last = sh.getLastRow();
+  const { sh, head } = hhSheetReady_(name), last = sh.getLastRow();
   const idc = head.indexOf('ID');
   const cur = last >= 2 ? sh.getRange(2, 1, last - 1, head.length).getValues() : [];
   const at = new Map(); cur.forEach((r, i) => { const id = String(r[idc]).trim(); if (id) at.set(id, i); });
@@ -1133,7 +1163,7 @@ function hhDel_(req) {
 
 /** req = { renames?: [{what:'asset'|'cat'|'sub', type, cat, from, to}], cats?: [[구분,분류,소분류]], assets?: [[그룹,자산,숨김,메모,연결]], budgets?: [[분류,소분류,금액,월]] } */
 function hhSettings_(req) {
-  hhEnsure_();
+  hhEnsureDaily_();
   (req.renames || []).forEach(hhRename_);
   if (req.cats) hhRewrite_('가계부분류', req.cats.map(r => [hhStr_(r[0], 4), hhStr_(r[1], 60), hhStr_(r[2], 2000)]).filter(r => r[1]));
   if (req.assets) hhRewrite_('가계부자산', req.assets.map(r => [hhStr_(r[0], 30), hhStr_(r[1], 80), r[2] ? 'Y' : '', hhStr_(r[3], 200), hhStr_(r[4], 80)]).filter(r => r[1]));
