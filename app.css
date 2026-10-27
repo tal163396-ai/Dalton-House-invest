@@ -1495,3 +1495,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .cm-sr > span:last-child { display: grid; justify-items: end; }
 .hs-v { display: grid; justify-items: end; }
 .hs-v small { font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+
+.cm-catbtn { width: 100%; margin: 0 0 10px; background: var(--card); }
+.cm-bt b small { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-top: 2px; word-break: keep-all; }
+.sel-list button b { color: var(--hh); }
+body.hh-mode .sheet .btn.primary { background: var(--hh); }
