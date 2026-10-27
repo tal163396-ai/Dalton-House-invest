@@ -1940,8 +1940,8 @@
   }
 
   /* ───────────── 운동 공약 (날짜별 O/X 체크 → 규칙대로 금액 자동 계산) ─────────────
-   * 공약규칙: 적용일부터 다음 규칙 전날까지. 항목 첫 번째는 '하면 좋은 것'(운동), 나머지는 '하면 위반'(야식·배달 등)
-   * 금액: 완수 / 완수+위반 / 미완 / 미완+위반.  + 이면 나예 → 준환, − 이면 준환 → 나예 */
+   * 공약규칙: 적용일부터 다음 규칙 전날까지. 항목 첫 번째는 '하면 좋은 것'(운동), 나머지는 하면 안 되는 것(야식·배달 등)
+   * 금액: 완수 / 완수+(나머지 중 하나라도 O) / 미완 / 미완+(…). 화면에는 '위반' 대신 실제 항목 이름으로 표시.  + 이면 나예 → 준환, − 이면 준환 → 나예 */
   const HB_ME = '준환', HB_YOU = '나예';
   const HB_ORDER = ['운동', '야식', '저녁간식', '배달'];
   function ingestHabits(hh) {
@@ -1970,6 +1970,7 @@
     const bad = r.items.slice(1).some(k => h.vals[k] === 'O');
     return m === 'O' ? r.amt[bad ? 1 : 0] : r.amt[bad ? 3 : 2];
   }
+  const badName = r => r.items.slice(1).join('·');   // '위반' 대신 실제 항목 이름 (예: 야식·배달)
   const hbWon = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmt(Math.abs(v))}`;
   const payLine = t => (t < 0 ? `${HB_ME} → ${HB_YOU} <b>${fmt(-t)}원</b>` : t > 0 ? `${HB_YOU} → ${HB_ME} <b>${fmt(t)}원</b>` : '주고받을 돈 없음');
   function habitDays(ym) {
@@ -2003,13 +2004,14 @@
         ${h && h.memo ? `<button class="hb-memo" data-hday="${d}">${esc(h.memo)}</button>` : ''}
       </div>`;
     }).join('');
-    const amtTxt = r => `완수 ${hbWon(r.amt[0])}${r.items.length > 1 ? ` · 완수+위반 ${hbWon(r.amt[1])}` : ''} · 미완 ${hbWon(r.amt[2])}${r.items.length > 1 ? ` · 미완+위반 ${hbWon(r.amt[3])}` : ''}`;
+    // 두 줄: 완수 쪽 / 미완 쪽
+    const amtTxt = r => `<span class="hb-rl1">완수 ${hbWon(r.amt[0])}${r.items.length > 1 ? ` · 완수+${esc(badName(r))} ${hbWon(r.amt[1])}` : ''}</span><span class="hb-rl1">미완 ${hbWon(r.amt[2])}${r.items.length > 1 ? ` · 미완+${esc(badName(r))} ${hbWon(r.amt[3])}` : ''}</span>`;
     return `<div class="card hb-sum">
         <div class="hb-top"><span>${+ym.slice(5)}월 ${cur ? '누적' : '합계'} · ${n}일 기록</span><button class="hb-set" id="hbRules">규칙 ⚙</button></div>
         <div class="hb-big num ${t < 0 ? 'm' : t > 0 ? 'p' : ''}">${t < 0 ? '−' : t > 0 ? '+' : ''}${fmt(Math.abs(t))}원</div>
         <div class="hb-sub">${cur ? '송금 예정 · ' : ''}${payLine(t)}</div>
         <div class="hb-cnt" style="--n:${items.length}">${items.map((k, i) => `<div><small>${esc(k)}</small><b class="num">${cnt(k)}<i>${i === 0 ? ` / ${n}일` : '번'}</i></b></div>`).join('')}</div>
-        <button class="hb-rule" id="hbRuleView"><span>${esc(amtTxt(r0))}</span><i>공약 내용 ›</i></button>
+        <button class="hb-rule" id="hbRuleView"><span>${amtTxt(r0)}</span><i>공약 내용 ›</i></button>
         <button class="hb-settle ${st ? 'on' : ''}" id="hbSettle">${st ? `✓ 정산 완료${st.memo && st.memo !== '정산 완료' ? ` · ${esc(st.memo)}` : ''}` : '정산 완료 표시'}</button>
       </div>
       <div class="card hb-list">${rows}</div>
@@ -2076,7 +2078,7 @@
   function viewHRule(r) {
     if (!r) return;
     D.openSheet(`<div class="ask hb-view"><h2 id="sheetTitle">공약 내용</h2><p class="note ask-note">${dateLabel(r.start)}부터 · 항목 ${esc(r.items.join(', '))}</p>
-      <div class="hb-amts">${[['완수', 0], ['완수+위반', 1], ['미완', 2], ['미완+위반', 3]].filter(([, i]) => r.items.length > 1 || i % 2 === 0).map(([k, i]) => `<div><small>${k}</small><b class="num ${r.amt[i] > 0 ? 'p' : r.amt[i] < 0 ? 'm' : ''}">${hbWon(r.amt[i])}원</b></div>`).join('')}</div>
+      <div class="hb-amts">${[['완수', 0], [`완수+${badName(r)}`, 1], ['미완', 2], [`미완+${badName(r)}`, 3]].filter(([, i]) => r.items.length > 1 || i % 2 === 0).map(([k, i]) => `<div><small>${esc(k)}</small><b class="num ${r.amt[i] > 0 ? 'p' : r.amt[i] < 0 ? 'm' : ''}">${hbWon(r.amt[i])}원</b></div>`).join('')}</div>
       ${r.text ? `<div class="hb-text">${esc(r.text)}</div>` : '<p class="note">적어 둔 공약 내용이 없습니다.</p>'}
       <div class="sheet-actions two"><button class="btn" data-close>닫기</button><button class="btn primary" id="hbEditR">고치기</button></div></div>`, 'pop');
     $('#hbEditR').onclick = () => { D.closeSheet(); openHRule(r); };
@@ -2085,7 +2087,7 @@
     const draw = pg => {
       $('#hbRl', pg).innerHTML = H.hrules.length ? H.hrules.slice().reverse().map((r, i) => `<button class="card hb-rl" data-rid="${esc(r.id)}">
           <span class="hm-date">${dateLabel(r.start)}부터${i === 0 ? ' <em class="hb-now">지금 규칙</em>' : ''}</span>
-          <b>${esc(r.items.join(' · '))}</b><small class="num">완수 ${hbWon(r.amt[0])}${r.items.length > 1 ? ` / +위반 ${hbWon(r.amt[1])}` : ''} · 미완 ${hbWon(r.amt[2])}${r.items.length > 1 ? ` / +위반 ${hbWon(r.amt[3])}` : ''}</small></button>`).join('')
+          <b>${esc(r.items.join(' · '))}</b><small class="num">완수 ${hbWon(r.amt[0])}${r.items.length > 1 ? ` / +${esc(badName(r))} ${hbWon(r.amt[1])}` : ''}<br>미완 ${hbWon(r.amt[2])}${r.items.length > 1 ? ` / +${esc(badName(r))} ${hbWon(r.amt[3])}` : ''}</small></button>`).join('')
         : emptyHtml('규칙이 없습니다.');
       $$('[data-rid]', pg).forEach(b => b.onclick = () => openHRule(H.hrules.find(x => x.id === b.dataset.rid)));
     };
@@ -2103,12 +2105,12 @@
       actions: r ? `<button class="icon-btn" id="hrDel" aria-label="규칙 삭제">${ico.trash}</button>` : '',
       body: `<div class="hf">
         <div class="hf-row"><span class="hf-l">적용일</span><div class="hf-v hf-date"><button type="button" class="hf-dt" id="hrDate" data-v="${base.start}"><span id="hrDateTxt">${dateLabel(base.start)}</span></button></div></div>
-        <label class="hb-f"><span>항목 <small>쉼표로 구분 · 첫 항목은 하면 좋은 것(운동), 나머지는 하면 위반</small></span><input id="hrItems" value="${esc(base.items.join(', '))}" placeholder="운동, 야식, 배달"></label>
+        <label class="hb-f"><span>항목 <small>쉼표로 구분 · 첫 항목은 하면 좋은 것(운동), 나머지는 하면 안 되는 것(야식·배달 등)</small></span><input id="hrItems" value="${esc(base.items.join(', '))}" placeholder="운동, 야식, 배달"></label>
         <div class="hb-f2">
           <label class="hb-f"><span>완수</span><input class="money hr-a" inputmode="numeric" value="${fmtSigned(base.amt[0])}"></label>
-          <label class="hb-f"><span>완수 + 위반</span><input class="money hr-a" inputmode="numeric" value="${fmtSigned(base.amt[1])}"></label>
+          <label class="hb-f"><span>완수 + <em class="hr-bad">야식·배달</em></span><input class="money hr-a" inputmode="numeric" value="${fmtSigned(base.amt[1])}"></label>
           <label class="hb-f"><span>미완</span><input class="money hr-a" inputmode="numeric" value="${fmtSigned(base.amt[2])}"></label>
-          <label class="hb-f"><span>미완 + 위반</span><input class="money hr-a" inputmode="numeric" value="${fmtSigned(base.amt[3])}"></label>
+          <label class="hb-f"><span>미완 + <em class="hr-bad">야식·배달</em></span><input class="money hr-a" inputmode="numeric" value="${fmtSigned(base.amt[3])}"></label>
         </div>
         <p class="note hb-help">+ 는 ${HB_YOU} → ${HB_ME}, − 는 ${HB_ME} → ${HB_YOU}. 항목이 하나뿐이면 '완수'와 '미완'만 씁니다.</p>
         <textarea id="hrText" class="hf-memo" rows="6" placeholder="공약 내용 (예: 팔굽혀펴기 100회 …)">${esc(base.text || '')}</textarea>
@@ -2119,6 +2121,9 @@
     requestAnimationFrame(() => autoGrow($('#hrText', pg)));
     const di = $('#hrDate', pg);
     bindDateBtn(di, v => { $('#hrDateTxt', pg).textContent = dateLabel(v); });
+    // 금액 칸 이름을 적은 항목에 맞춤 (예: 완수 + 야식·배달)
+    const badLbl = () => { const it = $('#hrItems', pg).value.split(/[,，]/).map(x => x.trim()).filter(Boolean).slice(1); $$('.hr-bad', pg).forEach(e => { e.textContent = it.length ? it.join('·') : '(없음)'; }); };
+    $('#hrItems', pg).addEventListener('input', badLbl); badLbl();
     $$('.hr-a', pg).forEach(i => i.addEventListener('input', () => { const neg = /^\s*[-−]/.test(i.value), dg = i.value.replace(/[^\d]/g, ''); i.value = (neg ? '-' : '') + (dg ? Number(dg).toLocaleString('ko-KR') : ''); }));
     $('#hrSave', pg).onclick = async () => {
       const items = $('#hrItems', pg).value.split(/[,，]/).map(x => x.trim()).filter(Boolean);

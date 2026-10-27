@@ -1630,3 +1630,6 @@ button.cm-sr:active { background: var(--fill); }
 .hb-settle.busy { border-style: solid; color: var(--ink); pointer-events: none; }
 .hb-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: color-mix(in srgb, var(--inc) 28%, transparent); transition: width 4.5s cubic-bezier(.15,.75,.3,1); }
 
+
+.hb-rule > span { display: grid; gap: 2px; } .hb-rl1 { display: block; }
+.hr-bad { font-style: normal; }
