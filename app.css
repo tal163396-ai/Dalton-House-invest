@@ -1391,3 +1391,13 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .adj-kp { padding-bottom: var(--safe-b); background: var(--line); }
 .adj-kp .kp-k { height: 56px; }
 .adj-kp .kp-k.sm { font-size: 16px; }
+
+/* ── 기간 실현손익 팝업: 종류 누르면 거래, 전체 거래는 접기 ── */
+.bd-kind { border-top: 1px solid var(--fill); }
+.bd-kind:first-child { border-top: 0; }
+.bd-kind button.stat-row { border-top: 0; }
+.bd-k .stat-row-name { display: inline-flex; align-items: center; }
+.bd-k.open .sd-chev, .bd-all.open .sd-chev { transform: rotate(90deg); }
+.bd-kind .sd-trades { margin-top: -2px; }
+.bd-all { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 14px; padding: 13px 14px; border: 0; border-radius: 14px; background: var(--fill); color: var(--ink); font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+.bd-all-list { padding: 2px 4px 0; }

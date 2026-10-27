@@ -1604,13 +1604,19 @@
           <div class="pop-sub num">익절 ${g.length}건 ${compactSigned(g.reduce((t, r) => t + r.amount, 0))} · 손절 ${l.length}건 ${compactSigned(l.reduce((t, r) => t + r.amount, 0))}</div></div>
       </div>
       <div class="pop-list">
-        ${ks.map(k => `<div class="stat-row"><div class="stat-row-top"><span class="stat-row-name">${esc(k.k)}</span><b class="num ${cls(k.amt)}">${signWon(k.amt)}</b></div>
+        ${ks.map(k => `<div class="bd-kind">
+          <button class="stat-row bd-k" aria-expanded="false"><div class="stat-row-top"><span class="stat-row-name">${esc(k.k)}<span class="sd-chev" aria-hidden="true">›</span></span><b class="num ${cls(k.amt)}">${signWon(k.amt)}</b></div>
           <div class="stat-row-sub num">${k.n}건 (${[k.g ? `익절 ${k.g}` : '', k.l ? `손절 ${k.l}` : ''].filter(Boolean).join(' · ')})</div>
-          <div class="stat-meter" aria-hidden="true"><i style="width:${Math.max(1.5, Math.abs(k.amt) / mx * 100)}%;background:${k.amt >= 0 ? 'var(--bar-up)' : 'var(--down)'}"></i></div></div>`).join('')}
-        ${list.length ? `<h3 class="section-title">거래 ${list.length}건</h3>` : '<p class="empty">이 기간에는 기록이 없습니다.</p>'}
-        ${list.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}
+          <div class="stat-meter" aria-hidden="true"><i style="width:${Math.max(1.5, Math.abs(k.amt) / mx * 100)}%;background:${k.amt >= 0 ? 'var(--bar-up)' : 'var(--down)'}"></i></div></button>
+          <div class="sd-trades" hidden>${list.filter(r => r.kind === k.k).map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)}${r.sub && r.sub !== k.k ? ` · ${esc(r.sub)}` : ''}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}</div></div>`).join('')}
+        ${list.length ? `<button class="bd-all" aria-expanded="false"><span>전체 거래 ${list.length}건</span><span class="sd-chev" aria-hidden="true">›</span></button>
+        <div class="bd-all-list" hidden>${list.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)} · ${esc(r.kind)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}</div>` : '<p class="empty">이 기간에는 기록이 없습니다.</p>'}
       </div>
       <button class="btn pop-close" data-close>닫기</button>`, 'pop');
+    $$('#sheetBody .bd-k, #sheetBody .bd-all').forEach(b => b.onclick = () => {
+      const box = b.nextElementSibling, open = box.hidden;
+      box.hidden = !open; b.setAttribute('aria-expanded', String(open)); b.classList.toggle('open', open);
+    });
   }
 
   /* ── 기록 ── */
