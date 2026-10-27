@@ -1082,6 +1082,13 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .hf-chip small { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hf-memo { margin-top: 14px; resize: none; overflow: hidden; min-height: 64px; line-height: 1.5; }
 .hf-memo.big { min-height: 48dvh; line-height: 1.6; font-size: 15.5px; }
+.hm-title { width: 100%; margin: 14px 0 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: 17px; font-weight: 800; }
+.hm-title::placeholder { color: var(--ink-4); font-weight: 700; }
+.hm-pinbtn { color: var(--ink-3); } .hm-pinbtn.on { color: var(--hh, #F0605A); } .hm-pinbtn.on svg { fill: currentColor; }
+.hm-sec { font-size: 12.5px; font-weight: 800; color: var(--ink-3); margin: 14px 4px 6px; } .hm-sec:first-child { margin-top: 2px; }
+.hm-pin { display: inline-flex; vertical-align: -3px; margin-right: 4px; color: var(--hh, #F0605A); } .hm-pin svg { width: 14px; height: 14px; fill: currentColor; }
+.hm-memo.pinned { box-shadow: inset 3px 0 0 var(--hh, #F0605A); }
+.hm-none { margin: 4px 6px; }
 .hf-btns { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 12px; }
 .hf-btns .btn:only-child { grid-column: 1 / -1; }
 .hf-save { background: var(--exp); color: #fff; }

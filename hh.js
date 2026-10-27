@@ -79,6 +79,7 @@
     del: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="var(--exp)"/><path d="M7.5 12h9" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>',
     drag: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 8h14M5 12h14M5 16h14"/></svg>',
     rep: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11V9a3 3 0 0 1 3-3h12l-3-3M20 13v2a3 3 0 0 1-3 3H5l3 3"/></svg>',
+    pin: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8"/></svg>',
     trash: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
     copy: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
     eye: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -140,7 +141,7 @@
     const it = o && o.items.find(x => x.asset === t.invAcct && x.sub === t.invSub);
     return `${name} ${t.invQty ? `${t.invQty}${it ? it.unit : ''} ` : ''}${t.invType}`;
   };
-  const toMemo = a => ({ id: String(a[0]), date: String(a[1] || ''), text: String(a[2] || ''), by: String(a[3] || '') });
+  const toMemo = a => ({ id: String(a[0]), date: String(a[1] || ''), text: String(a[2] || ''), by: String(a[3] || ''), pin: String(a[4] || '').trim() !== '' });
   const catsArr = () => ['수입', '지출'].flatMap(t => H.cats[t].map(c => [t, c.name, c.subs.join(' | ')]));
   const assetsArr = () => H.assets.map(a => [a.group, a.name, a.hidden ? 'Y' : '', a.memo, a.link || '']);
   const BK = (c, s) => `${c}\u0001${s || ''}`;
@@ -230,7 +231,7 @@
     clearTimeout(cacheT);
     cacheT = setTimeout(() => {
       try {
-        store.set(CACHE, JSON.stringify({ tx: H.tx.filter(t => !H.pending.has(t.id)).map(txArr), cats: catsArr(), assets: assetsArr(), rules: H.rules.map(ruleArr), memos: H.memos.map(m => [m.id, m.date, m.text, m.by]), budgets: budgetsArr() }));
+        store.set(CACHE, JSON.stringify({ tx: H.tx.filter(t => !H.pending.has(t.id)).map(txArr), cats: catsArr(), assets: assetsArr(), rules: H.rules.map(ruleArr), memos: H.memos.map(m => [m.id, m.date, m.text, m.by, m.pin ? 'Y' : '']), budgets: budgetsArr() }));
       } catch { /* 저장 공간 부족 등은 무시 */ }
     }, 400);
   }
@@ -523,13 +524,17 @@
   }
 
   function memoHtml(ym) {
-    const list = H.memos.filter(m => m.date.startsWith(ym)).sort((a, b) => (a.date < b.date ? 1 : -1));
-    if (!list.length) return emptyHtml('이 달에는 메모가 없습니다.', '+ 버튼으로 메모를 남기십시오.');
-    return list.map(m => {
+    const byDate = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+    const pinned = H.memos.filter(m => m.pin).sort(byDate);
+    const list = H.memos.filter(m => !m.pin && m.date.startsWith(ym)).sort(byDate);
+    if (!list.length && !pinned.length) return emptyHtml('이 달에는 메모가 없습니다.', '+ 버튼으로 메모를 남기십시오.');
+    const card = m => {
       const [first, ...rest] = m.text.split('\n');
-      return `<button class="card hm-memo" data-id="${esc(m.id)}"><span class="hm-date">${mdLabel(m.date)} (${WD[wdOf(m.date)]})${m.by ? ` · ${esc(m.by)}` : ''}</span>
+      return `<button class="card hm-memo ${m.pin ? 'pinned' : ''}" data-id="${esc(m.id)}"><span class="hm-date">${m.pin ? `<i class="hm-pin">${ico.pin}</i>${m.date.slice(2, 4)}.` : ''}${mdLabel(m.date)} (${WD[wdOf(m.date)]})${m.by ? ` · ${esc(m.by)}` : ''}</span>
         <b>${esc(first)}</b>${rest.length ? `<span class="hm-text">${esc(rest.join('\n'))}</span>` : ''}</button>`;
-    }).join('');
+    };
+    return (pinned.length ? `<div class="hm-sec">고정</div>${pinned.map(card).join('')}${list.length ? `<div class="hm-sec">${+ym.slice(5)}월 메모</div>` : ''}` : '')
+      + (list.length ? list.map(card).join('') : pinned.length ? '<p class="note hm-none">이 달에는 메모가 없습니다.</p>' : '');
   }
 
   /* ───────────── 통계 탭 ───────────── */
@@ -1808,12 +1813,17 @@
   function openMemo(m) {
     const isNew = !m;
     const date = m ? m.date : (H.ym === ymOf(new Date()) ? today() : `${H.ym}-01`);
+    // 저장 형식은 그대로 (첫 줄 = 제목). 화면에서만 제목 칸과 본문 칸으로 나눔
+    const lines = (m ? m.text : '').split('\n');
+    const title0 = m ? lines[0] : '', body0 = m ? lines.slice(1).join('\n').replace(/^\n/, '') : '';
+    let pin = m ? !!m.pin : false;
     const pg = pushPage({
       title: isNew ? '새 메모' : '메모', cls: 'hf-page',
-      actions: isNew ? '' : `<button class="icon-btn" id="mDel" aria-label="메모 삭제">${ico.trash}</button>`,
+      actions: `<button class="icon-btn hm-pinbtn ${pin ? 'on' : ''}" id="mPin" aria-label="상단 고정" aria-pressed="${pin}">${ico.pin}</button>${isNew ? '' : `<button class="icon-btn" id="mDel" aria-label="메모 삭제">${ico.trash}</button>`}`,
       body: `<div class="hf">
         <div class="hf-row"><span class="hf-l">날짜</span><div class="hf-v hf-date"><button type="button" class="hf-dt" id="mDate" data-v="${date}" aria-label="날짜"><span id="mDateTxt">${dateLabel(date)}</span></button></div></div>
-        <textarea id="mText" class="hf-memo big" rows="14" placeholder="첫 줄은 제목처럼 굵게 보입니다">${esc(m ? m.text : '')}</textarea>
+        <input id="mTitle" class="hm-title" placeholder="제목" value="${esc(title0)}" autocomplete="off">
+        <textarea id="mText" class="hf-memo big" rows="14" placeholder="내용">${esc(body0)}</textarea>
         <p class="form-error" id="mErr" role="alert"></p>
         <div class="hf-btns"><button class="btn hf-save memo" id="mSave">저장하기</button></div></div>`,
     });
@@ -1821,17 +1831,31 @@
     requestAnimationFrame(() => autoGrow($('#mText', pg)));
     const di = $('#mDate', pg);
     bindDateBtn(di, v => { $('#mDateTxt', pg).textContent = dateLabel(v); });
+    const textOf = () => {
+      const t = $('#mTitle', pg).value.replace(/\n/g, ' ').trim(), b = $('#mText', pg).value.replace(/\s+$/, '');
+      return t ? (b.trim() ? `${t}\n${b}` : t) : b.trim();
+    };
+    const save = async (obj, quiet) => {
+      await D.api('hhSave', { memo: { ID: obj.id, 날짜: obj.date, 내용: obj.text, 입력자: obj.by, 고정: obj.pin ? 'Y' : '' } });
+      const i = H.memos.findIndex(x => x.id === obj.id);
+      if (i >= 0) H.memos[i] = obj; else H.memos.push(obj);
+      saveCache(); if (!quiet) { back(); rerender(); }
+    };
+    // 고정: 이미 있는 메모는 누르는 즉시 저장, 새 메모는 저장할 때 함께
+    $('#mPin', pg).onclick = async () => {
+      pin = !pin;
+      const b = $('#mPin', pg); b.classList.toggle('on', pin); b.setAttribute('aria-pressed', pin);
+      if (isNew) { toast(pin ? '저장하면 맨 위에 고정됩니다' : '고정을 풀었습니다'); return; }
+      try { await save({ ...m, pin }, true); m.pin = pin; rerender(); toast(pin ? '맨 위에 고정했습니다' : '고정을 풀었습니다'); }
+      catch (ex) { pin = !pin; b.classList.toggle('on', pin); toast(`실패: ${ex.message}`, true); }
+    };
     $('#mSave', pg).onclick = async () => {
-      const text = $('#mText', pg).value.trim();
-      if (!text) { $('#mErr', pg).textContent = '내용을 입력하십시오.'; return; }
-      const obj = { id: m ? m.id : newId('m'), date: di.dataset.v || date, text, by: m ? m.by : (store.get('dh_name') || '') };
+      const text = textOf();
+      if (!text) { $('#mErr', pg).textContent = '제목이나 내용을 입력하십시오.'; return; }
+      const obj = { id: m ? m.id : newId('m'), date: di.dataset.v || date, text, by: m ? m.by : (store.get('dh_name') || ''), pin };
       const btn = $('#mSave', pg); btn.disabled = true; btn.textContent = '저장 중…';
-      try {
-        await D.api('hhSave', { memo: { ID: obj.id, 날짜: obj.date, 내용: obj.text, 입력자: obj.by } });
-        const i = H.memos.findIndex(x => x.id === obj.id);
-        if (i >= 0) H.memos[i] = obj; else H.memos.push(obj);
-        saveCache(); back(); rerender(); toast('메모를 저장했습니다');
-      } catch (ex) { btn.disabled = false; btn.textContent = '저장하기'; $('#mErr', pg).textContent = ex.message; }
+      try { await save(obj); toast('메모를 저장했습니다'); }
+      catch (ex) { btn.disabled = false; btn.textContent = '저장하기'; $('#mErr', pg).textContent = ex.message; }
     };
     const del = $('#mDel', pg);
     if (del) del.onclick = async () => {
@@ -1839,7 +1863,7 @@
       try { await D.api('hhDel', { kind: 'memo', id: m.id }); H.memos = H.memos.filter(x => x.id !== m.id); saveCache(); back(); rerender(); toast('메모를 지웠습니다'); }
       catch (ex) { toast(`삭제 실패: ${ex.message}`, true); }
     };
-    if (isNew) setTimeout(() => $('#mText', pg).focus(), 280);
+    if (isNew) setTimeout(() => $('#mTitle', pg).focus(), 280);
   }
 
   /* ───────────── 검색 ───────────── */
