@@ -1367,8 +1367,8 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .kp-k.ok:active { filter: brightness(.92); }
 
 /* ── 잔액 수정 창 ── */
-.sheet-panel:has(.adj) { padding-bottom: 0; }
-.adj { margin: 0 -22px; }
+.sheet-panel:has(.adj-box) { padding-bottom: 0; }
+.adj-box { margin: 0 -22px; }
 .adj-top { padding: 0 20px; display: grid; gap: 2px; }
 .adj-top h2 { font-size: 19px; }
 .adj-top span { font-size: 13.5px; color: var(--ink-3); }

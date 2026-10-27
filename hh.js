@@ -839,7 +839,7 @@
     const val = () => (v === '' || v === '-' ? NaN : Number(v));
     const typeOf = d => (d < 0 ? '지출' : '수입');
     const defCat = ty => { const l = H.cats[ty] || []; const last = store.get(`dh_adj_cat_${ty}`); return (l.find(c => c.name === last) || l.find(c => c.name === '기타') || l[0] || {}).name || ''; };
-    D.openSheet(`<div class="adj" id="adjBox"></div>`);
+    D.openSheet(`<div class="adj-box" id="adjBox"></div>`);
     const box = $('#adjBox');
     const k = (x, lab, cls = '') => `<button class="kp-k ${cls}" data-k="${x}">${lab}</button>`;
     const draw = () => {
