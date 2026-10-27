@@ -320,8 +320,10 @@
     document.addEventListener('touchstart', e => {
       v = null; dir = null; dx = 0;
       if (busy || e.touches.length !== 1) return;
-      const el = e.target.closest && e.target.closest('#hh-book, #hh-stats');
-      if (!el || e.target.closest(skip) || !$('#hhHead .hh-arrow') || stack.some(x => x.pg) || $('#sheet.open')) return;
+      // 내용이 짧은 달(빈 메모 등)도 넘기도록: 화면 아래 빈 곳에서 밀어도 지금 보이는 화면을 움직임
+      if (!H.active || (H.view !== 'book' && H.view !== 'stats') || !e.target.closest || e.target.closest('#hhHead, .tabbar, #hhFab, #hhLayer, #sheet, .topbar')) return;
+      const el = H.view === 'book' ? $('#hh-book') : $('#hh-stats');
+      if (!el || el.hidden || e.target.closest(skip) || !$('#hhHead .hh-arrow') || stack.some(x => x.pg) || $('#sheet.open')) return;
       v = el; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
     }, { passive: true });
     document.addEventListener('touchmove', e => {
