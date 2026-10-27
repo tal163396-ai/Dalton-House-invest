@@ -1303,3 +1303,4 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .am-row small { font-size: 11px; color: var(--ink-3); font-weight: 600; }
 .am-row em { font-style: normal; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .help.mc-help { font-size: 12.5px; line-height: 1.6; letter-spacing: -0.01em; }
+.pick-i.new span { color: var(--ink-3); }

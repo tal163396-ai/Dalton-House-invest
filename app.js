@@ -1692,15 +1692,8 @@
       const curr = F.key === '__new' ? (F.newCur || 'KRW') : (row?.cur || 'KRW');
       const unit = row && (row.ticker === 'ETH' || row.ticker === 'BMB') ? '개' : '주';
       body = `
-        <label class="field"><span>자산 구성</span>
-          <select id="fKind">${kinds.map(k => `<option ${k === F.kind ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select>
-        </label>
-        <label class="field"><span>종목</span>
-          <select id="fRow">
-            ${inKind.map(r => `<option value="${esc(rowKey(r))}" ${rowKey(r) === F.key ? 'selected' : ''}>${esc(r.sub)}</option>`).join('')}
-            ${F.type === '매수' ? `<option value="__new" ${F.key === '__new' ? 'selected' : ''}>+ 새 종목 추가</option>` : ''}
-          </select>
-        </label>
+        <div class="field"><span>종목</span>
+          <button type="button" class="pick-btn" id="fRowBtn"><small>${esc(F.kind)}</small><b>${F.key === '__new' ? '+ 새 종목 추가' : row ? esc(row.sub) : '선택'}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>
         ${F.key === '__new' ? `
           <div class="two">
             <label class="field"><span>종목 이름</span><input id="fNewName" placeholder="예: NAVER" value="${esc(F.newName || '')}"></label>
@@ -1759,8 +1752,18 @@
 
     $$('.type-seg button', el).forEach(b => b.onclick = () => { F.type = b.dataset.type; renderRecord(); });
     const on = (id, ev, fn) => { const x = $(id, el); if (x) x.addEventListener(ev, fn); };
-    on('#fKind', 'change', e => { F.kind = e.target.value; F.key = ''; renderRecord(); });
-    on('#fRow', 'change', e => { F.key = e.target.value; renderRecord(); });
+    on('#fRowBtn', 'click', () => {
+      // 매수·매도 종목 고르기: 구성별로 묶은 목록 (매수는 구성마다 '+ 새 종목 추가')
+      const buy = F.type === '매수';
+      const trad = D.rows.filter(isTradable).filter(r => buy || r.qty > 0);
+      const kinds = buy ? [...new Set([...kindsOf(trad), ...D.rows.filter(r => r.kind && r.kind !== '현금').map(r => r.kind)])] : kindsOf(trad);
+      const lab = r => `${r.sub}${r.asset !== r.sub && r.asset !== r.kind ? ` · ${r.asset}` : ''}`;
+      openSheet(`<h2 id="sheetTitle">${buy ? '매수할 종목' : '매도할 종목'}</h2><div class="pick-list">${kinds.map(k => `<div class="pick-g">${esc(k)}</div>${trad.filter(r => r.kind === k).map(r => {
+        const on = F.kind === k && rowKey(r) === F.key;
+        return `<button class="pick-i ${on ? 'on' : ''}" data-pk="${esc(rowKey(r))}" data-k="${esc(k)}"><span>${esc(lab(r))}</span>${on ? '<b>✓</b>' : ''}</button>`;
+      }).join('')}${buy ? `<button class="pick-i new ${F.kind === k && F.key === '__new' ? 'on' : ''}" data-pk="__new" data-k="${esc(k)}"><span>+ 새 종목 추가</span></button>` : ''}`).join('')}</div>`);
+      $$('#sheet [data-pk]').forEach(b => b.onclick = () => { F.kind = b.dataset.k; F.key = b.dataset.pk; closeSheet(); renderRecord(); });
+    });
     on('#fManualBtn', 'click', () => {
       const rows = D.rows.filter(r => r.asset);
       const lab = r => `${r.sub || r.asset}${r.asset !== r.sub && r.asset !== r.kind ? ` · ${r.asset}` : ''}`;
