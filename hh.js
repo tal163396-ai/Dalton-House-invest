@@ -310,25 +310,47 @@
     else if (p === 'week') H.st.anchor = addDays(a, 7 * k);
     window.scrollTo({ top: 0 }); render();
   }
-  // 가계부·통계 화면을 좌우로 밀면 이전·다음 달 (위 화살표와 같음)
+  // 가계부·통계 화면을 좌우로 밀면 이전·다음 달: 손가락을 따라 화면이 움직이고, 놓으면 부드럽게 넘어감
   (() => {
-    let x0 = 0, y0 = 0, t0 = 0, ok = false;
+    let x0 = 0, y0 = 0, t0 = 0, dx = 0, dir = null, v = null, busy = false;
     const skip = '.cm-chips, .hh-tabs, .seg, input, textarea, select, .hh-scroll-x, [data-noswipe]';
+    const EASE = 'cubic-bezier(.22,.8,.24,1)';
+    const set = (el, x, op, tr) => { el.style.transition = tr || 'none'; el.style.transform = x ? `translate3d(${x}px,0,0)` : ''; el.style.opacity = op === 1 ? '' : String(op); };
+    const clear = el => { el.style.transition = ''; el.style.transform = ''; el.style.opacity = ''; };
     document.addEventListener('touchstart', e => {
-      const v = e.target.closest && e.target.closest('#hh-book, #hh-stats');
-      ok = !!v && e.touches.length === 1 && !e.target.closest(skip) && !!$('#hhHead .hh-arrow') && !stack.some(x => x.pg) && !$('#sheet.open');
-      if (!ok) return;
-      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+      v = null; dir = null; dx = 0;
+      if (busy || e.touches.length !== 1) return;
+      const el = e.target.closest && e.target.closest('#hh-book, #hh-stats');
+      if (!el || e.target.closest(skip) || !$('#hhHead .hh-arrow') || stack.some(x => x.pg) || $('#sheet.open')) return;
+      v = el; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
     }, { passive: true });
-    document.addEventListener('touchend', e => {
-      if (!ok) return; ok = false;
-      const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
-      if (Date.now() - t0 > 700 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+    document.addEventListener('touchmove', e => {
+      if (!v) return;
+      const t = e.touches[0], mx = t.clientX - x0, my = t.clientY - y0;
+      if (!dir) { if (Math.abs(mx) < 8 && Math.abs(my) < 8) return; dir = Math.abs(mx) > Math.abs(my) * 1.2 ? 'h' : 'v'; }
+      if (dir !== 'h') return;
+      dx = mx;
+      const w = v.clientWidth || 360;
+      set(v, dx * 0.92, 1 - Math.min(0.35, Math.abs(dx) / w * 0.5));
+    }, { passive: true });
+    const end = () => {
+      if (!v || dir !== 'h') { v = null; return; }
+      const el = v, w = el.clientWidth || 360, speed = Math.abs(dx) / Math.max(1, Date.now() - t0);
+      if (Math.abs(dx) < w * 0.22 && !(speed > 0.45 && Math.abs(dx) > 40)) { set(el, 0, 1, `transform .28s ${EASE}, opacity .28s ${EASE}`); setTimeout(() => clear(el), 300); v = null; return; }
       const k = dx < 0 ? 1 : -1;
-      moveHead(k);
-      const v = H.view === 'book' ? $('#hh-book') : $('#hh-stats');
-      if (v) { v.classList.remove('sw-l', 'sw-r'); void v.offsetWidth; v.classList.add(k > 0 ? 'sw-l' : 'sw-r'); }
-    }, { passive: true });
+      busy = true;
+      set(el, -k * w * 0.6, 0, 'transform .16s ease-in, opacity .16s ease-in');   // 지금 달은 미는 쪽으로 빠지고
+      setTimeout(() => {
+        moveHead(k);
+        set(el, k * w * 0.35, 0);                                                      // 새 달은 반대쪽에서
+        void el.offsetWidth;
+        set(el, 0, 1, `transform .3s ${EASE}, opacity .26s ease-out`);               // 부드럽게 들어옴
+        setTimeout(() => { clear(el); busy = false; }, 320);
+      }, 160);
+      v = null;
+    };
+    document.addEventListener('touchend', end, { passive: true });
+    document.addEventListener('touchcancel', () => { if (v) { const el = v; set(el, 0, 1, `transform .25s ${EASE}`); setTimeout(() => clear(el), 260); } v = null; }, { passive: true });
   })();
   function setYm(ym) { H.ym = ym; sess.set('dh_hym', ym); window.scrollTo({ top: 0 }); render(); }
   function goView(v) {
