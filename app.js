@@ -714,19 +714,7 @@
                 ${ml.map(r => `<div class="trade"><span>${esc(r.text)}<br><small>${fmtDate(r.date)}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('')}</div>`;
             }).join('')}
           </details>`;
-        }).join('')}` : ''}
-      <div class="sheet-actions">
-        <button class="btn primary" id="goRecord">이 자산 거래 기록하기</button>
-      </div>`);
-    $('#goRecord').onclick = () => {
-      closeSheet();
-      if (!['매수', '매도'].includes(state.form.type)) state.form.type = '매수';
-      state.form.kind = a.kind;
-      const first = a.rows.find(r => isTradable(r));
-      state.form.key = first ? `${first.asset}|${first.sub}` : '';
-      renderRecord();
-      go('record');
-    };
+        }).join('')}` : ''}`);
   }
 
   /* ── 월별·연도별 ── */
