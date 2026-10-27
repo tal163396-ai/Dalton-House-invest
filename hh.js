@@ -1465,7 +1465,7 @@
       saveSettings({ renames: [rn], cats: catsArr(), budgets: budgetsArr() }, '분류를 고쳤습니다');
     };
     $('#ceToSub', pg).onclick = async () => {
-      if (cat.subs.length) { toast('소분류가 있는 분류는 소분류로 옮길 수 없습니다. 먼저 소분류를 지우거나 옮기십시오.', true); return; }
+      if (cat.subs.length) { toast('소분류가 있는 분류는 소분류로 옮길 수 없습니다.\n먼저 소분류를 지우거나 옮기십시오.', true); return; }
       const to = await pickCat(type, '어느 분류의 소분류로 옮길까요?', cat.name);
       if (!to) return;
       const name = cat.name;
@@ -1573,7 +1573,7 @@
   }
   async function deleteAsset(a, after) {
     if (!a) return false;
-    if (H.tx.some(t => t.asset === a.name || t.to === a.name)) { toast('내역이 있는 자산은 지울 수 없습니다. 눈 아이콘으로 숨기십시오.', true); return false; }
+    if (H.tx.some(t => t.asset === a.name || t.to === a.name)) { toast('내역이 있는 자산은 지울 수 없습니다.\n눈 아이콘으로 숨기십시오.', true); return false; }
     if (!(await askConfirm(`'${a.name}' 자산을 지울까요?`, '', '삭제'))) return false;
     H.assets.splice(H.assets.indexOf(a), 1);
     H.assets.forEach(x => { if (x.link === a.name) x.link = ''; });
