@@ -318,7 +318,11 @@
     if (H.btab === 'close') {
       $$('#hh-book [data-bcat]').forEach(r => r.onclick = () => {
         const k = r.dataset.bcat;
-        H.budClosed.has(k) ? H.budClosed.delete(k) : H.budClosed.add(k);
+        if (k.startsWith('__all__|')) {
+          // 전체예산: 하나라도 접혀 있으면 모두 펼치고, 모두 펼쳐져 있으면 모두 접음
+          const names = k.split('|').slice(1), allOpen = names.every(n => !H.budClosed.has(n));
+          names.forEach(n => (allOpen ? H.budClosed.add(n) : H.budClosed.delete(n)));
+        } else H.budClosed.has(k) ? H.budClosed.delete(k) : H.budClosed.add(k);
         store.set('dh_hbud_closed', JSON.stringify([...H.budClosed]));
         const y = window.scrollY; render(); window.scrollTo({ top: y });
       });
@@ -454,17 +458,19 @@
     const marker = ym === cur ? new Date().getDate() / daysIn(ym) : null;
     const rows = [];
     let tb = 0;
+    const togg = [];
     H.cats['지출'].forEach(c => {
       const b = catBudget(c, ym);
       if (!(b > 0)) return;
       tb += b;
       const subs = c.subs.filter(s => budgetOf(c.name, s, ym) > 0);
       const open = !H.budClosed.has(c.name);
+      if (subs.length) togg.push(c.name);
       rows.push(budRow(c.name, b, byCat.get(c.name) || 0, { kind: 'cat', marker, toggle: subs.length ? c.name : null, open }));
       if (subs.length && open) subs.forEach(s => rows.push(budRow(s, budgetOf(c.name, s, ym), bySub.get(BK(c.name, s)) || 0, { kind: 'sub', marker })));
     });
     const budget = rows.length
-      ? budRow('전체예산', tb, total, { kind: 'top', marker }) + rows.join('')
+      ? budRow('전체예산', tb, total, { kind: 'top', marker, toggle: togg.length ? `__all__|${togg.join('|')}` : null, open: togg.length > 0 && togg.every(n => !H.budClosed.has(n)) }) + rows.join('')
       : `<p class="empty">예산이 없습니다.<br><span class="sub">예산설정에서 분류별 한 달 예산을 넣으십시오.</span></p>`;
     // 자산별 수입·지출 (체크카드는 카드 이름 그대로)
     const byAsset = new Map();
