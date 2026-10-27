@@ -826,17 +826,59 @@
     pushPage({ title: esc(name), body: build(), onMount: bind, refresh: pg => { $('.hh-pbody', pg).innerHTML = build(); bind(pg); } });
   }
 
-  async function adjustBalance(name) {
+  // 잔액 수정: 실제 잔액을 숫자판으로 받고, 차액을 '보정'(수입·지출 제외) 또는 수입·지출 내역으로 기록
+  function adjustBalance(name) {
     const cur = H.bal.get(name) || 0;
-    const v = await askText('잔액 수정', fmt(cur), { note: `지금 앱에 기록된 잔액은 ${won(cur)}입니다. 실제 잔액을 입력하면 차액만큼 '잔액수정' 내역이 생깁니다.`, ok: '수정', money: true });
-    if (v === null) return;
-    const n = Number(String(v).replace(/[^\d-]/g, ''));
-    if (!Number.isFinite(n) || String(v).replace(/[^\d]/g, '') === '') { toast('금액을 숫자로 입력하십시오', true); return; }
-    const diff = n - cur;
-    if (!diff) { toast('잔액이 같아서 바꿀 것이 없습니다'); return; }
-    const d = new Date();
-    const t = toTx([newId('n'), `${dOf(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`, '수정', '잔액수정', '', '잔액 수정', diff, name, '', '', '', '', '', store.get('dh_name') || '']);
-    await commitTx(t, null);
+    let v = String(cur), fresh = true, mode = store.get('dh_adj_mode') === 'rec' ? 'rec' : 'adj', cat = '';
+    const val = () => (v === '' || v === '-' ? NaN : Number(v));
+    const typeOf = d => (d < 0 ? '지출' : '수입');
+    const defCat = ty => { const l = H.cats[ty] || []; const last = store.get(`dh_adj_cat_${ty}`); return (l.find(c => c.name === last) || l.find(c => c.name === '기타') || l[0] || {}).name || ''; };
+    D.openSheet(`<div class="adj" id="adjBox"></div>`);
+    const box = $('#adjBox');
+    const k = (x, lab, cls = '') => `<button class="kp-k ${cls}" data-k="${x}">${lab}</button>`;
+    const draw = () => {
+      const n = val(), diff = Number.isFinite(n) ? n - cur : 0, ty = typeOf(diff);
+      if (mode === 'rec' && diff && (!cat || !(H.cats[ty] || []).some(c => c.name === cat))) cat = defCat(ty);
+      const cats = H.cats[ty] || [];
+      box.innerHTML = `<div class="adj-top"><h2 id="sheetTitle">잔액 수정</h2><span>${esc(name)} · 앱 잔액 ${won(cur)}</span></div>
+        <div class="adj-amt"><small>실제 잔액</small><b>${v === '' ? '0' : v === '-' ? '−' : `${n < 0 ? '−' : ''}${fmt(Math.abs(n))}`}<span class="u">원</span></b>
+          <em class="${diff > 0 ? 'p' : diff < 0 ? 'm' : ''}">${diff ? `차액 ${swon(diff)}` : '차액 없음'}</em></div>
+        <div class="adj-seg" role="tablist"><button data-md="adj" class="${mode === 'adj' ? 'on' : ''}">보정<small>수입·지출 제외</small></button><button data-md="rec" class="${mode === 'rec' ? 'on' : ''}">수입·지출로 기록<small>통계·예산에 반영</small></button></div>
+        ${mode === 'rec' ? (diff ? `<div class="adj-cat"><small>${ty} 분류</small><div class="adj-chips">${cats.map(c => `<button class="${c.name === cat ? 'on' : ''}" data-c="${esc(c.name)}">${esc(c.name)}</button>`).join('') || '<span class="note">분류가 없습니다</span>'}</div></div>` : '<p class="adj-hint">실제 잔액을 입력하면 모자라면 지출, 남으면 수입으로 기록합니다.</p>') : '<p class="adj-hint">차액만큼 \'잔액수정\' 내역이 생기고, 수입·지출 통계에는 들어가지 않습니다.</p>'}
+        <div class="kp-grid adj-kp">${k(1, 1)}${k(2, 2)}${k(3, 3)}${k('bs', ico.bksp, 'fn')}${k(4, 4)}${k(5, 5)}${k(6, 6)}${k('-', '−', 'fn')}${k(7, 7)}${k(8, 8)}${k(9, 9)}${k('00', '00')}${k('x', '취소', 'fn sm')}${k(0, 0)}${k('000', '000')}${k('ok', '저장', 'ok')}</div>`;
+      $$('[data-md]', box).forEach(b => b.onclick = () => { mode = b.dataset.md; store.set('dh_adj_mode', mode); draw(); });
+      $$('[data-c]', box).forEach(b => b.onclick = () => { cat = b.dataset.c; draw(); });
+      $$('[data-k]', box).forEach(b => b.onclick = () => {
+        const x = b.dataset.k;
+        if (x === 'x') { D.closeSheet(); return; }
+        if (x === 'ok') { save(); return; }
+        if (x === 'bs') { v = v.slice(0, -1); fresh = false; draw(); return; }
+        if (x === '-') { v = fresh ? '-' : v.startsWith('-') ? v.slice(1) : '-' + v; fresh = false; draw(); return; }
+        if (fresh) { v = ''; fresh = false; }
+        const neg = v.startsWith('-'), d = neg ? v.slice(1) : v;
+        if (d.length + x.length > 13) return;
+        if (d === '' || d === '0') { if (/^0+$/.test(x)) { v = (neg ? '-' : '') + '0'; draw(); return; } v = (neg ? '-' : '') + x; }
+        else v += x;
+        draw();
+      });
+    };
+    async function save() {
+      const n = val();
+      if (!Number.isFinite(n)) { toast('실제 잔액을 입력하십시오', true); return; }
+      const diff = n - cur;
+      if (!diff) { toast('잔액이 같아서 바꿀 것이 없습니다'); return; }
+      const d = new Date(), at = `${dOf(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`, by = store.get('dh_name') || '';
+      let t;
+      if (mode === 'rec') {
+        const ty = typeOf(diff);
+        if (!cat) { toast('분류를 고르십시오', true); return; }
+        store.set(`dh_adj_cat_${ty}`, cat);
+        t = toTx([newId('n'), at, ty, cat, '', '잔액 맞춤', Math.abs(diff), name, '', '', '', '', '', by]);
+      } else t = toTx([newId('n'), at, '수정', '잔액수정', '', '잔액 수정', diff, name, '', '', '', '', '', by]);
+      D.closeSheet();
+      await commitTx(t, null);
+    }
+    draw();
   }
 
   /* ───────────── 더보기 탭 ───────────── */
