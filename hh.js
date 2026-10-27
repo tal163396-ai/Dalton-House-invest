@@ -1323,7 +1323,7 @@
       <button class="se-ed" data-ren="${i}" aria-label="이름 바꾸기">${ico.pen}</button>
       <span class="se-drag" data-drag="${i}" aria-label="끌어서 순서 바꾸기">${ico.drag}</span>
     </div>`).join('') || '<p class="empty">항목이 없습니다. 오른쪽 위 + 로 추가하십시오.</p>'}</div>
-    <p class="note">≡ 를 끌어서 순서를 바꿉니다. 이름을 바꾸면 지난 내역의 이름도 함께 바뀝니다.</p>`;
+    <p class="note">≡ 를 끌어서 순서를 바꿉니다.<br>이름을 바꾸면 지난 내역의 이름도 함께 바뀝니다.</p>`;
     $$('[data-open]', body).forEach(b => b.onclick = () => onOpen && onOpen(Number(b.dataset.open)));
     $$('[data-ren]', body).forEach(b => b.onclick = () => onRename(Number(b.dataset.ren)));
     $$('[data-del]', body).forEach(b => b.onclick = () => onDelete(Number(b.dataset.del)));
