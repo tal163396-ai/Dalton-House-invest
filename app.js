@@ -1751,17 +1751,18 @@
       </div>
       <div class="card">
         <div class="card-head"><h2 class="card-title">최근 기록</h2></div>
-        ${D.trades.length ? D.trades.slice(0, 15).map(t => `
-          <div class="trade">
-            <span><span class="tag ${t['구분'] === '매수' ? 'buy' : t['구분'] === '매도' ? 'sell' : ''}">${esc(t['구분'])}</span>${esc(t['세부종목'] || t['자산'])}${t['수량'] ? ` ${esc(t['수량'])}주` : ''}${t['연결'] ? ' <span class="tag hh-link">가계부</span>' : ''}<br>
+        ${D.trades.length ? D.trades.slice(0, 15).map((t, i) => `
+          <button class="trade tr-btn" data-ti="${i}">
+            <span><span class="tr-t"><span class="tag ${t['구분'] === '매수' ? 'buy' : t['구분'] === '매도' ? 'sell' : ''}">${esc(t['구분'])}</span><span class="tr-n">${esc(t['세부종목'] || t['자산'])}${t['수량'] ? ` ${esc(t['수량'])}주` : ''}${t['연결'] ? ' <span class="tag hh-link">가계부</span>' : ''}</span></span>
               <small>${fmtDate(new Date(t['날짜']))}${t['입력자'] ? ` · ${esc(t['입력자'])}` : ''}${t['메모'] ? ` · ${esc(t['메모'])}` : ''}</small></span>
             <span class="num" style="text-align:right">${won(num(t['금액(원)']))}${isNum(t['실현손익(원)']) && t['실현손익(원)'] !== '' ? `<br><small class="${cls(num(t['실현손익(원)']))}">${signWon(num(t['실현손익(원)']))}</small>` : ''}</span>
-          </div>`).join('') : `<p class="empty">아직 앱에서 기록한 거래가 없습니다.<br>매수·매도를 기록하면<br>보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
+          </button>`).join('') : `<p class="empty">아직 앱에서 기록한 거래가 없습니다.<br>매수·매도를 기록하면<br>보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
       </div>
       </div><div class="page">${monthCloseCard() || '<div class="card"><p class="empty">가계부월별 탭이 없습니다.</p></div>'}</div></div>`;
     recPagerApi = setupPager($('#rPager'), $$('#rTabs button'), { start: state.rPage || 0, onChange: i => { state.rPage = i; sess.set('dh_rpage', i); } });
 
     $$('.type-seg button', el).forEach(b => b.onclick = () => { F.type = b.dataset.type; renderRecord(); });
+    $$('.tr-btn', el).forEach(b => b.onclick = () => { const t = D.trades[Number(b.dataset.ti)]; if (t) openTrade(t); });
     const on = (id, ev, fn) => { const x = $(id, el); if (x) x.addEventListener(ev, fn); };
     on('#fRowBtn', 'click', () => {
       // 매수·매도 종목 고르기: 구성별로 묶은 목록 (매수는 구성마다 '+ 새 종목 추가')
@@ -1982,6 +1983,85 @@
         err.textContent = e.message; btn.disabled = false; btn.textContent = `${y}년 ${m}월 마감 저장`;
       }
     };
+  }
+
+  /* ── 최근 기록 누르기: 상세 → 수정·삭제 (보유현황도 함께 되돌림) ── */
+  const tradeSig = t => ({ type: t['구분'], asset: t['자산'], sub: t['세부종목'], amt: num(t['금액(원)']) });
+  function openTrade(t) {
+    const type = t['구분'], linked = !!String(t['연결'] || '').trim(), trade = type === '매수' || type === '매도';
+    const editable = !linked && ['매수', '매도', '입금', '출금'].includes(type);
+    const rows = [
+      ['종목', t['세부종목'] && t['세부종목'] !== t['자산'] ? `${t['자산']} · ${t['세부종목']}` : t['자산']],
+      ['날짜', fmtDate(new Date(t['날짜']))],
+      trade ? ['수량 · 단가', `${num(t['수량']).toLocaleString('ko-KR', { maximumFractionDigits: 8 })} × ${t['통화'] === 'USD' ? '$' : ''}${num(t['단가']).toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${t['통화'] === 'USD' ? '' : '원'}`] : null,
+      ['금액', won(num(t['금액(원)']))],
+      isNum(t['실현손익(원)']) && t['실현손익(원)'] !== '' ? ['손익', signWon(num(t['실현손익(원)']))] : null,
+      t['메모'] ? ['메모', t['메모']] : null,
+      t['입력자'] ? ['입력자', t['입력자']] : null,
+    ].filter(Boolean);
+    const acts = linked
+      ? `<p class="note ask-note">가계부 내역과 연결된 기록입니다.<br>가계부 내역에서 고치거나 지우면 함께 바뀝니다.</p>
+         <div class="sheet-actions two"><button class="btn" data-close>닫기</button><button class="btn primary" id="tdHh">가계부 내역 열기</button></div>`
+      : `<div class="sheet-actions ${editable ? 'two' : ''}"><button class="btn danger-line" id="tdDel">삭제</button>${editable ? '<button class="btn primary" id="tdEdit">수정</button>' : ''}</div>
+         <div class="sheet-actions"><button class="btn" data-close>닫기</button></div>`;
+    openSheet(`<div class="ask td-box"><h2 id="sheetTitle">${esc(type)} 기록</h2>
+      <dl class="td-kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>${acts}</div>`, 'pop');
+    const hh = $('#tdHh'); if (hh) hh.onclick = () => { closeSheet(); if (!(window.DH.hhOpenTx && window.DH.hhOpenTx(String(t['연결']).trim()))) toast('가계부를 한 번 연 뒤 다시 누르십시오', true); };
+    const del = $('#tdDel'); if (del) del.onclick = () => {
+      openSheet(`<div class="ask"><h2 id="sheetTitle">이 기록을 지울까요?</h2><p class="note ask-note">${esc(t['세부종목'] || t['자산'])} ${esc(type)} ${won(num(t['금액(원)']))}<br>보유현황(수량·원금·예수금)도 기록 전으로 되돌립니다.</p>
+        <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn danger" id="tdDelOk">삭제</button></div></div>`, 'pop');
+      $('#tdDelOk').onclick = () => runTrade('tradeDel', { r: t._r, sig: tradeSig(t) }, $('#tdDelOk'));
+    };
+    const ed = $('#tdEdit'); if (ed) ed.onclick = () => editTrade(t);
+  }
+  function editTrade(t) {
+    const type = t['구분'], trade = type === '매수' || type === '매도', usd = t['통화'] === 'USD';
+    const d0 = String(t['날짜']).slice(0, 10), tm0 = String(t['날짜']).slice(11, 19) || '12:00:00';
+    const amt0 = Math.round(num(t['금액(원)'])), q0 = num(t['수량']), p0 = num(t['단가']);
+    const decTxt = v => (v ? v.toLocaleString('ko-KR', { maximumFractionDigits: 8 }) : '');
+    openSheet(`<div class="ask td-box"><h2 id="sheetTitle">${esc(t['세부종목'] || t['자산'])} ${esc(type)} 수정</h2>
+      <div class="form td-form">
+        ${trade ? `<div class="two">
+          <label class="field"><span>수량</span><input id="tdQty" class="dec" type="text" inputmode="decimal" autocomplete="off" value="${decTxt(q0)}"></label>
+          <label class="field"><span>단가 (${usd ? '달러' : '원'})</span><input id="tdPrice" class="dec" type="text" inputmode="decimal" autocomplete="off" value="${decTxt(p0)}"></label></div>` : ''}
+        <label class="field"><span>${trade ? '실제 원화 금액' : '금액(원)'}</span><input id="tdKrw" class="money" type="text" inputmode="numeric" autocomplete="off" value="${amt0.toLocaleString('ko-KR')}"></label>
+        ${trade ? '<p class="help">수량·단가를 바꾸고 원화 금액을 그대로 두면 새로 계산합니다.</p>' : ''}
+        <div class="two">
+          <label class="field"><span>날짜</span><input id="tdDate" type="date" value="${d0}"></label>
+          <label class="field"><span>메모</span><input id="tdMemo" value="${esc(t['메모'] || '')}" placeholder="선택"></label>
+        </div>
+        <p class="form-error" id="tdErr" role="alert"></p>
+      </div>
+      <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn primary" id="tdSave">저장</button></div></div>`, 'pop');
+    bindMoney($('#sheetBody'));
+    $('#tdSave').onclick = () => {
+      const err = $('#tdErr'); err.textContent = '';
+      const krw = Number(String($('#tdKrw').value).replace(/,/g, ''));
+      const tr = { date: `${$('#tdDate').value || d0}T${tm0}+09:00`, memo: $('#tdMemo').value.trim() };
+      if (trade) {
+        tr.qty = num($('#tdQty').value); tr.price = num($('#tdPrice').value);
+        if (!(tr.qty > 0) || !(tr.price > 0)) { err.textContent = '수량과 단가를 입력하십시오.'; return; }
+        const changed = Math.abs(tr.qty - q0) > 1e-12 || Math.abs(tr.price - p0) > 1e-12;
+        tr.amountKrw = changed && krw === amt0 ? '' : krw;
+        if (tr.amountKrw !== '' && !(tr.amountKrw > 0)) { err.textContent = '원화 금액을 확인하십시오.'; return; }
+      } else {
+        if (!(krw > 0)) { err.textContent = '금액을 입력하십시오.'; return; }
+        tr.amountKrw = krw;
+      }
+      runTrade('tradeEdit', { r: t._r, sig: tradeSig(t), trade: tr }, $('#tdSave'));
+    };
+  }
+  async function runTrade(action, extra, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '처리 중…'; }
+    spin(true);
+    try {
+      const j = await api(action, extra);
+      closeSheet(); toast(j.message || '완료했습니다');
+      await load({ quiet: true });
+    } catch (e) {
+      toast(e.message, true);
+      if (btn) { btn.disabled = false; btn.textContent = action === 'tradeDel' ? '삭제' : '저장'; }
+    } finally { spin(false); }
   }
 
   async function submitForm() {

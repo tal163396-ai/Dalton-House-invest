@@ -110,6 +110,8 @@ function doPost(e) {
       case 'trade':  return json_(withLock_(() => recordTrade_(req.trade)));
       case 'manual': return json_(withLock_(() => setManual_(req.manual)));
       case 'month':  return json_(withLock_(() => saveMonth_(req.month)));
+      case 'tradeDel':  return json_(withLock_(() => tradeDel_(req)));
+      case 'tradeEdit': return json_(withLock_(() => tradeEdit_(req)));
       case 'hh':        return json_({ ok: true, hh: readHH_() });
       case 'hhSave':    return json_(withLock_(() => hhSave_(req)));
       case 'hhDel':     return json_(withLock_(() => hhDel_(req)));
@@ -132,7 +134,7 @@ function readAll_() {
     composition: rowsAsObjects_('연도별구성', o => !o['연도']),
     realized: rowsAsObjects_('실현손익', o => !o['날짜']),
     monthly: rowsAsObjects_('월말평가', o => !o['월']),
-    trades: rowsAsObjects_('거래기록', o => !o['날짜']).slice(-200),
+    trades: tradeRows_().slice(-200),
     index: readIndex_(),
     household: SpreadsheetApp.getActive().getSheetByName('가계부월별') ? rowsAsObjects_('가계부월별', o => !o['연도']) : [],
     hhAuto: hhAutoMonths_(),
@@ -899,17 +901,29 @@ function hhUndoLink_(id) {
   let r = -1;
   for (let i = lt.values.length - 1; i >= 1; i--) if (String(lt.values[i][lt.col['연결']]).trim() === id) { r = i; break; }
   if (r < 0) return false;
+  undoTradeAt_(lt, r, () => {
+    const rt = table_('실현손익');
+    if ('연결' in rt.col) for (let i = rt.values.length - 1; i >= 1; i--) if (String(rt.values[i][rt.col['연결']]).trim() === id) { rt.sh.deleteRow(i + 1); break; }
+  });
+  return true;
+}
+
+/** 거래기록 r번째 줄(0 = 머리글)의 효과를 보유현황에서 되돌리고 그 줄을 지움 */
+function undoTradeAt_(lt, r, dropRealized) {
   const v = h => lt.values[r][lt.col[h]];
   const type = String(v('구분')).trim(), asset = String(v('자산')).trim(), sub = String(v('세부종목')).trim();
   const amt = Math.round(num_(v('금액(원)'))), qty = num_(v('수량')), price = num_(v('단가'));
-  const dropRealized = () => {
-    const rt = table_('실현손익');
-    if ('연결' in rt.col) for (let i = rt.values.length - 1; i >= 1; i--) if (String(rt.values[i][rt.col['연결']]).trim() === id) { rt.sh.deleteRow(i + 1); break; }
-  };
   if (type === '비용') {
     dropRealized();
   } else if (type === '입금' || type === '출금') {
     recordTrade_({ type: type === '입금' ? '출금' : '입금', asset, sub, amountKrw: amt, nolog: true });
+  } else if (type === '수정') {
+    // 예수금 금액 수정(기타 손익): 차액만큼 되돌림
+    const t = holdings_(), h = findRow_(t, asset, sub), diff = Math.round(num_(v('실현손익(원)')));
+    if (h < 0) throw new Error(`되돌릴 줄 '${asset} / ${sub}'을 보유현황에서 찾지 못했습니다`);
+    setCell_(t, h, '직접평가(원)', Math.round(num_(t.values[h][t.col['직접평가(원)']]) - diff));
+    setCell_(t, h, '원금(원)', Math.round(num_(t.values[h][t.col['원금(원)']]) - diff));
+    dropRealized();
   } else {
     const t = holdings_(), rate = rate_(), cash = CASH[asset] || { mode: 'none' };
     const h = findRow_(t, asset, sub);
@@ -933,7 +947,77 @@ function hhUndoLink_(id) {
     }
   }
   lt.sh.deleteRow(r + 1);
-  return true;
+}
+
+/* ───────────────────────── 최근 기록 수정·삭제 ───────────────────────── */
+
+/** 거래기록 + 시트 줄 번호(_r) */
+function tradeRows_() {
+  const t = table_('거래기록'), out = [];
+  for (let r = 1; r < t.values.length; r++) {
+    const row = t.values[r];
+    if (row.every(x => x === '' || x === null)) continue;
+    const o = { _r: r + 1 };
+    t.headers.forEach((h, i) => { if (h) o[h] = clean_(row[i]); });
+    if (!o['날짜']) continue;
+    out.push(o);
+  }
+  return out;
+}
+
+/** 앱이 보낸 줄 번호와 내용이 지금 시트와 같은지 확인 (그사이 다른 사람이 고쳤으면 거절) */
+function tradeAt_(req) {
+  const lt = table_('거래기록'), r = Math.round(num_(req.r)) - 1, g = req.sig || {};
+  if (!(r >= 1 && r < lt.values.length)) throw new Error('기록을 찾지 못했습니다. 새로고침 후 다시 하십시오');
+  const v = h => lt.values[r][lt.col[h]];
+  const same = String(v('구분')).trim() === String(g.type || '').trim() && String(v('자산')).trim() === String(g.asset || '').trim()
+    && String(v('세부종목')).trim() === String(g.sub || '').trim() && Math.round(num_(v('금액(원)'))) === Math.round(num_(g.amt));
+  if (!same) throw new Error('그사이 기록이 바뀌었습니다. 새로고침 후 다시 하십시오');
+  if ('연결' in lt.col && String(v('연결')).trim()) throw new Error('가계부와 연결된 기록입니다. 가계부 내역에서 고치십시오');
+  return { lt, r, v };
+}
+
+/** 연결 없는 기록의 실현손익 줄 찾아 지우기 (날짜·종목·손익이 같은 가장 아래 줄) */
+function dropRealizedFor_(v) {
+  const p = Math.round(num_(v('실현손익(원)')));
+  if (!p) return;
+  const d = v('날짜'), dk = d instanceof Date ? d.getTime() : String(d);
+  const rt = table_('실현손익');
+  for (let i = rt.values.length - 1; i >= 1; i--) {
+    const x = rt.values[i], xd = x[rt.col['날짜']];
+    if ((xd instanceof Date ? xd.getTime() : String(xd)) !== dk) continue;
+    if (String(x[rt.col['자산']]).trim() !== String(v('자산')).trim() || String(x[rt.col['세부종목']]).trim() !== String(v('세부종목')).trim()) continue;
+    if (Math.round(num_(x[rt.col['손익(원)']])) !== p) continue;
+    if ('연결' in rt.col && String(x[rt.col['연결']]).trim()) continue;
+    rt.sh.deleteRow(i + 1); return;
+  }
+}
+
+function tradeDel_(req) {
+  const { lt, r, v } = tradeAt_(req);
+  const label = `${String(v('세부종목') || v('자산')).trim()} ${String(v('구분')).trim()}`;
+  undoTradeAt_(lt, r, () => dropRealizedFor_(v));
+  return { ok: true, message: `${label} 기록을 지우고 되돌렸습니다` };
+}
+
+function tradeEdit_(req) {
+  const { lt, r, v } = tradeAt_(req);
+  const type = String(v('구분')).trim();
+  if (['매수', '매도', '입금', '출금'].indexOf(type) < 0) throw new Error('이 기록은 고칠 수 없습니다. 지우고 새로 입력하십시오');
+  const d0 = v('날짜'), wall = d0 instanceof Date ? Utilities.formatDate(d0, sheetTz_(), "yyyy-MM-dd'T'HH:mm:ss") + '+09:00' : String(d0);
+  const old = { type, asset: String(v('자산')).trim(), sub: String(v('세부종목')).trim(), amountKrw: Math.round(num_(v('금액(원)'))),
+    date: wall, by: String(v('입력자') || ''), memo: String(v('메모') || '') };
+  if (type === '매수' || type === '매도') { old.qty = num_(v('수량')); old.price = num_(v('단가')); }
+  const n = req.trade || {};
+  const neu = Object.assign({}, old, { date: n.date || old.date, memo: n.memo !== undefined ? String(n.memo) : old.memo, amountKrw: Math.round(num_(n.amountKrw)) || old.amountKrw });
+  if (type === '매수' || type === '매도') { neu.qty = num_(n.qty) || old.qty; neu.price = num_(n.price) || old.price; if (n.amountKrw === '' || n.amountKrw === null) delete neu.amountKrw; }
+  undoTradeAt_(lt, r, () => dropRealizedFor_(v));
+  try { recordTrade_(neu); }
+  catch (e) {
+    try { recordTrade_(old); } catch (e2) { /* 되살리기 실패 */ }
+    throw new Error(`고치지 못했습니다: ${e.message}`);
+  }
+  return { ok: true, message: `${old.sub || old.asset} ${type} 기록을 고쳤습니다` };
 }
 
 /** 내역 저장 전후 비교: 연결이 바뀌었으면 예전 것을 되돌리고 새로 기록 */
