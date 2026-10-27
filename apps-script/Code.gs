@@ -575,7 +575,8 @@ function ensureHeaders_(name, headers) {
  * 가계부        : 내역 한 줄 = 수입·지출·이체·수정(잔액 수정). 금액은 원화. 수정은 +늘림 / −줄임
  * 가계부분류    : 구분(수입/지출) · 분류 · 소분류(' | '로 구분)
  * 가계부자산    : 그룹 · 자산 · 숨김(Y) · 메모 · 연결(체크카드의 결제 계좌)   (위에서부터 화면 순서)
- * 가계부예산    : 분류 · 소분류(비우면 분류 전체) · 금액   (매달 같은 예산)
+ * 가계부예산    : 분류 · 소분류(비우면 분류 전체) · 금액 · 월
+ *                 월: 비움 = 기본예산(처음부터), '2026-11~' = 그 달부터 기본예산, '2026-09' = 그 달만
  * 가계부반복    : 매월 같은 날 자동으로 들어가는 내역 (앱을 열 때 밀린 달까지 채움)
  * 가계부메모    : 날짜별 메모
  * 일시·ID 칸은 글자 서식(구글 시트가 날짜로 바꾸지 않게) */
@@ -586,9 +587,9 @@ const HH_TABS = {
   '가계부자산': ['그룹', '자산', '숨김', '메모', '연결'],
   '가계부반복': ['ID', '주기', '일', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '시작', '종료', '마지막생성'],
   '가계부메모': ['ID', '날짜', '내용', '입력자'],
-  '가계부예산': ['분류', '소분류', '금액'],
+  '가계부예산': ['분류', '소분류', '금액', '월'],
 };
-const HH_TEXT = { '가계부': ['ID', '일시'], '가계부반복': ['ID', '시작', '종료', '마지막생성'], '가계부메모': ['ID', '날짜'] };
+const HH_TEXT = { '가계부': ['ID', '일시'], '가계부반복': ['ID', '시작', '종료', '마지막생성'], '가계부메모': ['ID', '날짜'], '가계부예산': ['월'] };
 const HH_KIND = { tx: '가계부', rule: '가계부반복', memo: '가계부메모' };
 
 function readHH_() {
@@ -631,7 +632,7 @@ function hhRows_(name) {
 
 function hhVal_(v, h) {
   if (v instanceof Date) {
-    const f = h === '일시' ? 'yyyy-MM-dd HH:mm:ss' : (h === '시작' || h === '종료' || h === '마지막생성') ? 'yyyy-MM' : 'yyyy-MM-dd';
+    const f = h === '일시' ? 'yyyy-MM-dd HH:mm:ss' : (h === '시작' || h === '종료' || h === '마지막생성' || h === '월') ? 'yyyy-MM' : 'yyyy-MM-dd';
     return Utilities.formatDate(v, sheetTz_(), f);
   }
   if (typeof v === 'number' && !isFinite(v)) return '';
@@ -743,13 +744,16 @@ function hhDel_(req) {
   return { ok: true };
 }
 
-/** req = { renames?: [{what:'asset'|'cat'|'sub', type, cat, from, to}], cats?: [[구분,분류,소분류]], assets?: [[그룹,자산,숨김,메모,연결]], budgets?: [[분류,소분류,금액]] } */
+/** req = { renames?: [{what:'asset'|'cat'|'sub', type, cat, from, to}], cats?: [[구분,분류,소분류]], assets?: [[그룹,자산,숨김,메모,연결]], budgets?: [[분류,소분류,금액,월]] } */
 function hhSettings_(req) {
   hhEnsure_();
   (req.renames || []).forEach(hhRename_);
   if (req.cats) hhRewrite_('가계부분류', req.cats.map(r => [hhStr_(r[0], 4), hhStr_(r[1], 60), hhStr_(r[2], 2000)]).filter(r => r[1]));
   if (req.assets) hhRewrite_('가계부자산', req.assets.map(r => [hhStr_(r[0], 30), hhStr_(r[1], 80), r[2] ? 'Y' : '', hhStr_(r[3], 200), hhStr_(r[4], 80)]).filter(r => r[1]));
-  if (req.budgets) hhRewrite_('가계부예산', req.budgets.map(r => [hhStr_(r[0], 60), hhStr_(r[1], 60), Math.round(Number(r[2])) || 0]).filter(r => r[0] && r[2] > 0));
+  if (req.budgets) hhRewrite_('가계부예산', req.budgets.map(r => {
+    const m = String(r[3] || '').trim();
+    return [hhStr_(r[0], 60), hhStr_(r[1], 60), Math.max(0, Math.round(Number(r[2])) || 0), /^\d{4}-\d{2}~?$/.test(m) ? m : ''];
+  }).filter(r => r[0] && (r[2] > 0 || r[3])));
   return { ok: true };
 }
 
@@ -758,6 +762,7 @@ function hhRewrite_(name, rows) {
   const last = sh.getLastRow();
   if (last > 1) sh.getRange(2, 1, last - 1, head.length).clearContent();
   if (!rows.length) return;
+  (HH_TEXT[name] || []).forEach(h => { const i = head.indexOf(h); if (i >= 0) sh.getRange(2, i + 1, rows.length, 1).setNumberFormat('@'); });
   const vals = rows.map(r => head.map(h => { const i = F.indexOf(h); return i >= 0 ? r[i] : ''; }));
   sh.getRange(2, 1, vals.length, head.length).setValues(vals);
 }

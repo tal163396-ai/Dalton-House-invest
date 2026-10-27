@@ -1209,3 +1209,28 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .ae-gi { border: 0; border-top: 1px solid var(--line); background: none; color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; text-align: left; padding: 15px 8px; }
 .ae-gi:first-child { border-top: 0; }
 .ae-gi.on { color: var(--hh); }
+/* 예산설정 (편한가계부 방식) */
+.bs-ban { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 14px; align-items: center; background: var(--card); border-radius: 16px; padding: 14px 16px; margin-bottom: 12px; }
+.bs-ban-ic { width: 56px; height: 56px; border-radius: 50%; border: 1.5px solid var(--hh); color: var(--hh); display: grid; place-items: center; }
+.bs-ban p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ink-3); }
+.bs-ban b { color: var(--ink); }
+.bs-list, .bs-months { background: var(--card); border-radius: 16px; overflow: hidden; }
+.bs-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; border-top: 1px solid var(--line); }
+.bs-row:first-child { border-top: 0; }
+.bs-name, .bs-amt, .bs-sub, .bs-base, .bs-m { border: 0; background: none; color: var(--ink); font: inherit; text-align: left; }
+.bs-name { display: flex; align-items: center; gap: 6px; padding: 17px 0 17px 18px; font-size: 16px; font-weight: 650; min-width: 0; }
+.bs-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bs-chev svg { width: 16px; height: 16px; transform: rotate(90deg); color: var(--ink-3); transition: transform .15s; }
+.bs-chev.open svg { transform: rotate(-90deg); }
+.bs-amt { display: flex; align-items: center; gap: 8px; padding: 17px 14px 17px 8px; font-size: 16px; font-weight: 650; }
+.bs-amt svg, .bs-sub svg { width: 18px; height: 18px; color: var(--ink-4); }
+.bs-subs { background: var(--fill); }
+.bs-sub { display: grid; grid-template-columns: minmax(0, 1fr) auto 18px; gap: 8px; align-items: center; width: 100%; padding: 15px 14px 15px 30px; font-size: 15px; font-weight: 600; }
+.bs-yn { display: flex; align-items: center; gap: 2px; font-size: 16px; }
+.bs-yn b { min-width: 64px; text-align: center; }
+.bs-base { display: flex; justify-content: space-between; width: 100%; background: var(--card); border-radius: 16px; padding: 18px; font-size: 17px; margin-bottom: 10px; }
+.bs-m { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 12px 18px 12px 14px; border-top: 1px solid var(--line); font-size: 16px; font-weight: 600; }
+.bs-m:first-child { border-top: 0; }
+.bs-chip { display: inline-block; min-width: 64px; text-align: center; padding: 5px 10px; border: 1.5px solid var(--line); border-radius: 8px; color: var(--ink-3); font-size: 15px; }
+.bs-chip.own { color: var(--ink); border-color: var(--ink-4); }
+.bs-chip.cur { color: var(--hh); border-color: var(--hh); }

@@ -100,7 +100,29 @@
   const catsArr = () => ['수입', '지출'].flatMap(t => H.cats[t].map(c => [t, c.name, c.subs.join(' | ')]));
   const assetsArr = () => H.assets.map(a => [a.group, a.name, a.hidden ? 'Y' : '', a.memo, a.link || '']);
   const BK = (c, s) => `${c}\u0001${s || ''}`;
-  const budgetsArr = () => [...H.budgets].filter(([, v]) => v > 0).map(([k, v]) => [...k.split('\u0001'), v]);
+  // 예산: 키(분류·소분류) → { base: [{ from: ''|'yyyy-MM', amt }] (적용 시작 달 순), months: Map(ym → amt) }
+  const budgetsArr = () => {
+    const out = [];
+    H.budgets.forEach((e, k) => {
+      const [c, sb] = k.split('\u0001');
+      e.base.forEach(b => { if (b.amt > 0 || b.from) out.push([c, sb, b.amt, b.from ? `${b.from}~` : '']); });
+      e.months.forEach((v, ym) => out.push([c, sb, v, ym]));
+    });
+    return out;
+  };
+  const budEntry = (k, make = false) => { let e = H.budgets.get(k); if (!e && make) H.budgets.set(k, (e = { base: [], months: new Map() })); return e; };
+  function parseBudgets(rows) {
+    const m = new Map();
+    (rows || []).forEach(r => {
+      const c = String(r[0] || '').trim(); if (!c) return;
+      const k = BK(c, String(r[1] || '').trim()), amt = Math.max(0, Number(r[2]) || 0), mo = String(r[3] || '').trim();
+      let e = m.get(k); if (!e) m.set(k, (e = { base: [], months: new Map() }));
+      if (/^\d{4}-\d{2}$/.test(mo)) e.months.set(mo, amt);
+      else e.base.push({ from: /^\d{4}-\d{2}~$/.test(mo) ? mo.slice(0, 7) : '', amt });
+    });
+    m.forEach(e => e.base.sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0)));
+    return m;
+  }
 
   function ingest(hh) {
     H.tx = (hh.tx || []).map(toTx).filter(t => /^\d{4}-\d{2}-\d{2}/.test(t.ts));
@@ -110,7 +132,7 @@
       if (H.cats[t] && String(r[1] || '').trim()) H.cats[t].push({ name: String(r[1]).trim(), subs: String(r[2] || '').split('|').map(s => s.trim()).filter(Boolean) });
     });
     H.assets = (hh.assets || []).map(r => ({ group: String(r[0] || '기타').trim() || '기타', name: String(r[1] || '').trim(), hidden: String(r[2] || '').trim().toUpperCase() === 'Y', memo: String(r[3] || ''), link: String(r[4] || '').trim() })).filter(a => a.name);
-    H.budgets = new Map((hh.budgets || []).filter(r => String(r[0] || '').trim() && Number(r[2]) > 0).map(r => [BK(String(r[0]).trim(), String(r[1] || '').trim()), Number(r[2])]));
+    H.budgets = parseBudgets(hh.budgets);
     H.rules = (hh.rules || []).map(toRule).filter(r => r.id);
     H.memos = (hh.memos || []).map(toMemo).filter(m => m.id);
     H.pending.forEach((t, id) => { if (!H.tx.some(x => x.id === id)) H.tx.push(t); });
@@ -376,10 +398,24 @@
       <div class="hb-meter"><i style="width:${Math.max(1.5, Math.abs(r.v) / mx * 100)}%;background:${r.c || color}"></i></div></div>`).join('');
   }
   // 결산 = 예산 대비 지출 (편한가계부와 같은 모양) + 자산별 수입·지출
-  function budgetOf(cat, sub) { return H.budgets.get(BK(cat, sub)) || 0; }
-  function catBudget(c) {
-    const own = budgetOf(c.name, '');
-    return own > 0 ? own : c.subs.reduce((a, s) => a + budgetOf(c.name, s), 0);
+  const curYm = () => ymOf(new Date());
+  // 그 달의 기본예산 (월을 비우면 가장 최근에 정한 기본예산)
+  function baseOf(cat, sub, ym = null) {
+    const e = H.budgets.get(BK(cat, sub)); if (!e) return 0;
+    let v = 0; e.base.forEach(b => { if (ym === null || !b.from || b.from <= ym) v = b.amt; });
+    return v;
+  }
+  function budgetOf(cat, sub, ym = curYm()) {
+    const e = H.budgets.get(BK(cat, sub)); if (!e) return 0;
+    return e.months.has(ym) ? e.months.get(ym) : baseOf(cat, sub, ym);
+  }
+  function catBudget(c, ym = curYm()) {
+    const own = budgetOf(c.name, '', ym);
+    return own > 0 ? own : c.subs.reduce((a, s) => a + budgetOf(c.name, s, ym), 0);
+  }
+  function catBase(c) {
+    const own = baseOf(c.name, '');
+    return own > 0 ? own : c.subs.reduce((a, s) => a + baseOf(c.name, s), 0);
   }
   function budRow(name, b, spent, { kind = 'cat', marker = null, toggle = null, open = true } = {}) {
     const pct = b > 0 ? spent / b : Infinity, over = spent > b, rem = b - spent;
@@ -404,13 +440,13 @@
     const rows = [];
     let tb = 0;
     H.cats['지출'].forEach(c => {
-      const b = catBudget(c);
+      const b = catBudget(c, ym);
       if (!(b > 0)) return;
       tb += b;
-      const subs = c.subs.filter(s => budgetOf(c.name, s) > 0);
+      const subs = c.subs.filter(s => budgetOf(c.name, s, ym) > 0);
       const open = !H.budClosed.has(c.name);
       rows.push(budRow(c.name, b, byCat.get(c.name) || 0, { kind: 'cat', marker, toggle: subs.length ? c.name : null, open }));
-      if (subs.length && open) subs.forEach(s => rows.push(budRow(s, budgetOf(c.name, s), bySub.get(BK(c.name, s)) || 0, { kind: 'sub', marker })));
+      if (subs.length && open) subs.forEach(s => rows.push(budRow(s, budgetOf(c.name, s, ym), bySub.get(BK(c.name, s)) || 0, { kind: 'sub', marker })));
     });
     const budget = rows.length
       ? budRow('전체예산', tb, total, { kind: 'top', marker }) + rows.join('')
@@ -1527,45 +1563,76 @@
   }
 
   /* ───────────── 설정: 예산 ───────────── */
+  const budIco = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="15" height="8" rx="1.5"/><path d="M6 15h6M14 4l6 6-6 6"/><path d="M9 11l7-7"/></svg>';
+  const budBanner = html => `<div class="bs-ban"><span class="bs-ban-ic">${budIco}</span><p>${html}</p></div>`;
   function openBudgetSettings() {
-    const pg = pushPage({ title: '예산 설정', body: '', refresh: p => draw(p) });
+    const open = new Set();
+    const pg = pushPage({ title: '예산설정', cls: 'bs-page', body: '', refresh: p => draw(p) });
     function draw(p = pg) {
       const list = H.cats['지출'];
-      const tot = list.reduce((a, c) => a + catBudget(c), 0);
-      $('.hh-pbody', p).innerHTML = `
-        <div class="card ha-sum num one"><div><span>한 달 전체 예산</span><b>${won(tot)}</b></div></div>
-        <div class="card hmo">${list.map((c, i) => {
-          const n = c.subs.filter(s => budgetOf(c.name, s) > 0).length, b = catBudget(c);
-          return `<button class="hmo-row" data-bi="${i}"><span>${esc(c.name)}${n ? `<small class="bs-sub">소분류 ${n}개</small>` : ''}</span><small class="num ${b ? 'bs-on' : ''}">${won(b)}</small>${ico.chev}</button>`;
-        }).join('')}</div>
-        <p class="note">분류를 누르면 분류 전체 예산과 소분류 예산을 정합니다. 예산이 0원인 분류는 결산에 나오지 않습니다. 예산은 매달 똑같이 적용됩니다.</p>`;
-      $$('[data-bi]', p).forEach(b => b.onclick = () => openBudgetEdit(list[Number(b.dataset.bi)]));
+      $('.hh-pbody', p).innerHTML = budBanner('추가된 예산은 <b>가계부탭 - 결산</b>에서 확인하실 수 있습니다.') + `
+        <div class="bs-list">${list.map((c, i) => {
+          const has = c.subs.length > 0, on = open.has(c.name);
+          return `<div class="bs-row"><button class="bs-name" ${has ? `data-bo="${i}" aria-expanded="${on}"` : `data-bc="${i}"`}><span>${esc(c.name)}</span>${has ? `<i class="bs-chev ${on ? 'open' : ''}">${ico.chev}</i>` : ''}</button>
+            <button class="bs-amt num" data-bc="${i}">${won(catBase(c))}${ico.chev}</button></div>
+            ${has && on ? `<div class="bs-subs">${c.subs.map((sb, j) => `<button class="bs-sub" data-bc="${i}" data-bsub="${j}"><span>${esc(sb)}</span><span class="num">${won(baseOf(c.name, sb))}</span>${ico.chev}</button>`).join('')}</div>` : ''}`;
+        }).join('')}</div>`;
+      $$('[data-bo]', p).forEach(b => b.onclick = () => { const n = list[Number(b.dataset.bo)].name; if (open.has(n)) open.delete(n); else open.add(n); draw(); });
+      $$('[data-bc]', p).forEach(b => b.onclick = () => { const c = list[Number(b.dataset.bc)]; openBudgetEdit(c, b.dataset.bsub !== undefined ? c.subs[Number(b.dataset.bsub)] : ''); });
     }
     draw();
   }
-  function openBudgetEdit(c) {
-    const own = budgetOf(c.name, '');
+  function openBudgetEdit(c, sub = '') {
+    const key = BK(c.name, sub), cur = curYm();
+    let year = Number(cur.slice(0, 4));
+    const isCat = !sub;
     const pg = pushPage({
-      title: `${esc(c.name)} 예산`, cls: 'hf-page',
-      body: `<div class="hf">
-        <div class="hf-row wide"><span class="hf-l">분류 전체</span><div class="hf-v"><input id="bAll" inputmode="numeric" autocomplete="off" placeholder="소분류 합계" value="${own ? fmt(own) : ''}"><span class="hf-unit">원</span></div></div>
-        <p class="hf-info">비워 두면 아래 소분류 예산의 합을 분류 예산으로 씁니다.</p>
-        ${c.subs.length ? `<h3 class="se-gh">소분류</h3>${c.subs.map((s, i) => `<div class="hf-row wide"><span class="hf-l">${esc(s)}</span><div class="hf-v"><input data-bs="${i}" inputmode="numeric" autocomplete="off" placeholder="없음" value="${budgetOf(c.name, s) ? fmt(budgetOf(c.name, s)) : ''}"><span class="hf-unit">원</span></div></div>`).join('')}` : ''}
-        <p class="form-error" id="bErr" role="alert"></p>
-        <div class="hf-btns"><button class="btn hf-save memo" id="bSave">저장하기</button></div></div>`,
+      title: esc(sub || c.name), cls: 'bs-page bs-ed',
+      actions: `<span class="bs-yn"><button class="hh-arrow" data-y="-1" aria-label="이전 해">${ico.left}</button><b id="bYear"></b><button class="hh-arrow" data-y="1" aria-label="다음 해">${ico.right}</button></span><button class="icon-btn" id="bDel" aria-label="예산 삭제">${ico.trash}</button>`,
+      body: '', refresh: p => draw(p),
     });
-    $$('input', pg).forEach(i => bindMoneyInput(i));
-    $('#bSave', pg).onclick = async () => {
-      const val = i => { const v = moneyVal(i.value); return Number.isFinite(v) && v > 0 ? v : 0; };
-      const next = new Map(H.budgets);
-      const setB = (k, v) => { if (v > 0) next.set(k, v); else next.delete(k); };
-      setB(BK(c.name, ''), val($('#bAll', pg)));
-      $$('[data-bs]', pg).forEach(i => setB(BK(c.name, c.subs[Number(i.dataset.bs)]), val(i)));
-      const btn = $('#bSave', pg); btn.disabled = true; btn.textContent = '저장 중…';
-      const prev = H.budgets; H.budgets = next;
-      if (await saveSettings({ budgets: budgetsArr() }, '예산을 저장했습니다')) { back(); rerender(); }
-      else { H.budgets = prev; btn.disabled = false; btn.textContent = '저장하기'; }
+    const save = async (msg, prev) => { if (!(await saveSettings({ budgets: budgetsArr() }, msg))) { H.budgets = prev; } draw(); rerender(); refreshPages(); };
+    const snap = () => new Map([...H.budgets].map(([k, e]) => [k, { base: e.base.map(b => ({ ...b })), months: new Map(e.months) }]));
+    function draw(p = pg) {
+      $('#bYear', p).textContent = `${year}년`;
+      const base = baseOf(c.name, sub);
+      const months = Array.from({ length: 12 }, (_, i) => `${year}-${pad(12 - i)}`);
+      const shown = ym => (isCat ? catBudget(c, ym) : budgetOf(c.name, sub, ym));
+      $('.hh-pbody', p).innerHTML = budBanner('기본 예산을 변경하면, 기본 예산은 다음달부터 적용됩니다. 월을 선택하면, 월별 예산을 설정할 수 있습니다. 대분류 예산이 0원이면, 대분류 예산은 소분류 예산의 합으로 표시됩니다.') + `
+        <button class="bs-base" id="bBase"><b>기본예산</b><b class="num">${won(isCat && !base ? catBase(c) : base)}</b></button>
+        <div class="bs-months">${months.map(ym => {
+          const e = H.budgets.get(key), own = e && e.months.has(ym);
+          return `<button class="bs-m" data-m="${ym}"><span class="bs-chip ${ym === cur ? 'cur' : ''} ${own ? 'own' : ''}">${+ym.slice(5)}월</span><span class="num">${won(shown(ym))}</span></button>`;
+        }).join('')}</div>`;
+      $('#bBase', p).onclick = async () => {
+        const v = await askText('기본예산', base ? String(base) : '', { money: true, ok: '저장', note: H.budgets.get(key)?.base.length ? '다음달부터 적용됩니다. 이번 달까지는 지금 예산이 그대로 남습니다.' : '처음 정하는 기본예산은 모든 달에 적용됩니다.' });
+        if (v === null) return;
+        const amt = Math.max(0, moneyVal(v) || 0), prev = snap(), e = budEntry(key, true);
+        if (!e.base.length) e.base.push({ from: '', amt });
+        else {
+          const nx = addMonths(cur, 1);
+          e.base = e.base.filter(b => !b.from || b.from <= cur);
+          e.base.push({ from: nx, amt });
+        }
+        await save('기본예산을 저장했습니다', prev);
+      };
+      $$('[data-m]', p).forEach(b => b.onclick = async () => {
+        const ym = b.dataset.m, e0 = H.budgets.get(key);
+        const v = await askText(`${ym.slice(0, 4)}년 ${+ym.slice(5)}월 예산`, e0 && e0.months.has(ym) ? String(e0.months.get(ym)) : String(budgetOf(c.name, sub, ym) || ''), { money: true, ok: '저장', note: '이 달만 바뀝니다. 비우고 저장하면 기본예산으로 돌아갑니다.' });
+        if (v === null) return;
+        const prev = snap(), e = budEntry(key, true);
+        if (v.trim() === '') e.months.delete(ym); else e.months.set(ym, Math.max(0, moneyVal(v) || 0));
+        await save(`${+ym.slice(5)}월 예산을 저장했습니다`, prev);
+      });
+    }
+    $$('[data-y]', pg).forEach(b => b.onclick = () => { year += Number(b.dataset.y); draw(); });
+    $('#bDel', pg).onclick = async () => {
+      if (!H.budgets.has(key)) { toast('지울 예산이 없습니다.'); return; }
+      if (!(await askConfirm(`'${sub || c.name}' 예산을 지울까요?`, '기본예산과 월별 예산이 모두 지워집니다.', '삭제'))) return;
+      const prev = snap(); H.budgets.delete(key);
+      await save('예산을 지웠습니다', prev);
     };
+    draw();
   }
 
   /* ───────────── 설정: 매월 반복 ───────────── */
