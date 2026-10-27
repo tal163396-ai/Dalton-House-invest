@@ -716,6 +716,9 @@ function ensureHeaders_(name, headers) {
  *                 월: 비움 = 기본예산(처음부터), '2026-11~' = 그 달부터 기본예산, '2026-09' = 그 달만
  * 가계부반복    : 매월 같은 날 자동으로 들어가는 내역 (앱을 열 때 밀린 달까지 채움)
  * 가계부메모    : 날짜별 메모 (첫 줄 = 제목, 고정 = 'Y'면 메모 탭 맨 위)
+ * 공약규칙      : 운동 공약 규칙. 적용일부터 다음 규칙 전날까지. 항목 = '운동,야식,배달' (첫 항목은 하면 좋은 것, 나머지는 하면 위반)
+ *                 완수/완수+위반/미완/미완+위반 = 그날 금액 (+면 나예→준환, −면 준환→나예)
+ * 공약기록      : 날짜별 체크. 값 = '운동:O,야식:X,배달:X' / 면제 = 'Y'면 그날 0원 / ID가 gs-로 시작하면 그 달 정산 완료 표시
  * 일시·ID 칸은 글자 서식(구글 시트가 날짜로 바꾸지 않게) */
 
 const HH_TABS = {
@@ -725,9 +728,11 @@ const HH_TABS = {
   '가계부반복': ['ID', '주기', '일', '구분', '분류', '소분류', '내용', '금액', '자산', '받는자산', '메모', '시작', '종료', '마지막생성', '투자구분', '투자계좌', '투자종목'],
   '가계부메모': ['ID', '날짜', '내용', '입력자', '고정'],
   '가계부예산': ['분류', '소분류', '금액', '월'],
+  '공약규칙':   ['ID', '적용일', '항목', '완수', '완수+위반', '미완', '미완+위반', '내용', '입력자'],
+  '공약기록':   ['ID', '날짜', '값', '면제', '메모', '입력자'],
 };
-const HH_TEXT = { '가계부': ['ID', '일시'], '가계부반복': ['ID', '시작', '종료', '마지막생성'], '가계부메모': ['ID', '날짜'], '가계부예산': ['월'] };
-const HH_KIND = { tx: '가계부', rule: '가계부반복', memo: '가계부메모' };
+const HH_TEXT = { '가계부': ['ID', '일시'], '가계부반복': ['ID', '시작', '종료', '마지막생성'], '가계부메모': ['ID', '날짜'], '가계부예산': ['월'], '공약규칙': ['ID', '적용일'], '공약기록': ['ID', '날짜'] };
+const HH_KIND = { tx: '가계부', rule: '가계부반복', memo: '가계부메모', habit: '공약기록', hrule: '공약규칙' };
 
 function readHH_() {
   if (!SpreadsheetApp.getActive().getSheetByName('가계부')) return { ready: false };
@@ -736,7 +741,7 @@ function readHH_() {
   return {
     ready: true, made,
     tx: read('가계부'), cats: read('가계부분류'), assets: read('가계부자산'), rules: read('가계부반복'), memos: read('가계부메모'),
-    budgets: read('가계부예산'),
+    budgets: read('가계부예산'), hrules: read('공약규칙'), habits: read('공약기록'),
   };
 }
 
@@ -1073,7 +1078,44 @@ function hhSave_(req) {
     if (r) out.inv = { type: o['투자구분'], amountKrw: r.amountKrw, realized: r.realized };
   }
   if (req.memo) out.memo = hhUpsert_('가계부메모', hhMemo_(req.memo));
+  if (req.habit) out.habit = hhUpsert_('공약기록', hhHabit_(req.habit));
+  if (req.hrule) out.hrule = hhUpsert_('공약규칙', hhHRule_(req.hrule));
+  if (req.habits || req.hrules) {
+    const hs = (req.habits || []).slice(0, 2000).map(hhHabit_), rs = (req.hrules || []).slice(0, 100).map(hhHRule_);
+    out.bulk = { habits: hhUpsertMany_('공약기록', hs), hrules: hhUpsertMany_('공약규칙', rs) };
+  }
   return out;
+}
+
+function hhHabit_(t) {
+  const o = { 'ID': hhId_(t['ID']), '날짜': hhStr_(t['날짜'], 10), '값': hhStr_(t['값'], 200), '면제': t['면제'] ? 'Y' : '', '메모': hhStr_(t['메모'], 300), '입력자': hhStr_(t['입력자'], 20) };
+  if (!/^gs?-/.test(o['ID'])) throw new Error('공약 기록 ID가 올바르지 않습니다');
+  if (!/^\d{4}-\d{2}(-\d{2})?$/.test(o['날짜'])) throw new Error('공약 날짜가 올바르지 않습니다');
+  return o;
+}
+function hhHRule_(t) {
+  const n = k => Math.round(num_(t[k]));
+  const o = { 'ID': hhId_(t['ID']), '적용일': hhStr_(t['적용일'], 10), '항목': hhStr_(t['항목'], 100), '완수': n('완수'), '완수+위반': n('완수+위반'), '미완': n('미완'), '미완+위반': n('미완+위반'), '내용': hhStr_(t['내용'], 5000), '입력자': hhStr_(t['입력자'], 20) };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(o['적용일'])) throw new Error('적용일이 올바르지 않습니다');
+  if (!o['항목']) throw new Error('항목을 입력하십시오');
+  return o;
+}
+/** 여러 줄 한 번에 저장 (지난 기록 가져오기). 같은 ID는 덮어씀 */
+function hhUpsertMany_(name, objs) {
+  if (!objs.length) return 0;
+  const sh = sheet_(name), head = hhHead_(sh), last = sh.getLastRow();
+  const idc = head.indexOf('ID');
+  const cur = last >= 2 ? sh.getRange(2, 1, last - 1, head.length).getValues() : [];
+  const at = new Map(); cur.forEach((r, i) => { const id = String(r[idc]).trim(); if (id) at.set(id, i); });
+  const add = [];
+  objs.forEach(o => {
+    const i = at.get(o.ID);
+    if (i !== undefined) head.forEach((h, c) => { if (h in o) cur[i][c] = o[h]; });
+    else { add.push(head.map(h => (h in o ? o[h] : ''))); at.set(o.ID, -1); }
+  });
+  if (cur.length) { hhTextFormat_(sh, name, head, 2, cur.length); sh.getRange(2, 1, cur.length, head.length).setValues(cur); }
+  if (add.length) { const r0 = Math.max(last, 1) + 1; hhTextFormat_(sh, name, head, r0, add.length); sh.getRange(r0, 1, add.length, head.length).setValues(add); }
+  return objs.length;
 }
 
 /** req = { kind: 'tx'|'rule'|'memo', id } */

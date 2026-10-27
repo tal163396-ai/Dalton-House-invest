@@ -93,10 +93,10 @@
   const H = {
     ready: true, loaded: false, loading: false,
     tx: [], byId: new Map(), byYm: new Map(), bal: new Map(),
-    cats: { 수입: [], 지출: [] }, assets: [], rules: [], memos: [],
+    cats: { 수입: [], 지출: [] }, assets: [], rules: [], memos: [], hrules: [], habits: new Map(), settled: new Map(),
     pending: new Map(),
     view: pick(sess.get('dh_hview'), ['book', 'stats', 'assets', 'more'], 'book'),
-    btab: pick(sess.get('dh_hbtab'), ['daily', 'close', 'memo', 'month'], 'daily'),
+    btab: pick(sess.get('dh_hbtab'), ['daily', 'close', 'memo', 'habit', 'month'], 'daily'),
     ym: /^\d{4}-\d{2}$/.test(sess.get('dh_hym') || '') ? sess.get('dh_hym') : ymOf(new Date()),
     budgets: new Map(), link: new Map(), inv: new Set(),
     budClosed: new Set((() => { try { return JSON.parse(store.get('dh_hbud_closed') || '[]'); } catch { return []; } })()),
@@ -180,6 +180,7 @@
     H.budgets = parseBudgets(hh.budgets);
     H.rules = (hh.rules || []).map(toRule).filter(r => r.id);
     H.memos = (hh.memos || []).map(toMemo).filter(m => m.id);
+    ingestHabits(hh);
     H.pending.forEach((t, id) => { if (!H.tx.some(x => x.id === id)) H.tx.push(t); });
     reindex();
   }
@@ -231,7 +232,7 @@
     clearTimeout(cacheT);
     cacheT = setTimeout(() => {
       try {
-        store.set(CACHE, JSON.stringify({ tx: H.tx.filter(t => !H.pending.has(t.id)).map(txArr), cats: catsArr(), assets: assetsArr(), rules: H.rules.map(ruleArr), memos: H.memos.map(m => [m.id, m.date, m.text, m.by, m.pin ? 'Y' : '']), budgets: budgetsArr() }));
+        store.set(CACHE, JSON.stringify({ tx: H.tx.filter(t => !H.pending.has(t.id)).map(txArr), cats: catsArr(), assets: assetsArr(), rules: H.rules.map(ruleArr), memos: H.memos.map(m => [m.id, m.date, m.text, m.by, m.pin ? 'Y' : '']), budgets: budgetsArr(), hrules: H.hrules.map(hruleArr), habits: habitArrs() }));
       } catch { /* 저장 공간 부족 등은 무시 */ }
     }, 400);
   }
@@ -266,7 +267,7 @@
     if (!H.active) return;
     $$('.hh-view').forEach(v => { v.hidden = v.id !== `hh-${H.view}`; });
     $$('#hhTabs .htab').forEach(t => t.classList.toggle('active', t.dataset.hv === H.view));
-    $('#hhFab').hidden = H.view !== 'book';
+    $('#hhFab').hidden = H.view !== 'book' || H.btab === 'habit';
     renderHead();
     if (!H.loaded) { $(`#hh-${H.view}`).innerHTML = '<div class="skeleton"></div><div class="skeleton" style="height:320px"></div>'; return; }
     if (!H.ready) {
@@ -370,7 +371,7 @@
     </div>`;
   }
   function renderBook() {
-    const tabs = [['daily', '일일'], ['close', '결산'], ['memo', '메모'], ['month', '월별']];
+    const tabs = [['daily', '일일'], ['close', '결산'], ['memo', '메모'], ['habit', '공약'], ['month', '월별']];
     const list = monthTx(H.ym);
     let body = '', sum = '';
     if (H.btab === 'month') {
@@ -378,6 +379,7 @@
       sum = sumBar(sums(H.tx.filter(t => t.d.startsWith(y))));
       body = monthsHtml(y);
     } else if (H.btab === 'memo') body = memoHtml(H.ym);
+    else if (H.btab === 'habit') body = habitHtml(H.ym);
     else {
       sum = sumBar(sums(list));
       body = H.btab === 'daily' ? dailyHtml(list) : closeHtml(H.ym);
@@ -388,7 +390,7 @@
         ${sum}
       </div>
       <div class="hh-body">${body}</div>`;
-    $$('#hh-book [data-bt]').forEach(b => b.onclick = () => { H.btab = b.dataset.bt; sess.set('dh_hbtab', H.btab); window.scrollTo({ top: 0 }); render(); });
+    $$('#hh-book [data-bt]').forEach(b => b.onclick = () => { H.btab = b.dataset.bt; sess.set('dh_hbtab', H.btab); $('#hhFab').hidden = H.btab === 'habit'; window.scrollTo({ top: 0 }); render(); });
     bindRows($('#hh-book'));
     if (H.btab === 'close') {
       $$('#hh-book [data-bcat]').forEach(r => r.onclick = () => {
@@ -408,6 +410,7 @@
       $$('#hh-book [data-goym]').forEach(b => b.onclick = e => { e.stopPropagation(); H.btab = 'daily'; sess.set('dh_hbtab', 'daily'); setYm(b.dataset.goym); });
     }
     if (H.btab === 'memo') $$('#hh-book .hm-memo').forEach(m => m.onclick = () => openMemo(H.memos.find(x => x.id === m.dataset.id)));
+    if (H.btab === 'habit') bindHabit($('#hh-book'));
   }
 
   function emptyHtml(a, b = '') { return `<div class="card"><p class="empty">${a}${b ? `<br><span class="sub">${b}</span>` : ''}</p></div>`; }
@@ -1908,6 +1911,297 @@
       catch (ex) { toast(`삭제 실패: ${ex.message}`, true); }
     };
     if (isNew) setTimeout(() => $('#mTitle', pg).focus(), 280);
+  }
+
+  /* ───────────── 운동 공약 (날짜별 O/X 체크 → 규칙대로 금액 자동 계산) ─────────────
+   * 공약규칙: 적용일부터 다음 규칙 전날까지. 항목 첫 번째는 '하면 좋은 것'(운동), 나머지는 '하면 위반'(야식·배달 등)
+   * 금액: 완수 / 완수+위반 / 미완 / 미완+위반.  + 이면 나예 → 준환, − 이면 준환 → 나예 */
+  const HB_ME = '준환', HB_YOU = '나예';
+  const HB_ORDER = ['운동', '야식', '저녁간식', '배달'];
+  function ingestHabits(hh) {
+    H.hrules = (hh.hrules || []).map(a => ({ id: String(a[0] || ''), start: String(a[1] || '').slice(0, 10), items: String(a[2] || '').split(',').map(x => x.trim()).filter(Boolean), amt: [a[3], a[4], a[5], a[6]].map(v => Math.round(Number(v) || 0)), text: String(a[7] || ''), by: String(a[8] || '') }))
+      .filter(r => r.id && /^\d{4}-\d{2}-\d{2}$/.test(r.start) && r.items.length).sort((a, b) => (a.start < b.start ? -1 : 1));
+    H.habits = new Map(); H.settled = new Map();
+    (hh.habits || []).forEach(a => {
+      const id = String(a[0] || '');
+      if (id.startsWith('gs-')) { H.settled.set(id.slice(3, 10), { id, memo: String(a[4] || ''), by: String(a[5] || '') }); return; }
+      const date = String(a[1] || '').slice(0, 10); if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+      H.habits.set(date, { id, date, vals: parseVals(a[2]), ex: String(a[3] || '').trim() !== '', memo: String(a[4] || ''), by: String(a[5] || '') });
+    });
+  }
+  function parseVals(s) { const o = {}; String(s || '').split(',').forEach(p => { const [k, v] = p.split(':').map(x => (x || '').trim()); if (k && /^[OX?]$/.test(v)) o[k] = v; }); return o; }
+  const valsStr = o => Object.entries(o).filter(([, v]) => v).map(([k, v]) => `${k}:${v}`).join(',');
+  const hruleArr = r => [r.id, r.start, r.items.join(','), ...r.amt, r.text, r.by];
+  const habitArrs = () => [...[...H.habits.values()].map(h => [h.id, h.date, valsStr(h.vals), h.ex ? 'Y' : '', h.memo, h.by]), ...[...H.settled].map(([ym, x]) => [x.id, ym, '', '', x.memo, x.by])];
+  const ruleOn = d => { let r = null; for (const x of H.hrules) { if (x.start <= d) r = x; else break; } return r; };
+  // 그날 금액 (계산할 수 없으면 null)
+  function dayAmt(d) {
+    const r = ruleOn(d), h = H.habits.get(d);
+    if (!r || !h) return null;
+    if (h.ex) return 0;
+    const m = h.vals[r.items[0]];
+    if (m !== 'O' && m !== 'X') return null;
+    const bad = r.items.slice(1).some(k => h.vals[k] === 'O');
+    return m === 'O' ? r.amt[bad ? 1 : 0] : r.amt[bad ? 3 : 2];
+  }
+  const hbWon = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmt(Math.abs(v))}`;
+  const payLine = t => (t < 0 ? `${HB_ME} → ${HB_YOU} <b>${fmt(-t)}원</b>` : t > 0 ? `${HB_YOU} → ${HB_ME} <b>${fmt(t)}원</b>` : '주고받을 돈 없음');
+  function habitDays(ym) {
+    const td = today(), last = ym < td.slice(0, 7) ? daysIn(ym) : ym === td.slice(0, 7) ? +td.slice(8, 10) : 0;
+    const first = H.hrules.length ? H.hrules[0].start : '9999';
+    const out = [];
+    for (let i = last; i >= 1; i--) { const d = `${ym}-${pad(i)}`; if (d >= first) out.push(d); }
+    return out;
+  }
+  function habitHtml(ym) {
+    if (!H.hrules.length) return `<div class="card hb-empty"><p class="empty">운동 공약 규칙이 아직 없습니다.<br><span class="sub">규칙을 만들면 날짜마다 O·X만 누르면 됩니다.</span></p>
+      <div class="hb-acts"><button class="btn primary" id="hbNewRule">규칙 만들기</button><button class="btn" id="hbImport">메모에서 지난 기록 가져오기</button></div></div>`;
+    const days = habitDays(ym);
+    if (!days.length) return emptyHtml(ym > today().slice(0, 7) ? '아직 오지 않은 달입니다.' : '이 달에는 공약 규칙이 없습니다.', ym > today().slice(0, 7) ? '' : '첫 규칙 적용일 이전입니다.');
+    const asc = days.slice().reverse(), cum = new Map(); let t = 0, n = 0;
+    asc.forEach(d => { const a = dayAmt(d); if (a !== null) { t += a; n++; } cum.set(d, t); });
+    const items = []; asc.forEach(d => { const r = ruleOn(d); r && r.items.forEach(k => { if (!items.includes(k)) items.push(k); }); });
+    const cnt = k => asc.filter(d => (H.habits.get(d) || { vals: {} }).vals[k] === 'O').length;
+    const r0 = ruleOn(days[0]), st = H.settled.get(ym), cur = ym === today().slice(0, 7);
+    const pill = (d, k, main) => {
+      const v = ((H.habits.get(d) || {}).vals || {})[k] || '';
+      const good = v && (v === 'O') === main && v !== '?';
+      return `<button class="hb-pl ${v === '?' ? 'q' : v ? (good ? 'g' : 'b') : ''}" data-hd="${d}" data-hk="${esc(k)}"><small>${esc(k)}</small><b>${v === 'O' ? 'O' : v === 'X' ? 'X' : v === '?' ? '?' : '–'}</b></button>`;
+    };
+    const rows = days.map(d => {
+      const r = ruleOn(d), h = H.habits.get(d), a = dayAmt(d), isT = d === today();
+      return `<div class="hb-r ${isT ? 'today' : ''}">
+        <button class="hb-dt" data-hday="${d}"><b>${+d.slice(8, 10)}</b><small>${WD[wdOf(d)]}</small></button>
+        <div class="hb-pls" style="--n:${r.items.length}">${r.items.map((k, i) => pill(d, k, i === 0)).join('')}</div>
+        <div class="hb-am num">${h && h.ex ? '<b class="ex">면제</b>' : a !== null ? `<b class="${a > 0 ? 'p' : a < 0 ? 'm' : ''}">${hbWon(a)}</b>` : isT ? '<b class="td">오늘</b>' : '<b class="na">–</b>'}<small>${a !== null || (h && h.ex) ? hbWon(cum.get(d)) : ''}</small></div>
+        ${h && h.memo ? `<button class="hb-memo" data-hday="${d}">${esc(h.memo)}</button>` : ''}
+      </div>`;
+    }).join('');
+    const amtTxt = r => `완수 ${hbWon(r.amt[0])}${r.items.length > 1 ? ` · 완수+위반 ${hbWon(r.amt[1])}` : ''} · 미완 ${hbWon(r.amt[2])}${r.items.length > 1 ? ` · 미완+위반 ${hbWon(r.amt[3])}` : ''}`;
+    return `<div class="card hb-sum">
+        <div class="hb-top"><span>${+ym.slice(5)}월 ${cur ? '누적' : '합계'} · ${n}일 기록</span><button class="hb-set" id="hbRules">규칙 ⚙</button></div>
+        <div class="hb-big num ${t < 0 ? 'm' : t > 0 ? 'p' : ''}">${t < 0 ? '−' : t > 0 ? '+' : ''}${fmt(Math.abs(t))}원</div>
+        <div class="hb-sub">${cur ? '송금 예정 · ' : ''}${payLine(t)}</div>
+        <div class="hb-cnt" style="--n:${items.length}">${items.map((k, i) => `<div><small>${esc(k)}</small><b class="num">${cnt(k)}<i>${i === 0 ? ` / ${n}일` : '번'}</i></b></div>`).join('')}</div>
+        <button class="hb-rule" id="hbRuleView"><span>${esc(amtTxt(r0))}</span><i>공약 내용 ›</i></button>
+        <button class="hb-settle ${st ? 'on' : ''}" id="hbSettle">${st ? `✓ 정산 완료${st.memo && st.memo !== '정산 완료' ? ` · ${esc(st.memo)}` : ''}` : '정산 완료 표시'}</button>
+      </div>
+      <div class="card hb-list">${rows}</div>
+      <p class="note hb-note">버튼을 누를 때마다 O → X → – 로 바뀝니다.<br>날짜를 누르면 면제·메모를 남길 수 있습니다.</p>`;
+  }
+  // 체크 저장: 같은 날짜를 연달아 누르면 마지막 것만 보냄
+  const hbTimers = new Map();
+  function saveHabit(d) {
+    clearTimeout(hbTimers.get(d));
+    hbTimers.set(d, setTimeout(async () => {
+      hbTimers.delete(d);
+      const h = H.habits.get(d);
+      try {
+        if (!h || (!valsStr(h.vals) && !h.ex && !h.memo)) { if (h) H.habits.delete(d); await D.api('hhDel', { kind: 'habit', id: `g-${d.replace(/-/g, '')}` }); }
+        else await D.api('hhSave', { habit: { ID: h.id, 날짜: d, 값: valsStr(h.vals), 면제: h.ex ? 'Y' : '', 메모: h.memo, 입력자: h.by } });
+        saveCache();
+      } catch (ex) { toast(`공약 저장 실패: ${ex.message}`, true); }
+    }, 500));
+  }
+  function habitRec(d) {
+    let h = H.habits.get(d);
+    if (!h) { h = { id: `g-${d.replace(/-/g, '')}`, date: d, vals: {}, ex: false, memo: '', by: store.get('dh_name') || '' }; H.habits.set(d, h); }
+    return h;
+  }
+  function bindHabit(root) {
+    const nr = $('#hbNewRule', root); if (nr) nr.onclick = () => openHRule(null);
+    const im = $('#hbImport', root); if (im) im.onclick = () => importHabits();
+    const rs = $('#hbRules', root); if (rs) rs.onclick = () => openHRules();
+    const rv = $('#hbRuleView', root); if (rv) rv.onclick = () => viewHRule(ruleOn(habitDays(H.ym)[0]));
+    $$('.hb-pl', root).forEach(b => b.onclick = () => {
+      const d = b.dataset.hd, k = b.dataset.hk, h = habitRec(d), v = h.vals[k] || '';
+      h.vals[k] = v === 'O' ? 'X' : v === 'X' ? '' : 'O';
+      if (!h.vals[k]) delete h.vals[k];
+      rerender(); saveHabit(d);
+    });
+    $$('[data-hday]', root).forEach(b => b.onclick = () => openHabitDay(b.dataset.hday));
+    const se = $('#hbSettle', root); if (se) se.onclick = async () => {
+      const ym = H.ym, st = H.settled.get(ym), id = `gs-${ym}`;
+      if (st) { if (!(await askConfirm(`${+ym.slice(5)}월 정산 완료 표시를 지울까요?`, '', '지우기'))) return; }
+      try {
+        if (st) { await D.api('hhDel', { kind: 'habit', id }); H.settled.delete(ym); }
+        else { const by = store.get('dh_name') || ''; await D.api('hhSave', { habit: { ID: id, 날짜: ym, 값: '', 면제: '', 메모: '정산 완료', 입력자: by } }); H.settled.set(ym, { id, memo: '정산 완료', by }); }
+        saveCache(); rerender(); toast(st ? '정산 완료 표시를 지웠습니다' : `${+ym.slice(5)}월 정산 완료로 표시했습니다`);
+      } catch (ex) { toast(`실패: ${ex.message}`, true); }
+    };
+  }
+  function openHabitDay(d) {
+    const h0 = H.habits.get(d) || { vals: {}, ex: false, memo: '' };
+    let ex = !!h0.ex;
+    D.openSheet(`<div class="ask"><h2 id="sheetTitle">${dateLabel(d)}</h2>
+      <button class="hb-exbtn ${ex ? 'on' : ''}" id="hbEx"><span><b>면제</b><small>그날은 0원으로 계산 (출장·여행 등)</small></span><i>${ex ? 'ON' : 'OFF'}</i></button>
+      <input class="ask-in" id="hbMemo" placeholder="한 줄 메모 (예: 치킨, 현금으로 줌)" value="${esc(h0.memo || '')}" maxlength="300">
+      <div class="sheet-actions two"><button class="btn" id="hbClr">기록 지우기</button><button class="btn primary" id="hbOk">저장</button></div></div>`, 'pop');
+    $('#hbEx').onclick = () => { ex = !ex; $('#hbEx').classList.toggle('on', ex); $('#hbEx i').textContent = ex ? 'ON' : 'OFF'; };
+    $('#hbOk').onclick = () => { const h = habitRec(d); h.ex = ex; h.memo = $('#hbMemo').value.trim(); D.closeSheet(); rerender(); saveHabit(d); };
+    $('#hbClr').onclick = () => { H.habits.delete(d); D.closeSheet(); rerender(); saveHabit(d); };
+  }
+  function viewHRule(r) {
+    if (!r) return;
+    D.openSheet(`<div class="ask hb-view"><h2 id="sheetTitle">공약 내용</h2><p class="note ask-note">${dateLabel(r.start)}부터 · 항목 ${esc(r.items.join(', '))}</p>
+      <div class="hb-amts">${[['완수', 0], ['완수+위반', 1], ['미완', 2], ['미완+위반', 3]].filter(([, i]) => r.items.length > 1 || i % 2 === 0).map(([k, i]) => `<div><small>${k}</small><b class="num ${r.amt[i] > 0 ? 'p' : r.amt[i] < 0 ? 'm' : ''}">${hbWon(r.amt[i])}원</b></div>`).join('')}</div>
+      ${r.text ? `<div class="hb-text">${esc(r.text)}</div>` : '<p class="note">적어 둔 공약 내용이 없습니다.</p>'}
+      <div class="sheet-actions two"><button class="btn" data-close>닫기</button><button class="btn primary" id="hbEditR">고치기</button></div></div>`, 'pop');
+    $('#hbEditR').onclick = () => { D.closeSheet(); openHRule(r); };
+  }
+  function openHRules() {
+    const draw = pg => {
+      $('#hbRl', pg).innerHTML = H.hrules.length ? H.hrules.slice().reverse().map((r, i) => `<button class="card hb-rl" data-rid="${esc(r.id)}">
+          <span class="hm-date">${dateLabel(r.start)}부터${i === 0 ? ' <em class="hb-now">지금 규칙</em>' : ''}</span>
+          <b>${esc(r.items.join(' · '))}</b><small class="num">완수 ${hbWon(r.amt[0])}${r.items.length > 1 ? ` / +위반 ${hbWon(r.amt[1])}` : ''} · 미완 ${hbWon(r.amt[2])}${r.items.length > 1 ? ` / +위반 ${hbWon(r.amt[3])}` : ''}</small></button>`).join('')
+        : emptyHtml('규칙이 없습니다.');
+      $$('[data-rid]', pg).forEach(b => b.onclick = () => openHRule(H.hrules.find(x => x.id === b.dataset.rid)));
+    };
+    pushPage({ title: '공약 규칙', cls: 'hf-page', refresh: draw,
+      body: `<div class="hf"><p class="note hb-help">공약이 바뀌면 '새 규칙'을 적용일과 함께 추가하십시오.<br>그 날부터 새 규칙으로 계산하고, 이전 날짜는 예전 규칙 그대로입니다.</p>
+        <div id="hbRl"></div>
+        <div class="hf-btns"><button class="btn hf-save memo" id="hbAdd">+ 새 규칙</button></div>
+        <button class="btn hb-imp" id="hbImp2">메모에서 지난 기록 가져오기</button></div>`,
+      onMount: pg => { draw(pg); $('#hbAdd', pg).onclick = () => openHRule(null); $('#hbImp2', pg).onclick = () => importHabits(); } });
+  }
+  function openHRule(r) {
+    const last = H.hrules[H.hrules.length - 1];
+    const base = r || (last ? { ...last, id: '', start: today(), text: last.text } : { items: ['운동', '야식', '배달'], amt: [700, 400, -3000, -4000], start: today(), text: '' });
+    const pg = pushPage({ title: r ? '규칙 고치기' : '새 규칙', cls: 'hf-page',
+      actions: r ? `<button class="icon-btn" id="hrDel" aria-label="규칙 삭제">${ico.trash}</button>` : '',
+      body: `<div class="hf">
+        <div class="hf-row"><span class="hf-l">적용일</span><div class="hf-v hf-date"><button type="button" class="hf-dt" id="hrDate" data-v="${base.start}"><span id="hrDateTxt">${dateLabel(base.start)}</span></button></div></div>
+        <label class="hb-f"><span>항목 <small>쉼표로 구분 · 첫 항목은 하면 좋은 것(운동), 나머지는 하면 위반</small></span><input id="hrItems" value="${esc(base.items.join(', '))}" placeholder="운동, 야식, 배달"></label>
+        <div class="hb-f2">
+          <label class="hb-f"><span>완수</span><input class="money hr-a" inputmode="numeric" value="${fmtSigned(base.amt[0])}"></label>
+          <label class="hb-f"><span>완수 + 위반</span><input class="money hr-a" inputmode="numeric" value="${fmtSigned(base.amt[1])}"></label>
+          <label class="hb-f"><span>미완</span><input class="money hr-a" inputmode="numeric" value="${fmtSigned(base.amt[2])}"></label>
+          <label class="hb-f"><span>미완 + 위반</span><input class="money hr-a" inputmode="numeric" value="${fmtSigned(base.amt[3])}"></label>
+        </div>
+        <p class="note hb-help">+ 는 ${HB_YOU} → ${HB_ME}, − 는 ${HB_ME} → ${HB_YOU}. 항목이 하나뿐이면 '완수'와 '미완'만 씁니다.</p>
+        <textarea id="hrText" class="hf-memo" rows="6" placeholder="공약 내용 (예: 팔굽혀펴기 100회 …)">${esc(base.text || '')}</textarea>
+        <p class="form-error" id="hrErr" role="alert"></p>
+        <div class="hf-btns"><button class="btn hf-save memo" id="hrSave">저장하기</button></div></div>`,
+    });
+    pickerOnTap(pg);
+    requestAnimationFrame(() => autoGrow($('#hrText', pg)));
+    const di = $('#hrDate', pg);
+    bindDateBtn(di, v => { $('#hrDateTxt', pg).textContent = dateLabel(v); });
+    $$('.hr-a', pg).forEach(i => i.addEventListener('input', () => { const neg = /^\s*[-−]/.test(i.value), dg = i.value.replace(/[^\d]/g, ''); i.value = (neg ? '-' : '') + (dg ? Number(dg).toLocaleString('ko-KR') : ''); }));
+    $('#hrSave', pg).onclick = async () => {
+      const items = $('#hrItems', pg).value.split(/[,，]/).map(x => x.trim()).filter(Boolean);
+      const amt = $$('.hr-a', pg).map(i => Math.round(Number(i.value.replace(/[^\d-]/g, '')) || 0));
+      const start = di.dataset.v || base.start;
+      if (!items.length) { $('#hrErr', pg).textContent = '항목을 하나 이상 적으십시오.'; return; }
+      if (H.hrules.some(x => x.start === start && (!r || x.id !== r.id))) { $('#hrErr', pg).textContent = '같은 적용일의 규칙이 이미 있습니다.'; return; }
+      const o = { id: r ? r.id : newId('hr'), start, items, amt, text: $('#hrText', pg).value.trim(), by: r ? r.by : (store.get('dh_name') || '') };
+      const btn = $('#hrSave', pg); btn.disabled = true; btn.textContent = '저장 중…';
+      try {
+        await D.api('hhSave', { hrule: { ID: o.id, 적용일: o.start, 항목: o.items.join(','), 완수: amt[0], '완수+위반': amt[1], 미완: amt[2], '미완+위반': amt[3], 내용: o.text, 입력자: o.by } });
+        H.hrules = H.hrules.filter(x => x.id !== o.id).concat(o).sort((a, b) => (a.start < b.start ? -1 : 1));
+        saveCache(); back(); rerender(); refreshPages(); toast('규칙을 저장했습니다');
+      } catch (ex) { btn.disabled = false; btn.textContent = '저장하기'; $('#hrErr', pg).textContent = ex.message; }
+    };
+    const del = $('#hrDel', pg); if (del) del.onclick = async () => {
+      if (!(await askConfirm('이 규칙을 지울까요?', '이 기간의 날짜는 바로 앞 규칙으로 계산됩니다.', '삭제'))) return;
+      try { await D.api('hhDel', { kind: 'hrule', id: r.id }); H.hrules = H.hrules.filter(x => x.id !== r.id); saveCache(); back(); rerender(); refreshPages(); toast('규칙을 지웠습니다'); }
+      catch (ex) { toast(`삭제 실패: ${ex.message}`, true); }
+    };
+  }
+  const fmtSigned = v => (v < 0 ? '-' : '') + Math.abs(v).toLocaleString('ko-KR');
+
+  /* 메모의 'N월 운동 공약' 기록을 읽어 규칙·날짜별 체크로 옮김 (한 번만 쓰는 가져오기) */
+  function parseHabitMemos() {
+    const rules = [], recs = new Map(), settled = [];
+    const memos = H.memos.filter(m => /^\s*\d{1,2}월\s*운동\s*공약/.test(m.text)).sort((a, b) => (a.date < b.date ? -1 : 1));
+    const dayRe = /^\s*(\d{1,2})월\s*(\d{1,2})일/;
+    memos.forEach(m => {
+      const lines = m.text.split('\n');
+      const yy = (m.text.match(/기한\s*:\s*(\d{2})년\s*(\d{1,2})월/) || []);
+      const year = yy[1] ? 2000 + +yy[1] : +m.date.slice(0, 4);
+      const mon = yy[2] ? +yy[2] : +(lines[0].match(/(\d{1,2})월/) || [])[1];
+      if (!mon) return;
+      const ym = `${year}-${pad(mon)}`;
+      const iDay = lines.findIndex(l => dayRe.test(l));
+      let iHead = iDay < 0 ? lines.length : iDay;
+      while (iHead > 0 && /^\s*(완료|운동\s*\d|운동\d)/.test(lines[iHead - 1])) iHead--;
+      const head = lines.slice(0, iHead).join('\n').trim();
+      if (/정산\s*완/.test(m.text)) settled.push(ym);
+      const seen = new Set();
+      const put = (d, vals, memo, ex) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d.slice(0, 7) !== ym) return;
+        Object.keys(vals).forEach(k => seen.add(k));
+        recs.set(d, { id: `g-${d.replace(/-/g, '')}`, date: d, vals, ex: !!ex, memo: (memo || '').slice(0, 300), by: m.by || '' });
+      };
+      lines.slice(Math.max(0, iDay)).forEach(raw => {
+        const l = raw.trim(); if (!dayRe.test(l)) return;
+        // 범위: 3월 6일 금요일 ~ 3월 10일 수요일 푸꾸옥 요가 대체 / 5월 17일~24일 터키 출장
+        const rg = l.match(/^(\d{1,2})월\s*(\d{1,2})일(?:\s*[월화수목금토일]요일)?\s*~\s*(?:(\d{1,2})월\s*)?(\d{1,2})일(?:\s*[월화수목금토일]요일)?\s*(.*)$/);
+        if (rg) {
+          const note = rg[5].trim(), lost = /사라|없음|모름/.test(note);
+          for (let k = +rg[2]; k <= +rg[4]; k++) put(`${year}-${pad(+rg[1])}-${pad(k)}`, {}, note, !lost);
+          return;
+        }
+        const sm = l.match(/^(\d{1,2})월\s*(\d{1,2})일(?:\s*[월화수목금토일]요일)?\s*(.*)$/);
+        if (!sm) return;
+        const d = `${year}-${pad(+sm[1])}-${pad(+sm[2])}`;
+        let rest = sm[3].trim();
+        if (!rest || /^\?+$/.test(rest)) return;
+        const vals = {}, notes = [];
+        const old = rest.match(/^(완료|완|ㅠ+)\s*(.*)$/);
+        if (old) {
+          vals['운동'] = old[1].startsWith('ㅠ') ? 'X' : 'O';
+          const n = old[2].replace(/^\((.*)\)$/, '$1').trim(); if (n) notes.push(n);
+        } else {
+          const keys = [['운동', /운동\s*([OX?ox])?/], ['야식', /야식\s*([OX?ox])?/], ['저녁간식', /저녁간식\s*([OX?ox])?/], ['배달', /배달(?:음식)?\s*([OX?ox])?(_\S+)?/]];
+          keys.forEach(([k, re]) => {
+            const x = rest.match(re); if (!x) return;
+            let v = (x[1] || '').toUpperCase();
+            if (!v && x[2]) v = 'O';
+            if (v) vals[k] = v;
+            if (x[2]) notes.push(x[2].slice(1));
+          });
+          const tail = rest.replace(/(운동|야식|저녁간식|배달(?:음식)?)\s*[OX?ox]?(_\S+)?/g, '').replace(/[-−]?\d[\d,]*\s*$/, '').trim();
+          if (tail && !/^[?\s]*$/.test(tail)) notes.push(tail.replace(/^\((.*)\)$/, '$1'));
+          if (!Object.keys(vals).length) return;
+        }
+        const note = notes.join(' · ');
+        put(d, vals, note, /벌금\s*(x|면제)|면제/i.test(note));
+      });
+      const items = HB_ORDER.filter(k => seen.has(k));
+      if (!items.length) items.push('운동');
+      const multi = items.length > 1;
+      const okC = /700원/.test(head) ? 700 : /400원/.test(head) ? 400 : /300원/.test(head) ? 300 : 0;
+      const amt = [okC, multi ? (/400원/.test(head) ? 400 : okC) : okC, /3천원|3,000원/.test(head) ? -3000 : 0, 0];
+      amt[3] = multi ? (/4천원|4,000원/.test(head) ? -4000 : amt[2]) : amt[2];
+      const prev = rules[rules.length - 1];
+      if (prev && prev.items.join() === items.join() && prev.amt.join() === amt.join()) return;
+      // 첫 규칙은 실제로 기록을 시작한 날부터 (예: 1월 12일)
+      const firstRec = [...recs.keys()].filter(d => d.startsWith(ym)).sort()[0];
+      rules.push({ id: `hr-${ym.replace('-', '')}`, start: !rules.length && firstRec ? firstRec : `${ym}-01`, items, amt, text: head, by: m.by || '' });
+    });
+    return { rules, recs: [...recs.values()], settled };
+  }
+  async function importHabits() {
+    const p = parseHabitMemos();
+    if (!p.recs.length && !p.rules.length) { toast("'N월 운동 공약' 메모를 찾지 못했습니다. 메모를 먼저 넣어 주십시오.", true); return; }
+    const newRecs = p.recs.filter(r => !H.habits.has(r.date)), newRules = p.rules.filter(r => !H.hrules.some(x => x.start === r.start));
+    const span = p.recs.length ? `${p.recs[0].date.slice(2, 7).replace('-', '.')} ~ ${p.recs[p.recs.length - 1].date.slice(2, 7).replace('-', '.')}` : '';
+    if (!(await askConfirm('메모에서 지난 기록을 가져올까요?', `${span} · 날짜별 기록 ${newRecs.length}일, 규칙 ${newRules.length}개<br>이미 기록이 있는 날짜와 같은 적용일의 규칙은 건너뜁니다.`, '가져오기', false))) return;
+    D.spin(true);
+    try {
+      const by = store.get('dh_name') || '';
+      const habits = newRecs.map(h => ({ ID: h.id, 날짜: h.date, 값: valsStr(h.vals), 면제: h.ex ? 'Y' : '', 메모: h.memo, 입력자: h.by || by }))
+        .concat(p.settled.filter(ym => !H.settled.has(ym)).map(ym => ({ ID: `gs-${ym}`, 날짜: ym, 값: '', 면제: '', 메모: '정산 완료', 입력자: by })));
+      const hrules = newRules.map(o => ({ ID: o.id, 적용일: o.start, 항목: o.items.join(','), 완수: o.amt[0], '완수+위반': o.amt[1], 미완: o.amt[2], '미완+위반': o.amt[3], 내용: o.text, 입력자: o.by || by }));
+      await D.api('hhSave', { habits, hrules });
+      newRecs.forEach(h => H.habits.set(h.date, h));
+      p.settled.forEach(ym => { if (!H.settled.has(ym)) H.settled.set(ym, { id: `gs-${ym}`, memo: '정산 완료', by }); });
+      H.hrules = H.hrules.concat(newRules).sort((a, b) => (a.start < b.start ? -1 : 1));
+      saveCache(); rerender(); refreshPages();
+      toast(`날짜별 기록 ${newRecs.length}일, 규칙 ${newRules.length}개를 가져왔습니다`);
+    } catch (ex) { toast(`가져오기 실패: ${ex.message}`, true); }
+    finally { D.spin(false); }
   }
 
   /* ───────────── 검색 ───────────── */
