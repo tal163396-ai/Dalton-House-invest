@@ -947,7 +947,7 @@ body.hh-mode .inv-fab { display: none; }
   -webkit-mask-image: linear-gradient(#000 78%, transparent); mask-image: linear-gradient(#000 78%, transparent); }
 
 /* 통계 */
-.hh-pseg { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; margin: 8px 0 6px; }
+.hh-pseg { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; margin: 8px 0 6px; }
 .hh-range { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; color: var(--ink-3); }
 .hh-range input { padding: 9px 10px; font-size: 14.5px; background: var(--card); }
 .hs-pie { padding: 8px 4px; }
@@ -1170,3 +1170,4 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .hmo-row .bs-on { color: var(--ink); font-weight: 700; }
 .ha-tl small { font-size: 12px; color: var(--ink-3); font-weight: 600; margin: 0 auto 0 6px; }
 .ha-row span small { white-space: normal; }
+.hmo-sub { font-size: 12.5px; font-weight: 500; color: var(--ink-4); margin-left: 4px; }

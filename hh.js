@@ -66,13 +66,13 @@
     cats: { 수입: [], 지출: [] }, assets: [], rules: [], memos: [],
     pending: new Map(),
     view: pick(sess.get('dh_hview'), ['book', 'stats', 'assets', 'more'], 'book'),
-    btab: pick(sess.get('dh_hbtab'), ['daily', 'month', 'close', 'memo'], 'daily'),
+    btab: pick(sess.get('dh_hbtab'), ['daily', 'close', 'month', 'memo'], 'daily'),
     ym: /^\d{4}-\d{2}$/.test(sess.get('dh_hym') || '') ? sess.get('dh_hym') : ymOf(new Date()),
     budgets: new Map(), link: new Map(), inv: new Set(),
     budClosed: new Set((() => { try { return JSON.parse(store.get('dh_hbud_closed') || '[]'); } catch { return []; } })()),
     openMonths: new Set(), openInit: new Set(),
     st: {
-      period: pick(store.get('dh_hst_p'), ['week', 'month', 'year', 'range'], 'month'),
+      period: pick(store.get('dh_hst_p'), ['month', 'year', 'range'], 'month'),
       type: pick(store.get('dh_hst_t'), ['수입', '지출'], '지출'),
       anchor: today(), from: `${today().slice(0, 4)}-01-01`, to: today(),
     },
@@ -257,7 +257,7 @@
     </div>`;
   }
   function renderBook() {
-    const tabs = [['daily', '일일'], ['month', '월별'], ['close', '결산'], ['memo', '메모']];
+    const tabs = [['daily', '일일'], ['close', '결산'], ['month', '월별'], ['memo', '메모']];
     const list = monthTx(H.ym);
     let body = '', sum = '';
     if (H.btab === 'month') {
@@ -463,7 +463,7 @@
     const list = inRange(from, to), s = sums(list), type = H.st.type;
     const items = catTotals(list, type).map((x, i) => ({ ...x, c: COLORS[i % COLORS.length] }));
     const total = type === '수입' ? s.inc : s.exp;
-    const P = [['week', '주간'], ['month', '월간'], ['year', '연간'], ['range', '기간']];
+    const P = [['month', '월간'], ['year', '연간'], ['range', '기간']];
     $('#hh-stats').innerHTML = `
       <div class="hh-sticky">
         <div class="seg hh-pseg" role="group" aria-label="기간 단위">${P.map(([k, n]) => `<button data-p="${k}" class="${H.st.period === k ? 'on' : ''}">${n}</button>`).join('')}</div>
@@ -758,7 +758,7 @@
       <div class="card hmo">
         <button class="hmo-row" data-go="search"><span>내역 검색</span>${ico.chev}</button>
         <button class="hmo-row" data-go="csv"><span>내역 내려받기 (CSV)</span><small>${fmt(n)}건</small>${ico.chev}</button>
-        <button class="hmo-row" data-go="reload"><span>가계부 새로 불러오기</span>${ico.chev}</button>
+        <button class="hmo-row" data-go="reload"><span>새로고침 <small class="hmo-sub">(가계부 새로 불러오기)</small></span>${ico.chev}</button>
         <button class="hmo-row" data-go="inv"><span>투자 화면으로</span>${ico.chev}</button>
       </div>
       <p class="note hmo-note">가계부는 구글 시트의 '가계부' 탭들에 저장되어 두 사람 휴대폰에 바로 같이 보입니다(동기화). 시트에서 직접 고친 뒤 새로 불러오면 앱에 반영됩니다.<br>
