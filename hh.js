@@ -765,7 +765,7 @@
       const linked = H.assets.filter(x => H.link.get(x.name) === name).map(x => x.name);
       return `
         <section class="card hp-asset">
-          <span class="hp-ag">${esc(a ? a.group : '목록에 없는 자산')}${a && a.hidden ? ' · 숨김' : ''}</span>
+          ${isInv ? '' : `<span class="hp-ag">${esc(a ? a.group : '목록에 없는 자산')}${a && a.hidden ? ' · 숨김' : ''}</span>`}
           ${isInv ? (() => { const t = invTotal(); const pl = t ? t.value - t.cost : 0, r = t && t.cost ? pl / t.cost * 100 : 0;
               return `<div class="hp-invrow"><div class="hp-invl"><span class="hp-invlb">투자 앱 원금</span><div class="hp-bal sm num">${t ? won(t.cost) : '—'}</div></div>
                 ${t ? `<div class="hp-chips"><span class="hp-chip num">평가금 ${compactWon(t.value)}</span><span class="hp-chip num ${pl < 0 ? 'neg' : 'pos'}">${pl >= 0 ? '+' : ''}${compactWon(pl)} · ${pl >= 0 ? '+' : '−'}${Math.abs(r).toFixed(1)}%</span></div>` : ''}</div>`; })()
