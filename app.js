@@ -1606,7 +1606,7 @@
     '매도': '팔았을 때.<br>실현손익(익절·손절)이 자동 계산되어 월별 수익에 반영됩니다.',
     '입금': '계좌에 새 돈을 넣었을 때 (예: 월급에서 ISA로 이체).<br>원금과 예수금이 함께 늘어나 수익으로 잘못 잡히지 않습니다.',
     '출금': '계좌에서 돈을 뺐을 때.<br>원금과 예수금이 함께 줄어듭니다.',
-    '금액 수정': '예수금·금·현용주화처럼 직접 관리하는 금액을 지금 값으로 맞출 때.',
+    '금액 수정': '증권사 화면과 다를 때 지금 값으로 맞춥니다.<br>종목은 수량·평단·원금, 예수금·금처럼 직접 관리하는 항목은 금액을 고칩니다.',
   };
 
   const isTradable = r => !/예수금/.test(r.sub) && !r.method.startsWith('수동') && r.kind !== '현금';
@@ -1619,21 +1619,31 @@
     const el = $('#view-record');
     const types = ['매수', '매도', '입금', '출금', '금액 수정'];
     const kindsOf = rows => [...new Set(rows.map(r => r.kind))];
-    const manualRows = D.rows.filter(r => r.method.startsWith('수동'));
 
     let body = '';
     if (F.type === '금액 수정') {
-      if (!manualRows.some(r => rowKey(r) === F.key)) F.key = manualRows[0] ? rowKey(manualRows[0]) : '';
+      const fixRows = D.rows.filter(r => r.asset);
+      if (!fixRows.some(r => rowKey(r) === F.key)) F.key = fixRows[0] ? rowKey(fixRows[0]) : '';
       const cur = findRow(F.key);
       const usd = cur && cur.cur === 'USD';
+      const trad = cur && isTradable(cur);
+      const groups = kindsOf(fixRows).map(k => `<optgroup label="${esc(k)}">${fixRows.filter(r => r.kind === k).map(r => `<option value="${esc(rowKey(r))}" ${rowKey(r) === F.key ? 'selected' : ''}>${esc(r.sub || r.asset)}${r.asset !== r.sub && r.asset !== k ? ` · ${esc(r.asset)}` : ''}</option>`).join('')}</optgroup>`).join('');
+      const sym = usd ? '$' : '';
       body = `
-        <label class="field"><span>수정할 항목</span>
-          <select id="fManual">${manualRows.map(r => `<option value="${esc(rowKey(r))}" ${rowKey(r) === F.key ? 'selected' : ''}>${esc(r.kind)} · ${esc(r.asset === r.sub ? r.asset : r.sub)}</option>`).join('')}</select>
-        </label>
+        <label class="field"><span>수정할 항목</span><select id="fManual">${groups}</select></label>
+        ${trad ? `
+        <p class="fix-note">증권사 앱의 <b>체결잔고·매입단가·매입금액</b>을 그대로 넣으십시오. 비워 둔 칸은 바뀌지 않습니다.</p>
+        <div class="two">
+          <label class="field"><span>수량</span><input id="fxQty" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.qty}"></label>
+          <label class="field"><span>평단가 (${usd ? '달러' : '원'})</span><input id="fxAvg" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.avg || ''}"></label>
+        </div>
+        <label class="field"><span>원금 = 매입금액 (원)</span><input id="fxCost" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="${Math.round(cur.cost).toLocaleString('ko-KR')}"></label>
+        <p class="preview num">지금 기록: ${cur.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}주 · 평단 ${sym}${(cur.avg || 0).toLocaleString('ko-KR')}${usd ? '' : '원'} · 원금 ${won(cur.cost)}</p>
+        <p class="preview num" id="fxHint"></p>` : `
         <label class="field"><span>${usd ? '지금 금액 (달러)' : '지금 금액 (원)'}</span>
           <input id="fValue" class="${usd ? '' : 'money'}" type="${usd ? 'number' : 'text'}" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur ? (usd ? cur.qty : Math.round(cur.value).toLocaleString('ko-KR')) : ''}">
         </label>
-        <p class="preview">${cur ? `기록된 값 ${usd ? `$${cur.qty.toLocaleString('en-US')}` : won(cur.value)}` : ''}</p>
+        <p class="preview">${cur ? `기록된 값 ${usd ? `$${cur.qty.toLocaleString('en-US')}` : won(cur.value)}` : ''}</p>`}
         <p class="form-error" id="fErr" role="alert"></p>
         <button class="btn primary" id="fSubmit">금액 저장하기</button>`;
     } else if (F.type === '입금' || F.type === '출금') {
@@ -1742,6 +1752,13 @@
       p.textContent = q && pr ? `${usd ? `$${(q * pr).toLocaleString('en-US', { maximumFractionDigits: 2 })} · ` : ''}약 ${won(q * pr * (usd ? D.rate : 1))}` : '';
     };
     on('#fQty', 'input', upd); on('#fPrice', 'input', upd);
+    const fxUpd = () => {
+      const h = $('#fxHint', el); if (!h) return;
+      const row = findRow(F.key); if (!row) return;
+      const q = $('#fxQty').value === '' ? row.qty : num($('#fxQty').value), a = $('#fxAvg').value === '' ? row.avg : num($('#fxAvg').value);
+      h.textContent = ($('#fxQty').value || $('#fxAvg').value) && q && a ? `수량×평단 = ${row.cur === 'USD' ? `$${(q * a).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : won(q * a)}` : '';
+    };
+    on('#fxQty', 'input', fxUpd); on('#fxAvg', 'input', fxUpd);
     on('#fSubmit', 'click', submitForm);
     bindMonthClose(el);
     bindMoney(el);
@@ -1849,7 +1866,16 @@
     const btn = $('#fSubmit');
     let payload, action;
     const base = () => ({ type: F.type, by: store.get(LS.name) || '', memo: $('#fMemo').value.trim(), date: `${$('#fDate').value}T${new Date().toTimeString().slice(0, 8)}+09:00` });
-    if (F.type === '금액 수정') {
+    if (F.type === '금액 수정' && $('#fxQty')) {
+      const row = findRow($('#fManual').value);
+      if (!row) { err.textContent = '수정할 항목을 선택하십시오.'; return; }
+      const fix = {}; const q = $('#fxQty').value.trim(), a = $('#fxAvg').value.trim(), c = String($('#fxCost').value).replace(/,/g, '').trim();
+      if (q !== '') fix.qty = Number(q); if (a !== '') fix.avg = Number(a); if (c !== '') fix.cost = Number(c);
+      if (!Object.keys(fix).length) { err.textContent = '바꿀 값을 하나 이상 입력하십시오.'; return; }
+      if (Object.values(fix).some(v => !Number.isFinite(v) || v < 0)) { err.textContent = '숫자를 올바르게 입력하십시오.'; return; }
+      action = 'manual';
+      payload = { manual: { asset: row.asset, sub: row.sub, fix } };
+    } else if (F.type === '금액 수정') {
       const row = findRow($('#fManual').value);
       const v = String($('#fValue').value).replace(/,/g, '');
       if (!row) { err.textContent = '수정할 항목을 선택하십시오.'; return; }
@@ -1908,6 +1934,7 @@
     sw.setAttribute('aria-label', mode === 'hh' ? '투자 화면으로' : '가계부로'); sw.title = mode === 'hh' ? '투자 화면으로' : '가계부로';
     if (mode === 'hh') {
       $$('.view:not(.hh-view)').forEach(v => { v.hidden = true; });
+      $('#invFab').hidden = true;
       window.HH.enter();
     } else {
       if (window.HH) window.HH.leave();
@@ -1922,9 +1949,10 @@
   /* ───────────── 공통 UI ───────────── */
   function go(view, keepY = false) {
     state.view = view; sess.set('dh_view', view);
-    if (state.app === 'hh') return;
+    if (state.app === 'hh') { $('#invFab').hidden = true; return; }
     $$('.view').forEach(v => { v.hidden = v.id !== `view-${view}`; });
     $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+    $('#invFab').hidden = view !== 'assets';
     if (!keepY) window.scrollTo({ top: 0 });
     if (view === 'home') { homePagerApi.align(state.hPage || 0); drawPlan(); }
     if (view === 'years') { fitOneLine($('#view-years')); yPagerApi.align(state.yPage || 0); }
@@ -2070,6 +2098,13 @@
     $$('.tab').forEach(t => t.onclick = () => go(t.dataset.view));
     $('#refreshBtn').onclick = () => load();
     $('#appSwitch').onclick = () => setApp(state.app === 'hh' ? 'inv' : 'hh');
+    $('#invFab').onclick = () => {
+      // 보유자산 + 버튼 = 새 자산 추가 (매수 → 새 종목)
+      const F = state.form; F.type = '매수'; F.key = '__new';
+      if (!F.kind || F.kind === '현금') F.kind = (state.data?.rows.find(r => r.kind && r.kind !== '현금') || {}).kind || '';
+      state.rPage = 0; renderRecord(); go('record');
+      setTimeout(() => { const n = $('#fNewName'); if (n) n.focus(); }, 50);
+    };
     $('#maskBtn').onclick = () => setMask(!document.body.classList.contains('masked'));
     setMask(store.get('dh_mask') === '1', true);
     $('#menuBtn').onclick = openMenu;

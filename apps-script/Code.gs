@@ -349,6 +349,15 @@ function setManual_(m) {
   const r = findRow_(t, String(m.asset || '').trim(), String(m.sub || m.asset || '').trim());
   if (r < 0) throw new Error('보유현황에서 해당 줄을 찾지 못했습니다');
   const cur = String(t.values[r][t.col['통화']]).trim();
+  if (m.fix) {
+    // 종목 줄 직접 고치기: 수량·평단가·원금(원) 중 보낸 것만
+    const f = m.fix, done = [];
+    if (f.qty !== undefined && f.qty !== '') { if (!(num_(f.qty) >= 0)) throw new Error('수량이 올바르지 않습니다'); setCell_(t, r, '수량', round_(num_(f.qty), 6)); done.push('수량'); }
+    if (f.avg !== undefined && f.avg !== '') { if (!(num_(f.avg) >= 0)) throw new Error('평단가가 올바르지 않습니다'); setCell_(t, r, '평단가', round_(num_(f.avg), 4)); done.push('평단가'); }
+    if (f.cost !== undefined && f.cost !== '') { if (!(num_(f.cost) >= 0)) throw new Error('원금이 올바르지 않습니다'); setCell_(t, r, '원금(원)', Math.round(num_(f.cost))); done.push('원금'); }
+    if (!done.length) throw new Error('바꿀 값이 없습니다');
+    return { ok: true, message: `${String(m.sub || m.asset)} ${done.join('·')} 저장했습니다` };
+  }
   if (cur === 'USD' && m.usd !== undefined) {
     setCell_(t, r, '수량', round_(num_(m.usd), 2));
   } else {

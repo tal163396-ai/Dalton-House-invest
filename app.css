@@ -873,6 +873,9 @@ body.hh-mode .app-switch .ic-inv { display: block; }
   display: grid; place-items: center; box-shadow: 0 6px 18px rgba(240,96,90,.38);
 }
 .hh-fab:active { transform: scale(.95); }
+.inv-fab { background: var(--accent, #3b82f6); box-shadow: 0 6px 18px rgba(59,130,246,.38); }
+body.hh-mode .inv-fab { display: none; }
+.fix-note { font-size: 12.5px; color: var(--ink-3); margin: -2px 0 6px; line-height: 1.5; }
 .hh-view { padding-bottom: 88px; }
 
 /* 고정되는 윗부분 (탭 · 합계) */
