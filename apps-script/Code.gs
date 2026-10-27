@@ -876,14 +876,19 @@ function hhTx_(t) {
   // 투자 앱 연결: 이체 = 입금·매수(투자 계좌로 보냄) / 출금·매도(투자 계좌에서 찾음)
   //               잔액수정 = 비용(구독료 등 투자에 든 돈 → 그 구성의 실현손익에 기타 비용)
   o['투자구분'] = o['구분'] === '이체' || o['구분'] === '수정' ? hhStr_(t['투자구분'], 4) : '';
-  if (o['투자구분'] && (o['구분'] === '이체' ? ['입금', '출금', '매수', '매도'] : ['비용']).indexOf(o['투자구분']) < 0) throw new Error('투자 앱 연결 구분이 올바르지 않습니다');
+  if (o['투자구분'] && (o['구분'] === '이체' ? ['입금', '출금', '매수', '매도', '기존'] : ['비용']).indexOf(o['투자구분']) < 0) throw new Error('투자 앱 연결 구분이 올바르지 않습니다');
   if (o['투자구분'] === '비용' && !(o['금액'] < 0)) throw new Error('투자 비용은 잔액이 줄어드는 금액(−)으로 입력하세요');
   o['투자계좌'] = o['투자구분'] ? hhStr_(t['투자계좌'], 80) : '';
   o['투자종목'] = o['투자구분'] ? hhStr_(t['투자종목'], 80) : '';
   const tq = o['투자구분'] === '매수' || o['투자구분'] === '매도';
   o['투자수량'] = tq ? Number(t['투자수량']) : '';
   o['투자단가'] = tq ? Number(t['투자단가']) : '';
-  if (o['투자구분'] === '비용') { if (!o['투자계좌']) throw new Error('투자 비용을 넣을 구성을 고르세요'); }
+  // '기존' = 이미 투자 앱 원금에 들어간 이체 (기록만 연결, 투자 앱 숫자는 그대로)
+  if (o['투자구분'] === '기존') {
+    o['투자계좌'] = ''; o['투자종목'] = '';
+    const inv = hhInvAssets_();
+    if (!inv[o['받는자산']] === !inv[o['자산']]) throw new Error('이미 반영됨은 투자 계좌와 주고받는 이체에만 쓸 수 있습니다');
+  } else if (o['투자구분'] === '비용') { if (!o['투자계좌']) throw new Error('투자 비용을 넣을 구성을 고르세요'); }
   else if (o['투자구분']) {
     if (!o['투자계좌']) throw new Error('투자 앱 계좌를 고르세요');
     if (tq && !(o['투자수량'] > 0 && o['투자단가'] > 0)) throw new Error('수량과 단가를 입력하세요');
@@ -909,7 +914,7 @@ function hhLinkSpec_(o) {
   if (ty === '비용' && kind === '수정') {
     return { type: '비용', asset: String(o['투자계좌']).trim(), sub: String(o['투자종목'] || o['투자계좌']).trim(), amountKrw: Math.abs(Math.round(num_(o['금액']))), date: ts, by: o['입력자'] || '', memo: String(o['내용'] || '').trim() || '투자 비용' };
   }
-  if (!ty || kind !== '이체') return null;
+  if (!ty || ty === '기존' || kind !== '이체') return null;   // 기존 = 투자 앱 기록 없음
   const spec = { type: ty, asset: String(o['투자계좌']).trim(), sub: String(o['투자종목'] || o['투자계좌']).trim(), amountKrw: Math.round(num_(o['금액'])), date: ts, by: o['입력자'] || '' };
   if (ty === '매수' || ty === '매도') { spec.qty = num_(o['투자수량']); spec.price = num_(o['투자단가']); }
   spec.memo = `가계부: ${String(o['내용'] || '').trim() || (ty === '입금' || ty === '매수' ? '투자 계좌로 이체' : '투자 계좌에서 찾음')}`;

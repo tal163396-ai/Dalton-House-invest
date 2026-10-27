@@ -130,8 +130,10 @@
   const ruleObj = r => ({ ID: r.id, 주기: r.period || '매월', 일: r.day, 구분: r.type, 분류: r.cat, 소분류: r.sub, 내용: r.text, 금액: r.amt, 자산: r.asset, 받는자산: r.to, 메모: r.memo, 시작: r.start, 종료: r.end, 마지막생성: r.last, 투자구분: r.invType || '', 투자계좌: r.invAcct || '', 투자종목: r.invSub || '' });
   const toRule = a => ({ id: String(a[0]), period: PERIODS.includes(String(a[1] || '').trim()) ? String(a[1]).trim() : '매월', day: Number(a[2]) || 1, type: String(a[3] || ''), cat: String(a[4] || ''), sub: String(a[5] || ''), text: String(a[6] || ''), amt: Number(a[7]) || 0, asset: String(a[8] || ''), to: String(a[9] || ''), memo: String(a[10] || ''), start: String(a[11] || ''), end: String(a[12] || ''), last: String(a[13] || ''), invType: String(a[14] || ''), invAcct: String(a[15] || ''), invSub: String(a[16] || '') });
   // 투자 앱 연결 표시: 'ISA 입금', 'TIGER … 3주 매수'
+  const INV_KEEP = '기존';   // 이미 투자 앱에 반영된 이체: 연결 표시만, 투자 앱 숫자는 그대로
   const invLabel = (t, opts) => {
     if (!t.invType) return '';
+    if (t.invType === INV_KEEP) return '이미 반영됨 (기록만 연결)';
     const o = opts || (D.invOptions && D.invOptions());
     let name = t.invSub || t.invAcct;
     if (o) {
@@ -417,7 +419,7 @@
 
   function rowHtml(t, { balAfter = null, forAsset = null, showDate = false, raw = false } = {}) {
     let left, cls = '', amtTxt;
-    if (t.type === '이체') { left = `<span class="hr-cat">이체</span>${t.invType ? `<small class="hr-invs">투자 앱 ${esc(t.invType)}</small>` : ''}`; cls = 'tr'; }
+    if (t.type === '이체') { left = `<span class="hr-cat">이체</span>${t.invType ? `<small class="hr-invs">투자 앱 ${t.invType === INV_KEEP ? '반영됨' : esc(t.invType)}</small>` : ''}`; cls = 'tr'; }
     else if (t.type === '수정') { left = `<span class="hr-cat">잔액수정</span>${t.invType === '비용' ? `<small class="hr-invs">투자 비용</small>` : ''}`; cls = 'adj'; }
     else { left = `<span class="hr-cat">${esc(t.cat || '미분류')}</span>${t.sub ? `<small>${esc(t.sub)}</small>` : ''}`; cls = t.type === '수입' ? 'inc' : 'exp'; }
     if (forAsset) {
@@ -1464,7 +1466,7 @@
     const invDir = () => (f.type !== '이체' ? '' : H.inv.has(f.to) ? 'in' : H.inv.has(f.asset) ? 'out' : '');
     const invOk = () => {
       const d = invDir();
-      if (!d || !f.inv || !f.inv.type) return;
+      if (!d || !f.inv || !f.inv.type || f.inv.type === INV_KEEP) return;
       const into = f.inv.type === '입금' || f.inv.type === '매수';
       if ((d === 'in') !== into || (isRule && (f.inv.type === '매수' || f.inv.type === '매도'))) f.inv = null;
     };
@@ -1525,6 +1527,7 @@
           ${usd && pK() ? `<p class="hf-info">원화로 산 단가입니다. 평단은 환율 ${fmt(D.rate ? D.rate() || 0 : 0)}원으로 달러 환산해 기록합니다.</p>` : ''}` : ''}
           <p class="hf-info">${!f.inv ? `투자 계좌${dir === 'in' ? '로 보내는' : '에서 찾는'} 이체입니다. 투자 앱의 어느 계좌${dir === 'in' ? '에 들어가는지' : '에서 나오는지'} 고르십시오.<br>투자 앱에 따로 적을 거면 '연결 안 함'을 고르십시오.`
             : !f.inv.type ? '투자 앱에는 기록하지 않습니다.'
+            : f.inv.type === INV_KEEP ? '이미 투자 앱 원금에 들어간 이체로 표시만 합니다. 투자 앱 숫자는 바뀌지 않습니다.'
             : `${isRule ? '매달 자동으로 들어갈 때 투자 앱에도 같은 금액으로 기록됩니다.' : '저장하면 투자 앱에도 같은 금액으로 기록됩니다.'}${item && f.inv.type === '매도' ? `<br>지금 보유 ${item.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}주` : ''}${trade ? `<br>금액은 투자 앱의 실제 원화 금액(원금)으로 들어갑니다.` : ''}`}</p>` : ''}
         <div class="hf-row"><span class="hf-l">내용</span><div class="hf-v"><textarea id="hfText" class="hf-text" rows="1" maxlength="200" autocomplete="off" enterkeyhint="done" placeholder="${tr ? '예: 생활비 이체' : '예: 점심'}">${esc(f.text)}</textarea></div></div>
         <div class="hf-sugg" id="hfSugg"></div>
@@ -1728,7 +1731,8 @@
             <div class="pk-g">예수금 ${inT}</div><div class="pk-list">${o.acc.map(x => btn(inT, x.asset, x.sub, x.label, x.cur === 'USD' ? '원화 금액을 환율로 달러로 바꿔 넣습니다' : '')).join('')}</div>
             ${(o.manual || []).length ? `<div class="pk-g">원금 ${dir === 'in' ? '추가' : '빼기'} <small>금액만 직접 관리하는 항목 · 원금과 평가금이 함께 바뀜</small></div><div class="pk-list">${o.manual.map(x => btn(inT, x.asset, x.sub, x.label, `${x.kind} · 원금 ${won(x.cost)}`)).join('')}</div>` : ''}
             ${items.length ? `<div class="pk-g">바로 ${trT} <small>예수금 없이 사고파는 종목 · 수량·단가 입력</small></div><div class="pk-list">${items.map(x => btn(trT, x.asset, x.sub, x.label, `${x.kind} · 보유 ${x.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${x.unit || ''}`)).join('')}</div>` : ''}
-            <div class="pk-list"><button class="pk-inv none ${f.inv && !f.inv.type ? 'on' : ''}" data-ty="" data-a="" data-s=""><span>연결 안 함</span><small>투자 앱에 따로 적거나 기록하지 않을 때</small></button></div>
+            <div class="pk-list">${isRule ? '' : `<button class="pk-inv ${cur.type === '기존' ? 'on' : ''}" data-ty="기존" data-a="" data-s=""><span>이미 반영됨 (기록만 연결)</span><small>투자 앱 숫자는 그대로 · 10/27 이전처럼 이미 원금에 들어간 이체</small></button>`}
+              <button class="pk-inv none ${f.inv && !f.inv.type ? 'on' : ''}" data-ty="" data-a="" data-s=""><span>연결 안 함</span><small>투자 앱에 따로 적거나 기록하지 않을 때</small></button></div>
           </div>`;
         $$('[data-ty]', box).forEach(b => b.onclick = () => {
           const ty = b.dataset.ty;
