@@ -40,6 +40,8 @@ function onOpen() {
     .addItem('이번 달 월말기록 지금 저장', '이번달기록_메뉴')
     .addItem('지수 비교 탭 만들기', '지수탭_메뉴')
     .addItem('비밀번호 바꾸기', '비밀번호설정')
+    .addSeparator()
+    .addItem('지금 백업하기 (구글 드라이브)', '백업_메뉴')
     .addToUi();
 }
 
@@ -523,6 +525,32 @@ function 월말기록저장() {
   const ym = Utilities.formatDate(now, TZ, 'yyyy-MM');
   saveSnapshot_(ym);
   if (ym >= HH_AUTO_FROM) { try { saveAutoMonth_(ym); } catch (e) { /* 가계부 탭이 없으면 건너뜀 */ } }
+  try { backup_(); } catch (e) { console.error('백업 실패: ' + e.message); }
+}
+
+/* ───────────────────────── 자동 백업 ─────────────────────────
+ * 매달 말일 밤(월말기록 직후) 시트 전체를 구글 드라이브 'Dalton House 백업' 폴더에 사본으로 저장.
+ * 최근 BACKUP_KEEP 개만 남기고 오래된 사본은 휴지통으로 (휴지통에서 30일 동안 되살릴 수 있음). */
+const BACKUP_FOLDER = 'Dalton House 백업';
+const BACKUP_KEEP = 24;
+
+function backup_() {
+  const ss = SpreadsheetApp.getActive();
+  const it = DriveApp.getFoldersByName(BACKUP_FOLDER);
+  const folder = it.hasNext() ? it.next() : DriveApp.createFolder(BACKUP_FOLDER);
+  const name = `${ss.getName()} 백업 ${Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HHmm')}`;
+  DriveApp.getFileById(ss.getId()).makeCopy(name, folder);
+  const files = [];
+  const fi = folder.getFiles();
+  while (fi.hasNext()) { const f = fi.next(); if (f.getName().indexOf(`${ss.getName()} 백업 `) === 0) files.push(f); }
+  files.sort((a, b) => b.getDateCreated() - a.getDateCreated());
+  files.slice(BACKUP_KEEP).forEach(f => f.setTrashed(true));
+  return name;
+}
+
+function 백업_메뉴() {
+  const name = backup_();
+  SpreadsheetApp.getUi().alert('백업 완료', `구글 드라이브 '${BACKUP_FOLDER}' 폴더에 저장했습니다.\n${name}\n\n앞으로 매달 말일 밤에 자동으로 저장되고, 최근 ${BACKUP_KEEP}개만 남깁니다.`, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function saveSnapshot_(month) {
