@@ -1254,3 +1254,4 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .hp-chip.neg { color: var(--exp); background: color-mix(in srgb, var(--exp) 14%, transparent); }
 .hp-chip.pos { color: var(--inc); background: color-mix(in srgb, var(--inc) 14%, transparent); }
 @media (max-width: 380px) { .hp-bal.sm { font-size: 20px; } .hp-chip { font-size: 12px; padding: 4px 8px; } .hp-invrow { gap: 8px; } }
+.nw { white-space: nowrap; }

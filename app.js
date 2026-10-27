@@ -1697,7 +1697,7 @@
             </label>
             <label class="field"><span>자산(계좌) 이름</span><input id="fNewAsset" placeholder="선택" value="${esc(F.newAsset || '')}"></label>
           </div>
-          <p class="help">자산 이름을 비우면 ${inKind.length && new Set(inKind.map(r => r.asset)).size === 1 ? `'${esc(inKind[0].asset)}' 안에` : '종목 이름으로 새 자산을 만들어'} 넣습니다. 새 계좌면 이름을 적으십시오. 예: 나예 주식(NH증권)</p>` : `
+          <p class="help">자산 이름을 비우면 ${inKind.length && new Set(inKind.map(r => r.asset)).size === 1 ? `'${esc(inKind[0].asset)}' 안에` : '종목 이름으로 새 자산을 만들어'} 넣습니다.<br>새 계좌면 이름을 적으십시오.<br><span class="nw">예: 나예 주식(NH증권)</span></p>` : `
           <p class="preview num">${row ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''}</p>`}
         <div class="two">
           <label class="field"><span>수량</span><input id="fQty" type="number" inputmode="decimal" step="any" min="0"></label>
