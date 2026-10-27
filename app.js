@@ -2221,7 +2221,10 @@
       const items = D.rows.filter(r => isTradable(r) && !D.cashLinked.includes(r.asset))
         .map(r => ({ asset: r.asset, sub: r.sub, kind: r.kind, cur: r.cur, qty: r.qty, avg: r.avg, price: r.price, label: r.asset !== r.sub && r.asset !== r.kind ? `${r.sub} · ${r.asset}` : r.sub }));
       acc.sort((a, b) => (a.asset === '예수금' ? -1 : b.asset === '예수금' ? 1 : 0));
-      return { acc, items };
+      // 투자 비용(구독료 등)을 넣을 구성: 구성마다 대표 자산 하나 (실현손익은 자산 → 구성으로 묶임)
+      const kinds = [], ks = new Set();
+      D.rows.filter(r => r.kind && r.kind !== '현금').forEach(r => { if (ks.has(r.kind)) return; ks.add(r.kind); kinds.push({ kind: r.kind, asset: r.asset, sub: r.sub }); });
+      return { acc, items, kinds };
     },
     // 가계부 '투자 화면으로' → 포트폴리오의 '투자 자산' 쪽
     openInvHome: () => { state.view = 'home'; state.hPage = 1; sess.set('dh_hpage', 1); sess.set('dh_scroll_home', 0); setApp('inv'); homePagerApi.align(1); window.scrollTo({ top: 0 }); },

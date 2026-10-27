@@ -834,15 +834,18 @@ function hhTx_(t) {
     if (o['받는자산'] === o['자산']) throw new Error('출금·입금 자산이 같습니다');
     o['분류'] = ''; o['소분류'] = '';
   } else o['받는자산'] = '';
-  // 투자 앱 연결 (이체만): 입금·매수 = 투자 계좌로 보냄, 출금·매도 = 투자 계좌에서 찾음
-  o['투자구분'] = o['구분'] === '이체' ? hhStr_(t['투자구분'], 4) : '';
-  if (o['투자구분'] && ['입금', '출금', '매수', '매도'].indexOf(o['투자구분']) < 0) throw new Error('투자 앱 연결 구분이 올바르지 않습니다');
+  // 투자 앱 연결: 이체 = 입금·매수(투자 계좌로 보냄) / 출금·매도(투자 계좌에서 찾음)
+  //               잔액수정 = 비용(구독료 등 투자에 든 돈 → 그 구성의 실현손익에 기타 비용)
+  o['투자구분'] = o['구분'] === '이체' || o['구분'] === '수정' ? hhStr_(t['투자구분'], 4) : '';
+  if (o['투자구분'] && (o['구분'] === '이체' ? ['입금', '출금', '매수', '매도'] : ['비용']).indexOf(o['투자구분']) < 0) throw new Error('투자 앱 연결 구분이 올바르지 않습니다');
+  if (o['투자구분'] === '비용' && !(o['금액'] < 0)) throw new Error('투자 비용은 잔액이 줄어드는 금액(−)으로 입력하세요');
   o['투자계좌'] = o['투자구분'] ? hhStr_(t['투자계좌'], 80) : '';
   o['투자종목'] = o['투자구분'] ? hhStr_(t['투자종목'], 80) : '';
   const tq = o['투자구분'] === '매수' || o['투자구분'] === '매도';
   o['투자수량'] = tq ? Number(t['투자수량']) : '';
   o['투자단가'] = tq ? Number(t['투자단가']) : '';
-  if (o['투자구분']) {
+  if (o['투자구분'] === '비용') { if (!o['투자계좌']) throw new Error('투자 비용을 넣을 구성을 고르세요'); }
+  else if (o['투자구분']) {
     if (!o['투자계좌']) throw new Error('투자 앱 계좌를 고르세요');
     if (tq && !(o['투자수량'] > 0 && o['투자단가'] > 0)) throw new Error('수량과 단가를 입력하세요');
     const inv = hhInvAssets_(), into = o['투자구분'] === '입금' || o['투자구분'] === '매수';
@@ -862,15 +865,30 @@ function hhInvAssets_() {
 
 /** 내역 한 줄 → 투자 앱 거래 (없으면 null) */
 function hhLinkSpec_(o) {
-  const ty = String(o['투자구분'] || '').trim();
-  if (!ty || String(o['구분']).trim() !== '이체') return null;
+  const ty = String(o['투자구분'] || '').trim(), kind = String(o['구분']).trim();
   const ts = String(o['일시'] || '').replace(' ', 'T') + '+09:00';
+  if (ty === '비용' && kind === '수정') {
+    return { type: '비용', asset: String(o['투자계좌']).trim(), sub: String(o['투자종목'] || o['투자계좌']).trim(), amountKrw: Math.abs(Math.round(num_(o['금액']))), date: ts, by: o['입력자'] || '', memo: String(o['내용'] || '').trim() || '투자 비용' };
+  }
+  if (!ty || kind !== '이체') return null;
   const spec = { type: ty, asset: String(o['투자계좌']).trim(), sub: String(o['투자종목'] || o['투자계좌']).trim(), amountKrw: Math.round(num_(o['금액'])), date: ts, by: o['입력자'] || '' };
   if (ty === '매수' || ty === '매도') { spec.qty = num_(o['투자수량']); spec.price = num_(o['투자단가']); }
   spec.memo = `가계부: ${String(o['내용'] || '').trim() || (ty === '입금' || ty === '매수' ? '투자 계좌로 이체' : '투자 계좌에서 찾음')}`;
   return spec;
 }
 const hhSpecKey_ = s => (s ? [s.type, s.asset, s.sub, s.amountKrw, s.qty || '', s.price || ''].join('|') : '');
+
+/** 연결 기록 실행: 비용은 실현손익(기타)과 거래기록만, 나머지는 recordTrade_ */
+function hhApplyLink_(spec, id) {
+  if (spec.type !== '비용') return recordTrade_(Object.assign({}, spec, { link: id }));
+  const d = kstWall_(new Date(spec.date)), amt = spec.amountKrw;
+  appendByHeader_('거래기록', {
+    '날짜': d, '자산': spec.asset, '세부종목': spec.sub, '구분': '비용', '수량': '', '단가': '', '통화': 'KRW', '금액(원)': amt, '실현손익(원)': -amt,
+    '입력자': spec.by || '', '메모': `가계부: ${spec.memo}`, '연결': id,
+  });
+  appendRealized_({ '날짜': d, '자산': spec.asset, '세부종목': spec.sub, '내용': `${spec.memo} (투자 비용)`, '손익(원)': -amt, '구분': '기타', '출처': '가계부', '메모': '투자 비용', '연결': id });
+  return { ok: true, amountKrw: amt, realized: -amt };
+}
 
 /** 내역 ID에 연결된 투자 앱 거래를 되돌리고 기록을 지움 */
 function hhUndoLink_(id) {
@@ -882,7 +900,13 @@ function hhUndoLink_(id) {
   const v = h => lt.values[r][lt.col[h]];
   const type = String(v('구분')).trim(), asset = String(v('자산')).trim(), sub = String(v('세부종목')).trim();
   const amt = Math.round(num_(v('금액(원)'))), qty = num_(v('수량')), price = num_(v('단가'));
-  if (type === '입금' || type === '출금') {
+  const dropRealized = () => {
+    const rt = table_('실현손익');
+    if ('연결' in rt.col) for (let i = rt.values.length - 1; i >= 1; i--) if (String(rt.values[i][rt.col['연결']]).trim() === id) { rt.sh.deleteRow(i + 1); break; }
+  };
+  if (type === '비용') {
+    dropRealized();
+  } else if (type === '입금' || type === '출금') {
     recordTrade_({ type: type === '입금' ? '출금' : '입금', asset, sub, amountKrw: amt, nolog: true });
   } else {
     const t = holdings_(), rate = rate_(), cash = CASH[asset] || { mode: 'none' };
@@ -903,8 +927,7 @@ function hhUndoLink_(id) {
       setCell_(t, h, '수량', round_(Q + qty, 8));
       if (cash.mode !== 'internal') setCell_(t, h, '원금(원)', Math.round(C + (amt - realized)));
       moveCash_(t, cash, cashRow, -qty * price, -amt, cur, rate);
-      const rt = table_('실현손익');
-      if ('연결' in rt.col) for (let i = rt.values.length - 1; i >= 1; i--) if (String(rt.values[i][rt.col['연결']]).trim() === id) { rt.sh.deleteRow(i + 1); break; }
+      dropRealized();
     }
   }
   lt.sh.deleteRow(r + 1);
@@ -916,9 +939,9 @@ function hhSyncLink_(id, oldSpec, newSpec) {
   if (hhSpecKey_(oldSpec) === hhSpecKey_(newSpec)) return null;
   const undone = oldSpec ? hhUndoLink_(id) : false;
   if (!newSpec) return null;
-  try { return recordTrade_(Object.assign({}, newSpec, { link: id })); }
+  try { return hhApplyLink_(newSpec, id); }
   catch (e) {
-    if (undone) { try { recordTrade_(Object.assign({}, oldSpec, { link: id })); } catch (e2) { /* 되살리기 실패 */ } }
+    if (undone) { try { hhApplyLink_(oldSpec, id); } catch (e2) { /* 되살리기 실패 */ } }
     throw new Error(`투자 앱 기록 실패: ${e.message}`);
   }
 }
@@ -1089,7 +1112,7 @@ function hhRunRules_() {
       sh.getRange(last + 1, 1, rows.length, head.length).setValues(rows);
       n = rows.length;
       // 투자 앱 연결된 반복 이체 (예: 매월 ISA 입금)
-      fresh.forEach(o => { const sp = hhLinkSpec_(o); if (sp) { try { recordTrade_(Object.assign({}, sp, { link: o.ID })); } catch (e) { /* 투자 앱 기록 실패는 내역 생성을 막지 않음 */ } } });
+      fresh.forEach(o => { const sp = hhLinkSpec_(o); if (sp) { try { hhApplyLink_(sp, o.ID); } catch (e) { /* 투자 앱 기록 실패는 내역 생성을 막지 않음 */ } } });
     }
   }
   done.forEach(([row, m]) => rt.sh.getRange(row, c['마지막생성'] + 1).setNumberFormat('@').setValue(m));
