@@ -619,8 +619,13 @@
     let pos = 0, neg = 0;
     const vals = new Map(H.bal); H.inv.forEach(n => vals.set(n, assetVal(n)));
     vals.forEach(v => { if (v > 0) pos += v; else neg += v; });
-    const groups = new Map();
-    H.assets.filter(a => !a.hidden).forEach(a => { let g = groups.get(a.group); if (!g) groups.set(a.group, (g = [])); g.push(a); });
+    const groups0 = new Map();
+    H.assets.filter(a => !a.hidden).forEach(a => { let g = groups0.get(a.group); if (!g) groups0.set(a.group, (g = [])); g.push(a); });
+    // 현금성 자산 먼저 (현금·은행·적금·체크카드 …), 그다음 투자·부동산·대출
+    const LIQ = ['현금', '은행', '적금', '체크카드', '카드'], NONLIQ = ['투자', '부동산', '대출', '마이너스 통장'];
+    const rank = g => (LIQ.includes(g) ? LIQ.indexOf(g) : NONLIQ.includes(g) ? 100 + NONLIQ.indexOf(g) : 50);
+    const groups = new Map([...groups0].sort((a, b) => rank(a[0]) - rank(b[0])));
+    const firstNon = [...groups.keys()].find(g => rank(g) >= 100);
     const known = new Set(assetNames());
     const orphan = [...H.bal].filter(([k, v]) => !known.has(k) && Math.round(v) !== 0);
     const split = H.inv.size > 0;
@@ -640,8 +645,9 @@
       ${[...groups].map(([g, list]) => {
         const own = list.filter(x => !H.link.has(x.name));
         const gs = own.reduce((a, x) => a + assetVal(x.name), 0);
+        const sep = g === firstNon ? '<div class="ha-sep" role="separator"><span>투자 · 부동산 · 대출</span></div>' : '';
         const cm = ymOf(new Date());
-        return `<section class="card ha-group"><div class="ha-gh"><b>${esc(g)}</b>${own.length ? `<span class="num ${gs < 0 ? 'exp' : ''}">${won(gs)}</span>` : ''}</div>
+        return `${sep}<section class="card ha-group ${rank(g) >= 100 ? 'nonliq' : ''}"><div class="ha-gh"><b>${esc(g)}</b>${own.length ? `<span class="num ${gs < 0 ? 'exp' : ''}">${won(gs)}</span>` : ''}</div>
           ${list.map(a => {
             if (H.link.has(a.name)) {
               const used = monthTx(cm).filter(t => t.asset === a.name && t.type === '지출').reduce((x, t) => x + t.amt, 0);
