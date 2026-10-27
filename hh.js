@@ -1296,7 +1296,7 @@
           <p class="hf-info">${!f.inv ? `투자 계좌${dir === 'in' ? '로 보내는' : '에서 찾는'} 이체입니다. 투자 앱의 어느 계좌${dir === 'in' ? '에 들어가는지' : '에서 나오는지'} 고르십시오.<br>투자 앱에 따로 적을 거면 '연결 안 함'을 고르십시오.`
             : !f.inv.type ? '투자 앱에는 기록하지 않습니다.'
             : `${isRule ? '매달 자동으로 들어갈 때 투자 앱에도 같은 금액으로 기록됩니다.' : '저장하면 투자 앱에도 같은 금액으로 기록됩니다.'}${item && f.inv.type === '매도' ? `<br>지금 보유 ${item.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}주` : ''}${trade ? `<br>금액은 투자 앱의 실제 원화 금액(원금)으로 들어갑니다.` : ''}`}</p>` : ''}
-        <div class="hf-row"><span class="hf-l">내용</span><div class="hf-v"><input id="hfText" maxlength="200" autocomplete="off" enterkeyhint="done" value="${esc(f.text)}" placeholder="${tr ? '예: 생활비 이체' : '예: 점심'}"></div></div>
+        <div class="hf-row"><span class="hf-l">내용</span><div class="hf-v"><textarea id="hfText" class="hf-text" rows="1" maxlength="200" autocomplete="off" enterkeyhint="done" placeholder="${tr ? '예: 생활비 이체' : '예: 점심'}">${esc(f.text)}</textarea></div></div>
         <div class="hf-sugg" id="hfSugg"></div>
         <textarea id="hfMemo" class="hf-memo" rows="2" placeholder="메모">${esc(f.memo)}</textarea>
         <p class="form-error" id="hfErr" role="alert"></p>
@@ -1347,6 +1347,7 @@
       txt.oninput = () => sugg(txt.value);
       txt.onfocus = () => sugg(txt.value);
       txt.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); txt.blur(); } };
+      txt.addEventListener('input', () => autoGrow(txt)); requestAnimationFrame(() => autoGrow(txt));
       pickerOnTap(root);
       const d2 = $('#hfDel2', root); if (d2) d2.onclick = () => doDelete();
       const c2 = $('#hfCopy2', root); if (c2) c2.onclick = () => doCopy();
