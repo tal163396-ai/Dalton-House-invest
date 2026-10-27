@@ -1551,3 +1551,9 @@ button.ad-it { width: 100%; background: none; border: 0; border-top: 1px solid v
 button.ad-it:active { background: var(--fill); }
 .ad-it .ad-chev { flex: 0 0 10px; font-style: normal; color: var(--ink-3); font-size: 16px; line-height: 1.1; margin-left: -4px; text-align: right; }
 .ad-it em { margin-left: auto; text-align: right; }
+
+/* 좌우 밀어서 달 넘기기: 새 달이 미는 방향에서 살짝 들어옴 */
+@keyframes swL { from { opacity: .35; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes swR { from { opacity: .35; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+.hh-view.sw-l { animation: swL .22s ease-out; } .hh-view.sw-r { animation: swR .22s ease-out; }
+@media (prefers-reduced-motion: reduce) { .hh-view.sw-l, .hh-view.sw-r { animation: none; } }

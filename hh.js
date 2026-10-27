@@ -310,6 +310,26 @@
     else if (p === 'week') H.st.anchor = addDays(a, 7 * k);
     window.scrollTo({ top: 0 }); render();
   }
+  // 가계부·통계 화면을 좌우로 밀면 이전·다음 달 (위 화살표와 같음)
+  (() => {
+    let x0 = 0, y0 = 0, t0 = 0, ok = false;
+    const skip = '.cm-chips, .hh-tabs, .seg, input, textarea, select, .hh-scroll-x, [data-noswipe]';
+    document.addEventListener('touchstart', e => {
+      const v = e.target.closest && e.target.closest('#hh-book, #hh-stats');
+      ok = !!v && e.touches.length === 1 && !e.target.closest(skip) && !!$('#hhHead .hh-arrow') && !stack.some(x => x.pg) && !$('#sheet.open');
+      if (!ok) return;
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+    }, { passive: true });
+    document.addEventListener('touchend', e => {
+      if (!ok) return; ok = false;
+      const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+      if (Date.now() - t0 > 700 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+      const k = dx < 0 ? 1 : -1;
+      moveHead(k);
+      const v = H.view === 'book' ? $('#hh-book') : $('#hh-stats');
+      if (v) { v.classList.remove('sw-l', 'sw-r'); void v.offsetWidth; v.classList.add(k > 0 ? 'sw-l' : 'sw-r'); }
+    }, { passive: true });
+  })();
   function setYm(ym) { H.ym = ym; sess.set('dh_hym', ym); window.scrollTo({ top: 0 }); render(); }
   function goView(v) {
     H.view = v; sess.set('dh_hview', v);
