@@ -66,7 +66,7 @@
     cats: { 수입: [], 지출: [] }, assets: [], rules: [], memos: [],
     pending: new Map(),
     view: pick(sess.get('dh_hview'), ['book', 'stats', 'assets', 'more'], 'book'),
-    btab: pick(sess.get('dh_hbtab'), ['daily', 'close', 'month', 'memo'], 'daily'),
+    btab: pick(sess.get('dh_hbtab'), ['daily', 'close', 'memo', 'month'], 'daily'),
     ym: /^\d{4}-\d{2}$/.test(sess.get('dh_hym') || '') ? sess.get('dh_hym') : ymOf(new Date()),
     budgets: new Map(), link: new Map(), inv: new Set(),
     budClosed: new Set((() => { try { return JSON.parse(store.get('dh_hbud_closed') || '[]'); } catch { return []; } })()),
@@ -257,7 +257,7 @@
     </div>`;
   }
   function renderBook() {
-    const tabs = [['daily', '일일'], ['close', '결산'], ['month', '월별'], ['memo', '메모']];
+    const tabs = [['daily', '일일'], ['close', '결산'], ['memo', '메모'], ['month', '월별']];
     const list = monthTx(H.ym);
     let body = '', sum = '';
     if (H.btab === 'month') {
@@ -581,7 +581,7 @@
       <div class="ha-tools"><button class="hbud-set" id="hhAAdd">${ico.plus}<span>자산 추가</span></button><button class="hbud-set" id="hhAEdit">${ico.pen}<span>표시·숨김 · 순서 · 삭제</span></button></div>
       <button class="card ha-total" id="hhTotalBtn">
         <span class="ha-tl">순자산 추이 <em>전체통계 ›</em></span>
-        ${sparkSvg(ms.map(m => cum.get(m)))}
+        <div class="ha-chart">${sparkSvg(ms.map(m => cum.get(m)), ms)}</div>
       </button>
       ${[...groups].map(([g, list]) => {
         const own = list.filter(x => !H.link.has(x.name));
@@ -632,13 +632,24 @@
     });
     return out;
   }
-  function sparkSvg(vals) {
-    const v = vals.map(x => x ?? null).filter(x => x !== null);
-    if (v.length < 2) return '';
-    const W = 300, Hh = 46, lo = Math.min(...v), hi = Math.max(...v);
-    const pts = v.map((x, i) => [4 + (W - 8) * i / (v.length - 1), 5 + (Hh - 10) * (1 - (x - lo) / ((hi - lo) || 1))]);
-    return `<svg viewBox="0 0 ${W} ${Hh}" class="ha-spark" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="var(--hh)" stroke-width="2.2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>
-      <span class="ha-tv num">${won(v.at(-1))}</span>`;
+  function sparkSvg(vals, ms) {
+    const idx = vals.map((x, i) => (x === null || x === undefined ? null : i)).filter(i => i !== null);
+    if (idx.length < 2) return '';
+    const v = idx.map(i => vals[i]);
+    const W = 320, Hh = 70, lo = Math.min(...v), hi = Math.max(...v), span = (hi - lo) || 1;
+    const pts = v.map((x, k) => [6 + (W - 12) * k / (v.length - 1), 8 + (Hh - 16) * (1 - (x - lo) / span)]);
+    let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+    for (let k = 1; k < pts.length; k++) { const [x0, y0] = pts[k - 1], [x1, y1] = pts[k], cx = (x0 + x1) / 2; d += ` C${cx.toFixed(1)},${y0.toFixed(1)} ${cx.toFixed(1)},${y1.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`; }
+    const last = pts.at(-1), diff = v.at(-1) - v.at(-2);
+    const ml = m => `${Number(m.slice(5))}월`;
+    return `<div class="ha-tvrow"><span class="ha-tv num">${won(v.at(-1))}</span><span class="ha-chg num ${diff >= 0 ? 'up' : 'dn'}">지난달보다 ${diff >= 0 ? '+' : '−'}${compactWon(Math.abs(diff))}원</span></div>
+      <div class="ha-sw"><svg viewBox="0 0 ${W} ${Hh}" class="ha-spark" preserveAspectRatio="none" aria-hidden="true">
+        <defs><linearGradient id="haG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--hh)" stop-opacity=".32"/><stop offset="1" stop-color="var(--hh)" stop-opacity="0"/></linearGradient></defs>
+        <path d="${d} L${last[0].toFixed(1)},${Hh} L${pts[0][0].toFixed(1)},${Hh} Z" fill="url(#haG)"/>
+        <path d="${d}" fill="none" stroke="var(--hh)" stroke-width="2.4" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <span class="ha-dot" style="left:${(last[0] / W * 100).toFixed(2)}%;top:${(last[1] / Hh * 100).toFixed(2)}%"></span></div>
+      ${ms ? `<div class="ha-ml"><span>${ml(ms[idx[0]])}</span><span>${ml(ms[idx.at(-1)])}</span></div>` : ''}`;
   }
 
   function openTotal(endYm) {
@@ -749,10 +760,10 @@
     const n = H.tx.length;
     $('#hh-more').innerHTML = `
       <div class="card hmo">
-        <button class="hmo-row" data-go="cat-수입"><span>수입 분류 설정</span><small>${H.cats['수입'].length}개</small>${ico.chev}</button>
-        <button class="hmo-row" data-go="cat-지출"><span>지출 분류 설정</span><small>${H.cats['지출'].length}개</small>${ico.chev}</button>
-        <button class="hmo-row" data-go="assets"><span>자산 설정</span><small>${H.assets.length}개</small>${ico.chev}</button>
-        <button class="hmo-row" data-go="rules"><span>매월 반복 내역</span><small>${H.rules.length}개</small>${ico.chev}</button>
+        <button class="hmo-row" data-go="cat-수입"><span>수입 분류 설정</span>${ico.chev}</button>
+        <button class="hmo-row" data-go="cat-지출"><span>지출 분류 설정</span>${ico.chev}</button>
+        <button class="hmo-row" data-go="assets"><span>자산 설정</span>${ico.chev}</button>
+        <button class="hmo-row" data-go="rules"><span>매월 반복 내역</span>${ico.chev}</button>
         <button class="hmo-row" data-go="budget"><span>예산 설정</span><small>${H.budgets.size ? `월 ${won(H.cats['지출'].reduce((a, c) => a + catBudget(c), 0))}` : '없음'}</small>${ico.chev}</button>
       </div>
       <div class="card hmo">
