@@ -999,9 +999,10 @@
     });
   }
   // 달력 창 (편한가계부 날짜 선택 창과 같은 모양)
-  function pickDate(cur) {
+  function pickDate(cur, { month: mOnly = false, clear = false } = {}) {
     return new Promise(res => {
-      let sel = cur || today(), ym = sel.slice(0, 7), mode = 'day', yy = +ym.slice(0, 4);
+      if (mOnly) cur = cur ? `${cur.slice(0, 7)}-01` : '';
+      let sel = cur || today(), ym = sel.slice(0, 7), mode = mOnly ? 'month' : 'day', yy = +ym.slice(0, 4);
       D.openSheet('<div class="cal" id="cal"></div>', 'pop');
       const box = $('#cal');
       let done = false;
@@ -1025,17 +1026,18 @@
             <div class="cal-grid" id="calGrid">${cells.join('')}</div>`;
         } else {
           body = `<div class="cal-nav"><button class="cal-ar" data-yv="-1" aria-label="이전 해">‹</button><button class="cal-ym" id="calYm">${yy}년</button><button class="cal-ar" data-yv="1" aria-label="다음 해">›</button></div>
-            <div class="cal-ms">${Array.from({ length: 12 }, (_, i) => { const m = `${yy}-${pad(i + 1)}`; return `<button class="cal-m${m === ym ? ' on' : ''}${m === td.slice(0, 7) ? ' td' : ''}" data-m="${m}">${i + 1}월</button>`; }).join('')}</div>`;
+            <div class="cal-ms">${Array.from({ length: 12 }, (_, i) => { const m = `${yy}-${pad(i + 1)}`; return `<button class="cal-m${m === (mOnly ? sel.slice(0, 7) : ym) ? ' on' : ''}${m === td.slice(0, 7) ? ' td' : ''}" data-m="${m}">${i + 1}월</button>`; }).join('')}</div>`;
         }
-        box.innerHTML = `<div class="cal-hd"><span>${sel.slice(0, 4)}년</span><b>${+sel.slice(5, 7)}월 ${+sel.slice(8, 10)}일 (${WD[wdOf(sel)]})</b></div>${body}
-          <div class="cal-btns"><button class="cal-tb" id="calToday">오늘</button><span></span><button class="cal-tb" data-close>취소</button><button class="cal-tb ok" id="calOk">확인</button></div>`;
+        box.innerHTML = `<div class="cal-hd"><span>${sel.slice(0, 4)}년</span><b>${mOnly ? `${+sel.slice(5, 7)}월` : `${+sel.slice(5, 7)}월 ${+sel.slice(8, 10)}일 (${WD[wdOf(sel)]})`}</b></div>${body}
+          <div class="cal-btns">${clear ? '<button class="cal-tb" id="calClr">지우기</button>' : `<button class="cal-tb" id="calToday">${mOnly ? '이번 달' : '오늘'}</button>`}<span></span><button class="cal-tb" data-close>취소</button><button class="cal-tb ok" id="calOk">확인</button></div>`;
         $$('[data-mv]', box).forEach(b => b.onclick = () => { ym = addMonths(ym, +b.dataset.mv); draw(); });
         $$('[data-yv]', box).forEach(b => b.onclick = () => { yy += +b.dataset.yv; draw(); });
         $$('[data-d]', box).forEach(b => b.onclick = () => { sel = b.dataset.d; draw(); });
-        $$('[data-m]', box).forEach(b => b.onclick = () => { ym = b.dataset.m; mode = 'day'; draw(); });
-        $('#calYm', box).onclick = () => { if (mode === 'day') { mode = 'month'; yy = +ym.slice(0, 4); } else mode = 'day'; draw(); };
-        $('#calToday', box).onclick = () => { sel = td; ym = td.slice(0, 7); mode = 'day'; draw(); };
-        $('#calOk', box).onclick = () => { fin(sel); D.closeSheet(); };
+        $$('[data-m]', box).forEach(b => b.onclick = () => { ym = b.dataset.m; if (mOnly) { sel = `${ym}-01`; } else mode = 'day'; draw(); });
+        $('#calYm', box).onclick = () => { if (mOnly) return; if (mode === 'day') { mode = 'month'; yy = +ym.slice(0, 4); } else mode = 'day'; draw(); };
+        const tb = $('#calToday', box); if (tb) tb.onclick = () => { sel = mOnly ? `${td.slice(0, 7)}-01` : td; ym = td.slice(0, 7); yy = +td.slice(0, 4); mode = mOnly ? 'month' : 'day'; draw(); };
+        const cb = $('#calClr', box); if (cb) cb.onclick = () => { fin(''); D.closeSheet(); };
+        $('#calOk', box).onclick = () => { fin(mOnly ? sel.slice(0, 7) : sel); D.closeSheet(); };
         const g = $('#calGrid', box);
         if (g) {
           let x0 = null, y0 = 0;
@@ -1050,6 +1052,19 @@
       draw();
     });
   }
+  // 앱 안의 모든 날짜·달 칸(투자 기록 포함)은 휴대폰 기본 달력 대신 위 달력 창을 씀
+  document.addEventListener('click', async ev => {
+    const i = ev.target.closest && ev.target.closest('input[type="date"], input[type="month"]');
+    if (!i || i.disabled || i.readOnly) return;
+    ev.preventDefault();
+    i.blur();
+    const mo = i.type === 'month';
+    const v = await pickDate(i.value, { month: mo, clear: !i.required && i.dataset.clear === '1' });
+    if (v === null || v === i.value) return;
+    i.value = v;
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+    i.dispatchEvent(new Event('change', { bubbles: true }));
+  }, true);
   // 날짜 단추: 누르면 달력 창을 열고, 고른 날짜를 data-v 에 담음
   function bindDateBtn(btn, onPick) {
     btn.onclick = async () => { const v = await pickDate(btn.dataset.v); if (v && v !== btn.dataset.v) { btn.dataset.v = v; onPick(v); } };
@@ -1057,6 +1072,7 @@
   function pickerOnTap(root) {
     $$('input[type="date"], input[type="time"], input[type="month"]', root).forEach(i => {
       if (i.dataset.pk) return; i.dataset.pk = '1';
+      if (i.type !== 'time') return;   // 날짜·달은 아래 달력 창이 맡음
       i.addEventListener('click', () => { try { i.showPicker(); } catch { /* 지원하지 않는 브라우저는 기본 동작 */ } });
     });
   }
@@ -1132,7 +1148,7 @@
         </div>`}
         ${isRule ? `
         <div class="hf-row"><span class="hf-l">반복</span><div class="hf-v">매월 <select id="hfDay" class="hf-sel">${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${f.day === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select> 일</div></div>
-        <div class="hf-row"><span class="hf-l">기간</span><div class="hf-v hf-months"><input type="month" id="hfStart" value="${f.start}" aria-label="시작 달"><span>~</span><input type="month" id="hfEnd" value="${f.end}" aria-label="끝 달 (비우면 계속)"></div></div>
+        <div class="hf-row"><span class="hf-l">기간</span><div class="hf-v hf-months"><input type="month" id="hfStart" value="${f.start}" aria-label="시작 달"><span>~</span><input type="month" id="hfEnd" data-clear="1" value="${f.end}" aria-label="끝 달 (비우면 계속)"></div></div>
         <p class="hf-info">${rule ? `마지막으로 들어간 달: ${rule.last || '없음'}` : '이번 달 날짜가 이미 지났으면 다음 달부터 자동으로 들어갑니다.'} 끝 달을 비우면 계속 반복합니다.</p>`
         : `
         <div class="hf-row"><span class="hf-l">날짜</span>
