@@ -706,7 +706,7 @@
       return `
         <section class="card hp-asset">
           <span class="hp-ag">${esc(a ? a.group : '목록에 없는 자산')}${a && a.hidden ? ' · 숨김' : ''}</span>
-          ${isInv ? (() => { const t = invTotal(); return `<div class="hp-bal num">${t ? won(t.cost) : '—'}</div><p class="note">투자 앱의 원금입니다.${t ? `<br>평가금 ${won(t.value)}<br>평가손익 ${t.value - t.cost >= 0 ? '+' : ''}${compactWon(t.value - t.cost)}원` : ''}<br>가계부에는 투자로 보낸 돈과 찾은 돈만 남습니다.</p>`; })()
+          ${isInv ? (() => { const t = invTotal(); return `<div class="hp-bal num">${t ? won(t.cost) : '—'}</div><p class="note">투자 앱의 원금입니다.${t ? `<br>평가금 ${won(t.value)}<br>평가손익 ${t.value - t.cost >= 0 ? '+' : ''}${compactWon(t.value - t.cost)}원` : ''}</p>`; })()
             : card ? `<div class="hp-bal num">${won(out - inn)}</div><p class="note">${ymLabel(ym)} 사용 금액입니다. 결제 계좌 <b>${esc(card)}</b> 잔액에서 바로 빠집니다.</p>`
             : `<div class="hp-bal num ${bal < 0 ? 'exp' : ''}">${won(bal)}</div>${linked.length ? `<p class="note">${linked.map(esc).join(', ')} 사용 금액이 이 잔액에 들어 있습니다.</p>` : ''}`}
           ${a && a.memo && !isInv ? `<p class="note">${esc(a.memo)}</p>` : ''}
