@@ -32,6 +32,32 @@
     return `${h < 12 ? '오전' : '오후'} ${h % 12 === 0 ? 12 : h % 12}:${m}`;
   }
   const dateLabel = ds => `${ds.slice(2, 4)}. ${+ds.slice(5, 7)}. ${+ds.slice(8, 10)}. (${WD[wdOf(ds)]})`;
+  /* ── 반복 주기 (편한가계부와 같은 목록). 서버 hhOccAfter_ 와 같은 계산 ── */
+  const PERIODS = ['매일', '주중', '주말', '매주', '2주마다', '4주마다', '매월', '월말', '2개월마다', '3개월마다', '4개월마다', '6개월마다', '1년마다'];
+  const PER_M = { 매월: 1, '2개월마다': 2, '3개월마다': 3, '4개월마다': 4, '6개월마다': 6, '1년마다': 12 };
+  const PER_D = { 매주: 7, '2주마다': 14, '4주마다': 28 };
+  const PER_PM = { 매일: 30.4, 주중: 21.7, 주말: 8.7, 매주: 4.35, '2주마다': 2.17, '4주마다': 1.09, 매월: 1, 월말: 1, '2개월마다': 1 / 2, '3개월마다': 1 / 3, '4개월마다': 1 / 4, '6개월마다': 1 / 6, '1년마다': 1 / 12 };
+  const clampDay = (ym, d) => `${ym}-${pad(Math.min(d, daysIn(ym)))}`;
+  const ruleAnchor = r => { const s = String(r.start || ''); if (s.length >= 10) return s.slice(0, 10); return clampDay(/^\d{4}-\d{2}/.test(s) ? s.slice(0, 7) : ymOf(new Date()), r.day || 1); };
+  const ruleLast = r => { const s = String(r.last || ''); if (s.length >= 10) return s.slice(0, 10); if (/^\d{4}-\d{2}$/.test(s)) return clampDay(s, r.day || 1); return addDays(ruleAnchor(r), -1); };
+  const ruleEnd = r => { const s = String(r.end || ''); return !s ? '' : s.length >= 10 ? s.slice(0, 10) : `${s.slice(0, 7)}-${pad(daysIn(s.slice(0, 7)))}`; };
+  function occAfter(per, anchor, after) {
+    const day = +anchor.slice(8, 10);
+    if (per in PER_M) { let ym = anchor.slice(0, 7); for (let i = 0; i < 1200; i++) { const d = clampDay(ym, day); if (d > after) return d; ym = addMonths(ym, PER_M[per]); } return ''; }
+    if (per === '월말') { let ym = anchor.slice(0, 7); for (let i = 0; i < 1200; i++) { const d = `${ym}-${pad(daysIn(ym))}`; if (d >= anchor && d > after) return d; ym = addMonths(ym, 1); } return ''; }
+    if (per in PER_D) { if (after < anchor) return anchor; const diff = Math.round((parseD(after) - parseD(anchor)) / 864e5); return addDays(anchor, (Math.floor(diff / PER_D[per]) + 1) * PER_D[per]); }
+    let d = after < anchor ? anchor : addDays(after, 1);
+    for (let i = 0; i < 8; i++) { const w = wdOf(d); if (per === '매일' || (per === '주중' && w > 0 && w < 6) || (per === '주말' && (w === 0 || w === 6))) return d; d = addDays(d, 1); }
+    return '';
+  }
+  const ruleNext = r => occAfter(r.period || '매월', ruleAnchor(r), ruleLast(r));
+  function perLabel(per, anchor) {
+    const d = +anchor.slice(8, 10);
+    if (per === '매월' || /개월마다$/.test(per)) return `${per} ${d}일`;
+    if (per === '1년마다') return `매년 ${+anchor.slice(5, 7)}월 ${d}일`;
+    if (per in PER_D) return `${per} ${WD[wdOf(anchor)]}요일`;
+    return per;
+  }
   function compactWon(v) {
     const a = Math.abs(v), s = v < 0 ? '−' : '';
     if (a >= 1e8) return `${s}${(a / 1e8).toFixed(2)}억`;
@@ -97,9 +123,9 @@
   }
   const txArr = t => [t.id, t.ts, t.type, t.cat, t.sub, t.text, t.amt, t.asset, t.to, t.memo, t.cur, t.famt, t.rule, t.by, t.invType || '', t.invAcct || '', t.invSub || '', t.invQty ?? '', t.invPrice ?? ''];
   const txObj = t => Object.fromEntries(F_TX.map((h, i) => [h, txArr(t)[i]]));
-  const ruleArr = r => [r.id, '매월', r.day, r.type, r.cat, r.sub, r.text, r.amt, r.asset, r.to, r.memo, r.start, r.end, r.last, r.invType || '', r.invAcct || '', r.invSub || ''];
-  const ruleObj = r => ({ ID: r.id, 주기: '매월', 일: r.day, 구분: r.type, 분류: r.cat, 소분류: r.sub, 내용: r.text, 금액: r.amt, 자산: r.asset, 받는자산: r.to, 메모: r.memo, 시작: r.start, 종료: r.end, 마지막생성: r.last, 투자구분: r.invType || '', 투자계좌: r.invAcct || '', 투자종목: r.invSub || '' });
-  const toRule = a => ({ id: String(a[0]), day: Number(a[2]) || 1, type: String(a[3] || ''), cat: String(a[4] || ''), sub: String(a[5] || ''), text: String(a[6] || ''), amt: Number(a[7]) || 0, asset: String(a[8] || ''), to: String(a[9] || ''), memo: String(a[10] || ''), start: String(a[11] || ''), end: String(a[12] || ''), last: String(a[13] || ''), invType: String(a[14] || ''), invAcct: String(a[15] || ''), invSub: String(a[16] || '') });
+  const ruleArr = r => [r.id, r.period || '매월', r.day, r.type, r.cat, r.sub, r.text, r.amt, r.asset, r.to, r.memo, r.start, r.end, r.last, r.invType || '', r.invAcct || '', r.invSub || ''];
+  const ruleObj = r => ({ ID: r.id, 주기: r.period || '매월', 일: r.day, 구분: r.type, 분류: r.cat, 소분류: r.sub, 내용: r.text, 금액: r.amt, 자산: r.asset, 받는자산: r.to, 메모: r.memo, 시작: r.start, 종료: r.end, 마지막생성: r.last, 투자구분: r.invType || '', 투자계좌: r.invAcct || '', 투자종목: r.invSub || '' });
+  const toRule = a => ({ id: String(a[0]), period: PERIODS.includes(String(a[1] || '').trim()) ? String(a[1]).trim() : '매월', day: Number(a[2]) || 1, type: String(a[3] || ''), cat: String(a[4] || ''), sub: String(a[5] || ''), text: String(a[6] || ''), amt: Number(a[7]) || 0, asset: String(a[8] || ''), to: String(a[9] || ''), memo: String(a[10] || ''), start: String(a[11] || ''), end: String(a[12] || ''), last: String(a[13] || ''), invType: String(a[14] || ''), invAcct: String(a[15] || ''), invSub: String(a[16] || '') });
   // 투자 앱 연결 표시: 'ISA 입금', 'TIGER … 3주 매수'
   const invLabel = (t, opts) => {
     if (!t.invType) return '';
@@ -918,7 +944,7 @@
         <button class="hmo-row" data-go="cat-수입"><span>수입 분류 설정</span>${ico.chev}</button>
         <button class="hmo-row" data-go="cat-지출"><span>지출 분류 설정</span>${ico.chev}</button>
         <button class="hmo-row" data-go="assets"><span>자산 설정</span>${ico.chev}</button>
-        <button class="hmo-row" data-go="rules"><span>매월 반복 내역</span>${ico.chev}</button>
+        <button class="hmo-row" data-go="rules"><span>반복 내역</span>${ico.chev}</button>
         <button class="hmo-row" data-go="budget"><span>예산 설정</span><small>${H.budgets.size ? `월 ${won(H.cats['지출'].reduce((a, c) => a + catBudget(c), 0))}` : '없음'}</small>${ico.chev}</button>
       </div>
       <div class="card hmo">
@@ -1025,6 +1051,21 @@
       const obs = new MutationObserver(() => { if (!sh.classList.contains('open') || sh.hidden) fin(false); });
       setTimeout(() => obs.observe(sh, { attributes: true, attributeFilter: ['class', 'hidden'] }), 60);
       $('#askOk').onclick = () => { fin(true); D.closeSheet(); };
+    });
+  }
+  // 반복 주기 고르기 (편한가계부 목록)
+  function pickPeriod(cur, withNone) {
+    return new Promise(res => {
+      const list = withNone ? ['없음', ...PERIODS] : PERIODS;
+      D.openSheet(`<div class="ask"><h2 id="sheetTitle">반복</h2><div class="sel-list">${list.map(p => `<button class="${p === cur ? 'on' : ''}" data-pp="${p}"><span>${p}</span>${p === cur ? '<b>✓</b>' : ''}</button>`).join('')}</div>
+        <div class="sheet-actions"><button class="btn" data-close>취소</button></div></div>`, 'pop');
+      let done = false;
+      const fin = v => { if (done) return; done = true; obs.disconnect(); res(v); };
+      const sh = $('#sheet');
+      const obs = new MutationObserver(() => { if (!sh.classList.contains('open') || sh.hidden) fin(null); });
+      setTimeout(() => obs.observe(sh, { attributes: true, attributeFilter: ['class', 'hidden'] }), 60);
+      $$('#sheetBody [data-pp]').forEach(b => b.onclick = () => { fin(b.dataset.pp); D.closeSheet(); });
+      const on = $('#sheetBody .sel-list .on'); if (on) on.scrollIntoView({ block: 'center' });
     });
   }
   // 달력 창 (편한가계부 날짜 선택 창과 같은 모양)
@@ -1184,9 +1225,11 @@
       text: src ? src.text : '', memo: src ? src.memo : '',
       cur: e ? e.cur : '', famt: e ? e.famt : '',
       rule: e ? e.rule : '',
-      repeat: false,
+      repeat: false, period: '없음',
+      rper: rule ? (rule.period || '매월') : '매월',
+      rdate: rule ? (ruleNext(rule) || ruleAnchor(rule)) : (opts.date || today()),
       day: rule ? rule.day : +(opts.date || today()).slice(8, 10),
-      start: rule ? rule.start : ymOf(new Date()), end: rule ? rule.end : '',
+      start: rule ? rule.start : ymOf(new Date()), end: rule ? ruleEnd(rule) : '',
       // 투자 앱 연결: null = 아직 안 고름, { type: '' } = 연결 안 함
       inv: (() => {
         const x = e || rule || opts.copy;
@@ -1226,18 +1269,21 @@
           ${['수입', '지출', '이체'].map(t => `<button data-t="${t}" class="${f.type === t ? 'on' : ''} t-${{ 수입: 'in', 지출: 'out', 이체: 'tr' }[t]}">${t}</button>`).join('')}
         </div>`}
         ${isRule ? `
-        <div class="hf-row"><span class="hf-l">반복</span><div class="hf-v">매월 <select id="hfDay" class="hf-sel">${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${f.day === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select> 일</div></div>
-        <div class="hf-row"><span class="hf-l">기간</span><div class="hf-v hf-months"><input type="month" id="hfStart" value="${f.start}" aria-label="시작 달"><span>~</span><input type="month" id="hfEnd" data-clear="1" value="${f.end}" aria-label="끝 달 (비우면 계속)"></div></div>
-        <p class="hf-info">${rule ? `마지막으로 들어간 달: ${rule.last || '없음'}` : '이번 달 날짜가 이미 지났으면 다음 달부터 자동으로 들어갑니다.'} 끝 달을 비우면 계속 반복합니다.</p>`
+        <div class="hf-row"><span class="hf-l">날짜</span>
+          <div class="hf-v hf-date"><button type="button" class="hf-dt" id="rDate"><span>${dateLabel(f.rdate)}</span></button></div>
+          <button class="hf-rep on" id="rPer" aria-label="반복 주기">${ico.rep}<span>${esc(f.rper)}</span></button>
+        </div>
+        <div class="hf-row"><span class="hf-l">종료</span><div class="hf-v"><button type="button" class="hf-dt ${f.end ? '' : 'ph'}" id="rEnd"><span>${f.end ? `${dateLabel(f.end)}까지` : '계속 반복'}</span></button></div></div>
+        <p class="hf-info">${esc(perLabel(f.rper, f.rdate))} · 다음 입력 ${(() => { const pl = rule ? ruleLast(rule) : '', b = addDays(f.rdate, -1); const nd = occAfter(f.rper, f.rdate, pl && pl > b ? pl : b); return nd ? dateLabel(nd) : '없음'; })()}${rule && rule.last ? `<br>마지막으로 들어간 날: ${dateLabel(ruleLast(rule))}` : ''}</p>`
         : `
         <div class="hf-row"><span class="hf-l">날짜</span>
           <div class="hf-v hf-date">
             <button type="button" class="hf-dt" id="hfDate" data-v="${f.date}" aria-label="날짜 ${dateLabel(f.date)}"><span>${dateLabel(f.date)}</span></button>
             <label class="hf-dt"><span>${tmLabel(f.time + ':00') || '오전 12:00'}</span><input type="time" id="hfTime" value="${f.time}" aria-label="시간"></label>
           </div>
-          ${!e && !adj ? `<button class="hf-rep ${f.repeat ? 'on' : ''}" id="hfRep" aria-pressed="${f.repeat}">${ico.rep}<span>반복</span></button>` : ''}
+          ${!e && !adj ? `<button class="hf-rep ${f.repeat ? 'on' : ''}" id="hfRep" aria-pressed="${f.repeat}">${ico.rep}<span>${f.repeat ? esc(f.period) : '반복'}</span></button>` : ''}
         </div>`}
-        ${f.repeat && !isRule ? `<p class="hf-info">매월 ${+f.date.slice(8)}일에 같은 내역이 자동으로 들어갑니다.</p>` : ''}
+        ${f.repeat && !isRule ? `<p class="hf-info">반복 ${esc(perLabel(f.period, f.date))} · 다음부터 같은 내역이 자동으로 들어갑니다.</p>` : ''}
         ${e && e.rule ? `<p class="hf-info">매월 반복 내역입니다. 여기서 고치면 이번 것만 바뀝니다. 반복 자체는 더보기 → 매월 반복 내역에서 고칩니다.</p>` : ''}
         <div class="hf-row ${kp !== null ? 'kp-on' : ''}"><span class="hf-l">금액</span><div class="hf-v"><button type="button" id="hfAmt" class="hf-amt ${kp !== null || f.amt ? '' : 'ph'}" aria-label="금액">${amtShow()}</button></div></div>
         ${f.cur && f.famt !== '' ? `<p class="hf-info">외화 ${f.cur === 'USD' ? 'US$' : f.cur} ${Number(f.famt).toLocaleString('ko-KR', { minimumFractionDigits: 2 })} 내역입니다. 앱은 원화 금액으로 계산합니다.</p>` : ''}
@@ -1288,10 +1334,10 @@
       });
       const fd = $('#hfDate', root); if (fd) bindDateBtn(fd, v => { readInputs(); f.date = v; f.sec = ''; draw(); });
       const ft = $('#hfTime', root); if (ft) ft.onchange = () => { if (ft.value) { readInputs(); f.time = ft.value.slice(0, 5); f.sec = ''; draw(); } };
-      const rep = $('#hfRep', root); if (rep) rep.onclick = () => { readInputs(); f.repeat = !f.repeat; draw(); };
-      const day = $('#hfDay', root); if (day) day.onchange = () => { f.day = Number(day.value); };
-      const fs = $('#hfStart', root); if (fs) fs.onchange = () => { f.start = fs.value; };
-      const fe = $('#hfEnd', root); if (fe) fe.onchange = () => { f.end = fe.value; };
+      const rep = $('#hfRep', root); if (rep) rep.onclick = async () => { readInputs(); const v = await pickPeriod(f.repeat ? f.period : '없음', true); if (v) { f.period = v; f.repeat = v !== '없음'; draw(); } };
+      const rp = $('#rPer', root); if (rp) rp.onclick = async () => { readInputs(); const v = await pickPeriod(f.rper, false); if (v) { f.rper = v; draw(); } };
+      const rd = $('#rDate', root); if (rd) rd.onclick = async () => { readInputs(); const v = await pickDate(f.rdate); if (v) { f.rdate = v; draw(); } };
+      const re = $('#rEnd', root); if (re) re.onclick = async () => { readInputs(); const v = await pickDate(f.end || f.rdate, { clear: true }); if (v !== null) { f.end = v; draw(); } };
       $('#hfAmt', root).onclick = () => { readInputs(); openPicker('amt'); };
       const cat = $('#hfCat', root); if (cat) cat.onclick = () => { readInputs(); openPicker(f.type === '이체' ? 'from' : 'cat'); };
       $('#hfAsset', root).onclick = () => { readInputs(); openPicker(f.type === '이체' ? 'to' : 'asset'); };
@@ -1514,14 +1560,13 @@
       }
       const by = store.get('dh_name') || '';
       if (isRule) {
-        if (!f.start) return fail('시작 달을 고르십시오.');
-        if (f.end && f.end < f.start) return fail('끝 달이 시작 달보다 앞입니다.');
+        if (f.end && f.end < f.rdate) return fail('종료 날짜가 다음 입력 날짜보다 앞입니다.');
         const li = invDir() && f.inv && f.inv.type ? f.inv : null;
-        const r = { id: rule ? rule.id : newId('r'), day: f.day, type: f.type, cat: f.type === '이체' ? '' : f.cat, sub: f.type === '이체' ? '' : f.sub, text: f.text.trim(), amt: f.amt, asset: f.asset, to: f.type === '이체' ? f.to : '', memo: f.memo.trim(), start: f.start, end: f.end, last: rule ? rule.last : '', invType: li ? li.type : '', invAcct: li ? li.acct : '', invSub: li ? li.sub : '' };
-        if (!rule) {
-          // 지난 달 것은 채우지 않음. 이번 달 날짜가 이미 지났으면 다음 달부터 자동 입력
-          const cur = ymOf(new Date());
-          r.last = f.start > cur ? addMonths(f.start, -1) : (f.day <= new Date().getDate() ? cur : addMonths(cur, -1));
+        const r = { id: rule ? rule.id : newId('r'), day: f.day, type: f.type, cat: f.type === '이체' ? '' : f.cat, sub: f.type === '이체' ? '' : f.sub, text: f.text.trim(), amt: f.amt, asset: f.asset, to: f.type === '이체' ? f.to : '', memo: f.memo.trim(), start: rule ? rule.start : f.rdate, end: f.end, last: rule ? rule.last : addDays(f.rdate, -1), period: f.rper, invType: li ? li.type : '', invAcct: li ? li.acct : '', invSub: li ? li.sub : '' };
+        // 날짜나 주기를 바꾸면 그 날짜부터 새로 셈 (안 바꾸면 기존 기준 그대로)
+        if (!rule || f.rper !== (rule.period || '매월') || f.rdate !== (ruleNext(rule) || ruleAnchor(rule))) {
+          r.start = f.rdate; r.day = +f.rdate.slice(8); r.last = addDays(f.rdate, -1);
+          if (rule && rule.last) { const ol = ruleLast(rule); if (ol > r.last) r.last = ol; }   // 이미 들어간 날 이전 것은 다시 넣지 않음
         }
         const btn = $('#hfSave', root); btn.disabled = true; btn.textContent = '저장 중…';
         try {
@@ -1529,6 +1574,7 @@
           const i = H.rules.findIndex(x => x.id === r.id);
           if (i >= 0) H.rules[i] = r; else H.rules.push(r);
           saveCache(); refreshPages(); render(); back(); toast('반복 내역을 저장했습니다');
+          if (f.rdate <= today()) load({ quiet: true });   // 오늘까지 들어갈 것이 있으면 바로 채움
         } catch (ex) { btn.disabled = false; btn.textContent = '저장하기'; fail(ex.message); }
         return;
       }
@@ -1540,14 +1586,14 @@
       let newRule = null;
       if (f.repeat && !e) {
         const rl = t.invType === '입금' || t.invType === '출금';
-        newRule = { id: newId('r'), day: +f.date.slice(8), type: t.type, cat: t.cat, sub: t.sub, text: t.text, amt: t.amt, asset: t.asset, to: t.to, memo: t.memo, start: t.ym, end: '', last: t.ym, invType: rl ? t.invType : '', invAcct: rl ? t.invAcct : '', invSub: rl ? t.invSub : '' };
+        newRule = { id: newId('r'), period: f.period, day: +f.date.slice(8), type: t.type, cat: t.cat, sub: t.sub, text: t.text, amt: t.amt, asset: t.asset, to: t.to, memo: t.memo, start: f.date, end: '', last: f.date, invType: rl ? t.invType : '', invAcct: rl ? t.invAcct : '', invSub: rl ? t.invSub : '' };
         t.rule = newRule.id;
       }
       store.set('dh_hlt', f.type);
       if (f.type !== '수정') store.set(`dh_hla_${f.type}`, f.asset);
       if (cont) {
         commitTx(t, e, newRule);
-        Object.assign(f, { amt: 0, neg: false, cat: '', sub: '', text: '', memo: '', repeat: false, to: '', inv: null });
+        Object.assign(f, { amt: 0, neg: false, cat: '', sub: '', text: '', memo: '', repeat: false, period: '없음', to: '', inv: null });
         draw();
         setTimeout(() => openPicker('amt'), 50);
         toast('저장했습니다. 이어서 입력하십시오');
@@ -2111,18 +2157,20 @@
 
   /* ───────────── 설정: 매월 반복 ───────────── */
   function openRules() {
-    const pg = pushPage({ title: '매월 반복 내역', actions: `<button class="icon-btn" id="rAdd" aria-label="반복 내역 추가">${ico.plus}</button>`, body: '', refresh: p => draw(p) });
+    const pg = pushPage({ title: '반복 내역', actions: `<button class="icon-btn" id="rAdd" aria-label="반복 내역 추가">${ico.plus}</button>`, body: '', refresh: p => draw(p) });
     function draw(p = pg) {
-      const cur = ymOf(new Date());
-      const act = H.rules.filter(r => !r.end || r.end >= cur).sort((a, b) => a.day - b.day);
-      const ended = H.rules.filter(r => r.end && r.end < cur);
-      const row = r => `<button class="hr" data-rule="${esc(r.id)}">
-        <span class="hr-l"><span class="hr-cat">매월 ${r.day}일</span>${r.type === '이체' ? '<small>이체</small>' : `<small>${esc(r.cat)}</small>`}</span>
-        <span class="hr-m"><span class="hr-t">${esc(r.text || r.sub || r.cat)}</span><span class="hr-s">${r.type === '이체' ? `${esc(r.asset)} → ${esc(r.to)}` : esc(r.asset)}${r.end ? ` · ${r.end}까지` : ''}</span></span>
+      const td = today();
+      const nx = new Map(H.rules.map(r => [r.id, ruleNext(r)]));
+      const isEnded = r => { const e = ruleEnd(r), n = nx.get(r.id); return e && (!n || n > e) && e < td; };
+      const act = H.rules.filter(r => !isEnded(r)).sort((a, b) => (nx.get(a.id) || '9').localeCompare(nx.get(b.id) || '9'));
+      const ended = H.rules.filter(isEnded);
+      const row = r => `<button class="hr rl" data-rule="${esc(r.id)}">
+        <span class="hr-l"><span class="hr-cat">${esc(perLabel(r.period || '매월', ruleAnchor(r)))}</span>${r.type === '이체' ? '<small>이체</small>' : `<small>${esc(r.cat)}</small>`}</span>
+        <span class="hr-m"><span class="hr-t">${esc(r.text || r.sub || r.cat)}</span><span class="hr-s">${r.type === '이체' ? `${esc(r.asset)} → ${esc(r.to)}` : esc(r.asset)}${!isEnded(r) && nx.get(r.id) ? ` · 다음 ${mdLabel(nx.get(r.id))}` : ''}${ruleEnd(r) ? ` · ${mdLabel(ruleEnd(r))}까지` : ''}</span></span>
         <span class="hr-r"><b class="num ${r.type === '수입' ? 'inc' : r.type === '지출' ? 'exp' : 'tr'}">${won(r.amt)}</b></span></button>`;
-      const tot = act.filter(r => r.type === '지출').reduce((a, r) => a + r.amt, 0);
+      const tot = act.filter(r => r.type === '지출').reduce((a, r) => a + r.amt * (PER_PM[r.period || '매월'] || 1), 0);
       $('.hh-pbody', p).innerHTML = `
-        <div class="card hs-sum num"><span>${act.length}개</span><span class="exp">매월 지출 ${won(tot)}</span></div>
+        <div class="card hs-sum num"><span>${act.length}개</span><span class="exp">월 지출 ${act.some(r => (r.period || '매월') !== '매월') ? '약 ' : ''}${won(tot)}</span></div>
         ${act.length ? `<section class="card hd">${act.map(row).join('')}</section>` : '<p class="empty">반복 내역이 없습니다.</p>'}
         ${ended.length ? `<h3 class="se-gh">끝난 반복</h3><section class="card hd">${ended.map(row).join('')}</section>` : ''}
         <p class="note">그 날짜가 지난 뒤 앱을 처음 열 때 자동으로 들어갑니다.<br>이미 들어간 내역은 각각 고칠 수 있습니다.</p>`;

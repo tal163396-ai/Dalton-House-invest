@@ -960,11 +960,11 @@ function hhRule_(t) {
   const o = hhTx_(Object.assign({}, t, { '일시': '2000-01-01 00:00:00' }));
   delete o['일시']; delete o['반복']; delete o['입력자']; delete o['화폐']; delete o['외화금액']; delete o['투자수량']; delete o['투자단가'];
   if (o['투자구분'] === '매수' || o['투자구분'] === '매도') throw new Error('반복 내역은 투자 앱 입금·출금만 연결할 수 있습니다');
-  o['주기'] = '매월';
+  o['주기'] = HH_PERIODS.indexOf(String(t['주기'] || '').trim()) >= 0 ? String(t['주기']).trim() : '매월';
   o['일'] = Math.min(31, Math.max(1, Math.round(Number(t['일'])) || 1));
   ['시작', '종료', '마지막생성'].forEach(h => {
-    o[h] = hhStr_(t[h], 7);
-    if (o[h] && !/^\d{4}-\d{2}$/.test(o[h])) throw new Error(`${h} 달이 올바르지 않습니다`);
+    o[h] = hhStr_(t[h], 10);
+    if (o[h] && !/^\d{4}-\d{2}(-\d{2})?$/.test(o[h])) throw new Error(`${h} 날짜가 올바르지 않습니다`);
   });
   if (!o['시작']) throw new Error('시작 달이 없습니다');
   return o;
@@ -1079,26 +1079,29 @@ function hhRunRules_() {
   const rt = table_('가계부반복'), c = rt.col;
   if (rt.values.length < 2) return 0;
   const now = new Date();
-  const ym = Utilities.formatDate(now, TZ, 'yyyy-MM'), today = Number(Utilities.formatDate(now, TZ, 'd'));
+  const todayD = Utilities.formatDate(now, TZ, 'yyyy-MM-dd');
   const add = [], done = [];
   for (let r = 1; r < rt.values.length; r++) {
     const v = rt.values[r], g = h => (h in c ? hhVal_(v[c[h]], h) : '');
     const id = String(g('ID')).trim();
-    if (!id || (g('주기') && g('주기') !== '매월')) continue;
-    const start = String(g('시작')).slice(0, 7), end = String(g('종료')).slice(0, 7), last = String(g('마지막생성')).slice(0, 7);
-    if (!/^\d{4}-\d{2}$/.test(start)) continue;
-    let m = /^\d{4}-\d{2}$/.test(last) ? hhNextYm_(last) : start, made = '', guard = 0;
-    if (m < start) m = start;
-    while (m <= ym && (!end || m <= end) && guard++ < 36) {
-      const day = Math.min(Math.max(1, Math.round(num_(g('일'))) || 1), hhDays_(m));
-      if (m === ym && day > today) break;
+    if (!id) continue;
+    const per = HH_PERIODS.indexOf(String(g('주기')).trim()) >= 0 ? String(g('주기')).trim() : '매월';
+    const day = Math.min(31, Math.max(1, Math.round(num_(g('일'))) || 1));
+    const start = String(g('시작')).trim(), endS = String(g('종료')).trim(), lastS = String(g('마지막생성')).trim();
+    if (!/^\d{4}-\d{2}/.test(start)) continue;
+    const clampD = ym => `${ym}-${('0' + Math.min(day, hhDays_(ym))).slice(-2)}`;
+    const anchor = start.length >= 10 ? start.slice(0, 10) : clampD(start.slice(0, 7));
+    const endD = !endS ? '' : endS.length >= 10 ? endS.slice(0, 10) : `${endS.slice(0, 7)}-${hhDays_(endS.slice(0, 7))}`;
+    const lastD = lastS.length >= 10 ? lastS.slice(0, 10) : /^\d{4}-\d{2}$/.test(lastS) ? clampD(lastS) : hhAddDays_(anchor, -1);
+    let d = hhOccAfter_(per, anchor, lastD), made = '', guard = 0;
+    while (d && d <= todayD && (!endD || d <= endD) && guard++ < 400) {
       add.push({
-        'ID': `${id}-${m.replace('-', '')}`, '일시': `${m}-${('0' + day).slice(-2)} 00:00:00`, '구분': g('구분'),
+        'ID': per === '매월' ? `${id}-${d.slice(0, 7).replace('-', '')}` : `${id}-${d.replace(/-/g, '')}`, '일시': `${d} 00:00:00`, '구분': g('구분'),
         '분류': g('분류'), '소분류': g('소분류'), '내용': g('내용'), '금액': num_(g('금액')), '자산': g('자산'),
         '받는자산': g('받는자산'), '메모': g('메모'), '반복': id, '입력자': '자동',
         '투자구분': g('구분') === '이체' ? g('투자구분') : '', '투자계좌': g('투자계좌'), '투자종목': g('투자종목'),
       });
-      made = m; m = hhNextYm_(m);
+      made = d; d = hhOccAfter_(per, anchor, d);
     }
     if (made) done.push([r + 1, made]);
   }
@@ -1119,6 +1122,41 @@ function hhRunRules_() {
   }
   done.forEach(([row, m]) => rt.sh.getRange(row, c['마지막생성'] + 1).setNumberFormat('@').setValue(m));
   return n;
+}
+
+/* 반복 주기 (편한가계부와 같은 목록) */
+const HH_PERIODS = ['매일', '주중', '주말', '매주', '2주마다', '4주마다', '매월', '월말', '2개월마다', '3개월마다', '4개월마다', '6개월마다', '1년마다'];
+const HH_PER_M = { '매월': 1, '2개월마다': 2, '3개월마다': 3, '4개월마다': 4, '6개월마다': 6, '1년마다': 12 };
+const HH_PER_D = { '매주': 7, '2주마다': 14, '4주마다': 28 };
+function hhAddDays_(d, k) { const t = new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10) + k)); return t.toISOString().slice(0, 10); }
+function hhAddMonths_(ym, k) { const t = new Date(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7) - 1 + k, 1)); return t.toISOString().slice(0, 7); }
+function hhWd_(d) { return new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10))).getUTCDay(); }
+/** 반복의 다음 날짜: anchor(시작일) 기준, after 보다 뒤의 첫 날짜 */
+function hhOccAfter_(per, anchor, after) {
+  const day = +anchor.slice(8, 10);
+  if (per in HH_PER_M) {
+    let ym = anchor.slice(0, 7);
+    for (let i = 0; i < 1200; i++) { const d = `${ym}-${('0' + Math.min(day, hhDays_(ym))).slice(-2)}`; if (d > after) return d; ym = hhAddMonths_(ym, HH_PER_M[per]); }
+    return '';
+  }
+  if (per === '월말') {
+    let ym = anchor.slice(0, 7);
+    for (let i = 0; i < 1200; i++) { const d = `${ym}-${hhDays_(ym)}`; if (d >= anchor && d > after) return d; ym = hhAddMonths_(ym, 1); }
+    return '';
+  }
+  if (per in HH_PER_D) {
+    const n = HH_PER_D[per];
+    if (after < anchor) return anchor;
+    const diff = Math.round((Date.UTC(+after.slice(0, 4), +after.slice(5, 7) - 1, +after.slice(8, 10)) - Date.UTC(+anchor.slice(0, 4), +anchor.slice(5, 7) - 1, day)) / 864e5);
+    return hhAddDays_(anchor, (Math.floor(diff / n) + 1) * n);
+  }
+  let d = after < anchor ? anchor : hhAddDays_(after, 1);
+  for (let i = 0; i < 8; i++) {
+    const w = hhWd_(d);
+    if (per === '매일' || (per === '주중' && w > 0 && w < 6) || (per === '주말' && (w === 0 || w === 6))) return d;
+    d = hhAddDays_(d, 1);
+  }
+  return '';
 }
 
 function hhNextYm_(ym) {

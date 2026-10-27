@@ -1440,3 +1440,5 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 body:not(.hh-mode) .sel-list button.on { color: var(--accent); }
 input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.hf-dt.ph { color: var(--ink-4); }
+.hr.rl { grid-template-columns: 84px minmax(0, 1fr) auto; } .hr.rl .hr-cat { white-space: normal; word-break: keep-all; line-height: 1.3; }
