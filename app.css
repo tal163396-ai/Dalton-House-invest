@@ -1358,12 +1358,12 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .hh-page.kping .hh-pbody { padding-bottom: 330px; }
 .kp-grid, .kp-ops { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
 .kp-ops[hidden] { display: none; }
-.kp-k { border: 0; border-radius: 0; background: var(--card); color: var(--ink); font: inherit; font-size: 24px; font-weight: 600; height: 62px; display: grid; place-items: center; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+.kp-k { border: 0; border-radius: 0; background: var(--card); color: var(--ink); font: inherit; font-size: 20px; font-weight: 500; height: 56px; display: grid; place-items: center; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
 .kp-k:active { background: var(--fill); }
 .kp-ops .kp-k { height: 48px; font-size: 22px; color: var(--hh); background: color-mix(in srgb, var(--hh) 7%, var(--card)); }
 .kp-k.fn { color: var(--ink-2); }
 .kp-k.fn.on { color: var(--hh); }
-.kp-k.ok { background: var(--kc, var(--hh)); color: var(--kt, #fff); font-size: 18px; font-weight: 800; }
+.kp-k.ok { background: var(--kc, var(--hh)); color: var(--kt, #fff); font-size: 16px; font-weight: 700; }
 .kp-k.ok:active { filter: brightness(.92); }
 
 /* ── 잔액 수정 창 ── */
@@ -1374,8 +1374,8 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .adj-top span { font-size: 13.5px; color: var(--ink-3); }
 .adj-amt { padding: 14px 20px 10px; display: grid; gap: 2px; }
 .adj-amt small { font-size: 13px; color: var(--ink-3); font-weight: 600; }
-.adj-amt b { font-size: 28px; font-weight: 800; letter-spacing: -.4px; border-bottom: 2px solid var(--hh); padding-bottom: 6px; }
-.adj-amt b .u { font-size: 20px; font-weight: 700; margin-left: 2px; }
+.adj-amt b { font-size: 22px; font-weight: 700; letter-spacing: -.2px; border-bottom: 2px solid var(--hh); padding-bottom: 6px; }
+.adj-amt b .u { font-size: 17px; font-weight: 600; margin-left: 2px; }
 .adj-amt em { font-style: normal; font-size: 13.5px; font-weight: 700; color: var(--ink-3); margin-top: 4px; }
 .adj-amt em.p { color: var(--inc); } .adj-amt em.m { color: var(--exp); }
 .adj-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 4px 20px 10px; }
@@ -1389,8 +1389,8 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .adj-chips button.on { background: var(--hh); color: #fff; }
 .adj-hint { margin: 0; padding: 0 20px 12px; font-size: 12.5px; color: var(--ink-3); line-height: 1.5; word-break: keep-all; }
 .adj-kp { padding-bottom: var(--safe-b); background: var(--line); }
-.adj-kp .kp-k { height: 56px; }
-.adj-kp .kp-k.sm { font-size: 16px; }
+.adj-kp .kp-k { height: 52px; }
+.adj-kp .kp-k.sm { font-size: 15px; }
 
 /* ── 기간 실현손익 팝업: 종류 누르면 거래, 전체 거래는 접기 ── */
 .bd-kind { border-top: 1px solid var(--fill); }
@@ -1404,3 +1404,13 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 
 .pnl-seg { display: grid; grid-template-columns: 1fr 1fr; }
 .pnl-seg button { font-size: 14.5px; padding: 10px 4px; word-break: keep-all; }
+
+.adj-catbtn { display: flex; align-items: center; gap: 10px; width: calc(100% - 40px); margin: 0 20px 12px; padding: 12px 14px; border: 0; border-radius: 14px; background: var(--fill); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.adj-catbtn small { font-size: 13px; color: var(--ink-3); font-weight: 600; }
+.adj-catbtn b { flex: 1; font-size: 15.5px; font-weight: 700; }
+.adj-catbtn svg { color: var(--ink-3); }
+.adj-pick { border-top: 1px solid var(--line); padding-bottom: var(--safe-b); }
+.adj-pick-h { padding: 12px 20px 6px; font-size: 13px; font-weight: 700; color: var(--ink-3); }
+.adj-pick-l { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 4px 20px 16px; max-height: 208px; overflow-y: auto; overscroll-behavior: contain; }
+.adj-pick-l button { border: 0; border-radius: 12px; background: var(--fill); color: var(--ink); font: inherit; font-size: 15px; font-weight: 600; padding: 12px 10px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.adj-pick-l button.on { background: var(--hh); color: #fff; }
