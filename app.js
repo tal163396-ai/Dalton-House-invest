@@ -884,7 +884,7 @@
         <div class="gw-legend num">
           <span><i style="background:var(--accent)"></i>저축 <small class="lg-sub">(근로·기타소득 − 지출)</small> <b>${won0(last.saveCum)}</b></span>
           <span><i style="background:${last.pnlCum >= 0 ? 'var(--up)' : 'var(--down)'}"></i>투자 손익 (실현) <b class="${cls(last.pnlCum)}">${won0(last.pnlCum)}</b></span>
-          ${Math.round(last.adjCum) ? `<span><i style="background:var(--ink-4)"></i>기타 보정 <small class="lg-sub">(잔액 맞춤·자산 등록 등)</small> <b class="${cls(last.adjCum)}">${won0(last.adjCum)}</b></span>` : ''}
+          ${Math.abs(last.adjCum) >= 10000 ? `<span><i style="background:var(--ink-4)"></i>기타 보정 <small class="lg-sub">(빠진 기록 확인 필요)</small> <b class="${cls(last.adjCum)}">${won0(last.adjCum)}</b></span>` : ''}
         </div>
         <div class="legend">${series.map(s => `<span><i class="${s.key === 'inv' || s.key === 'save' ? 'dash' : ''}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
         ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, areaKey: 'nw', tagFmt: v => compact(v), valFmt: v => `${compact(v)}원`, meta })}
@@ -1625,7 +1625,7 @@
     '매도': '팔았을 때.<br>실현손익(익절·손절)이 자동 계산되어<br>월별 수익에 반영됩니다.',
     '입금': '계좌에 새 돈을 넣었을 때 (예: 월급에서 ISA로 이체).<br>원금과 예수금이 함께 늘어나<br>수익으로 잘못 잡히지 않습니다.',
     '출금': '계좌에서 돈을 뺐을 때.<br>원금과 예수금이 함께 줄어듭니다.',
-    '금액 수정': '증권사 화면과 다를 때 지금 값으로 맞춥니다.<br>종목은 수량·평단·원금을,<br>예수금·금처럼 직접 관리하는 항목은 금액을 고칩니다.',
+    '금액 수정': '증권사 화면과 다를 때 지금 값으로 맞춥니다.<br>종목은 수량·평단·원금을,<br>예수금·금처럼 직접 관리하는 항목은<br>금액을 고칩니다.',
   };
 
   const isTradable = r => !/예수금/.test(r.sub) && !r.method.startsWith('수동') && r.kind !== '현금';
@@ -1668,7 +1668,10 @@
         <label class="field"><span>${usd ? '지금 금액 (달러)' : '지금 금액 (원)'}</span>
           <input id="fValue" class="${usd ? '' : 'money'}" type="${usd ? 'number' : 'text'}" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur ? (usd ? cur.qty : Math.round(cur.value).toLocaleString('ko-KR')) : ''}">
         </label>
-        <p class="preview">${cur ? `기록된 값 ${usd ? `$${cur.qty.toLocaleString('en-US')}` : won(cur.value)}` : ''}</p>`}
+        <p class="preview">${cur ? `기록된 값 ${usd ? `$${cur.qty.toLocaleString('en-US')}` : won(cur.value)}` : ''}</p>
+        ${cur && !usd && cur.kind === '현금' ? `<div class="field"><span>차액 처리</span>
+          <div class="seg pnl-seg" role="group"><button type="button" data-pnl="1" class="${F.pnl !== false ? 'on' : ''}">기타 손익으로 기록</button><button type="button" data-pnl="0" class="${F.pnl === false ? 'on' : ''}">원금만 맞춤</button></div></div>
+          <p class="preview num" id="fPnlHint"></p>` : ''}`}
         <p class="form-error" id="fErr" role="alert"></p>
         <button class="btn primary" id="fSubmit">저장하기</button>`;
     } else if (F.type === '입금' || F.type === '출금') {
@@ -1800,6 +1803,14 @@
       else if (row) a.placeholder = row.avg || '';
       fxUpd();
     });
+    const pnlUpd = () => {
+      const h = $('#fPnlHint', el); if (!h) return;
+      const row = findRow(F.key); const v = String($('#fValue').value).replace(/,/g, '');
+      const d = row && v !== '' ? Math.round(Number(v) - row.cost) : 0;
+      h.innerHTML = d ? (F.pnl !== false ? `차액 <b class="${d > 0 ? 'up' : 'down'}">${d > 0 ? '+' : '−'}${Math.abs(d).toLocaleString('ko-KR')}원</b>을 이번 달 실현손익(기타)에 넣습니다.` : `차액 ${d > 0 ? '+' : '−'}${Math.abs(d).toLocaleString('ko-KR')}원은 손익 없이 원금만 바뀝니다.`) : '';
+    };
+    $$('[data-pnl]', el).forEach(b => b.onclick = () => { F.pnl = b.dataset.pnl === '1'; $$('[data-pnl]', el).forEach(x => x.classList.toggle('on', x === b)); pnlUpd(); });
+    on('#fValue', 'input', pnlUpd);
     on('#fSubmit', 'click', submitForm);
     bindMonthClose(el);
     bindMoney(el);
@@ -1953,7 +1964,7 @@
       if (!row) { err.textContent = '수정할 항목을 선택하십시오.'; return; }
       if (v === '' || !Number.isFinite(Number(v))) { err.textContent = '금액을 입력하십시오.'; return; }
       action = 'manual';
-      payload = { manual: row.cur === 'USD' ? { asset: row.asset, sub: row.sub, usd: Number(v) } : { asset: row.asset, sub: row.sub, value: Number(v) } };
+      payload = { manual: row.cur === 'USD' ? { asset: row.asset, sub: row.sub, usd: Number(v) } : { asset: row.asset, sub: row.sub, value: Number(v), pnl: row.kind === '현금' && F.pnl !== false, by: store.get(LS.name) || '' } };
     } else if (F.type === '입금' || F.type === '출금') {
       const t = { ...base(), asset: $('#fCash').value, amountKrw: Number(String($('#fKrw').value).replace(/,/g, '')) };
       if (!(t.amountKrw > 0)) { err.textContent = '금액을 입력하십시오.'; return; }

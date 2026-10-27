@@ -1401,3 +1401,6 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .bd-kind .sd-trades { margin-top: -2px; }
 .bd-all { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 14px; padding: 13px 14px; border: 0; border-radius: 14px; background: var(--fill); color: var(--ink); font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
 .bd-all-list { padding: 2px 4px 0; }
+
+.pnl-seg { display: grid; grid-template-columns: 1fr 1fr; }
+.pnl-seg button { font-size: 14.5px; padding: 10px 4px; word-break: keep-all; }

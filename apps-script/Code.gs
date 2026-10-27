@@ -331,21 +331,27 @@ function recordTrade_(tr) {
   });
 
   if (realized !== null) {
-    const row = appendByHeader_('실현손익', {
+    appendRealized_({
       '날짜': kstWall_(date), '자산': asset, '세부종목': sub,
       '내용': `${sub} ${qty}주 매도 ${realized >= 0 ? '익절' : '손절'}`,
       '손익(원)': realized, '구분': realized >= 0 ? '익절' : '손절', '출처': tr.link ? '가계부' : '앱', '메모': tr.memo || '', '연결': tr.link || '',
     });
-    const rt = table_('실현손익');
-    const A = colLetter_(rt.col['날짜'] + 1);
-    if ('연도' in rt.col) rt.sh.getRange(row, rt.col['연도'] + 1).setFormula(`=YEAR(${A}${row})`);
-    if ('월' in rt.col) rt.sh.getRange(row, rt.col['월'] + 1).setFormula(`=MONTH(${A}${row})`);
   }
 
   return { ok: true, message: `${asset} ${type} 기록 완료`, amountKrw, realized };
 }
 
 /** 수동 값 갱신: manual = { asset, sub, value(원) } 또는 달러 예수금이면 { usd } */
+/** 실현손익 한 줄 추가 (연도·월 칸은 날짜에서 계산하는 수식) */
+function appendRealized_(o) {
+  const row = appendByHeader_('실현손익', o);
+  const rt = table_('실현손익');
+  const A = colLetter_(rt.col['날짜'] + 1);
+  if ('연도' in rt.col) rt.sh.getRange(row, rt.col['연도'] + 1).setFormula(`=YEAR(${A}${row})`);
+  if ('월' in rt.col) rt.sh.getRange(row, rt.col['월'] + 1).setFormula(`=MONTH(${A}${row})`);
+  return row;
+}
+
 function setManual_(m) {
   if (!m) throw new Error('값이 없습니다');
   const t = holdings_();
@@ -367,8 +373,20 @@ function setManual_(m) {
     setCell_(t, r, '수량', round_(num_(m.usd), 2));
   } else {
     const v = Math.round(num_(m.value));
+    const isCash = String(t.values[r][t.col['종류']]).trim() === '현금';
+    const diff = isCash ? v - Math.round(num_(t.values[r][t.col['원금(원)']])) : 0;
     setCell_(t, r, '직접평가(원)', v);
-    if (String(t.values[r][t.col['종류']]).trim() === '현금') setCell_(t, r, '원금(원)', v);
+    if (isCash) setCell_(t, r, '원금(원)', v);
+    // 예수금 차액을 '기타 손익'으로 실현손익에 남김 (수수료·세금·환차 등) → 자산 성장의 기타 보정이 생기지 않음
+    if (isCash && diff && m.pnl) {
+      const asset = String(m.asset).trim(), sub = String(m.sub || m.asset).trim(), now = kstWall_(new Date());
+      appendByHeader_('거래기록', {
+        '날짜': now, '자산': asset, '세부종목': sub, '구분': '수정', '수량': '', '단가': '', '통화': 'KRW', '금액(원)': v, '실현손익(원)': diff,
+        '입력자': m.by || '', '메모': '기타 손익', '연결': '',
+      });
+      appendRealized_({ '날짜': now, '자산': asset, '세부종목': sub, '내용': `${sub} 금액 수정 기타 ${diff >= 0 ? '이익' : '손실'}`, '손익(원)': diff, '구분': '기타', '출처': '앱', '메모': '기타 손익', '연결': '' });
+      return { ok: true, message: `저장했습니다 · 차액 ${diff > 0 ? '+' : ''}${diff.toLocaleString('ko-KR')}원을 기타 손익으로 기록` };
+    }
   }
   return { ok: true, message: '저장했습니다' };
 }
