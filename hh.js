@@ -42,6 +42,8 @@
   const clip = (s, n) => { const c = chars(s); return c.length > n ? c.slice(0, n).join('') + '…' : c.join(''); };
   const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const ico = {
+    bksp: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M9 5h11a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9l-6-7z"/><path d="M12 9.5l5 5M17 9.5l-5 5"/></svg>',
+    calc: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 15.5h.01M12 15.5h.01M15.5 15.5h.01M8.5 18h.01M12 18h.01M15.5 18h.01"/></svg>',
     back: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>',
     left: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
     right: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
@@ -1100,7 +1102,7 @@
         </div>`}
         ${f.repeat && !isRule ? `<p class="hf-info">매월 ${+f.date.slice(8)}일에 같은 내역이 자동으로 들어갑니다.</p>` : ''}
         ${e && e.rule ? `<p class="hf-info">매월 반복 내역입니다. 여기서 고치면 이번 것만 바뀝니다. 반복 자체는 더보기 → 매월 반복 내역에서 고칩니다.</p>` : ''}
-        <div class="hf-row"><span class="hf-l">금액</span><div class="hf-v"><input id="hfAmt" inputmode="numeric" enterkeyhint="next" autocomplete="off" placeholder="0" value="${f.amt ? (f.neg ? '-' : '') + fmt(f.amt) : ''}"><span class="hf-unit">원</span></div></div>
+        <div class="hf-row ${kp !== null ? 'kp-on' : ''}"><span class="hf-l">금액</span><div class="hf-v"><button type="button" id="hfAmt" class="hf-amt ${kp !== null || f.amt ? '' : 'ph'}" aria-label="금액">${amtShow()}</button></div></div>
         ${f.cur && f.famt !== '' ? `<p class="hf-info">외화 ${f.cur === 'USD' ? 'US$' : f.cur} ${Number(f.famt).toLocaleString('ko-KR', { minimumFractionDigits: 2 })} 내역입니다. 앱은 원화 금액으로 계산합니다.</p>` : ''}
         ${adj ? '' : `<div class="hf-row"><span class="hf-l">${tr ? '출금' : '분류'}</span><button class="hf-v hf-pick ${(tr ? f.asset : f.cat) ? '' : 'ph'}" id="hfCat">${tr ? esc(f.asset || '출금 자산') : esc(f.cat ? `${f.cat}${f.sub ? ` / ${f.sub}` : ''}` : '분류 고르기')}</button></div>`}
         <div class="hf-row"><span class="hf-l">${tr ? '입금' : '자산'}</span><button class="hf-v hf-pick ${(tr ? f.to : f.asset) ? '' : 'ph'}" id="hfAsset">${tr ? esc(f.to || '입금 자산') : esc(f.asset || '자산 고르기')}</button></div>
@@ -1121,7 +1123,7 @@
       bind();
     }
     function readInputs() {
-      const a = $('#hfAmt', root); if (a) { const v = moneyVal(a.value); f.amt = Number.isFinite(v) ? Math.abs(v) : 0; f.neg = v < 0; }
+      kpCommit();
       const t = $('#hfText', root); if (t) f.text = t.value;
       const m = $('#hfMemo', root); if (m) f.memo = m.value;
       const q = $('#hfQty', root); if (q && f.inv) f.inv.qty = q.value === '' ? '' : Number(q.value);
@@ -1141,7 +1143,7 @@
         // 고르기 창이 열려 있으면 바뀐 구분에 맞게 다시 그림 (수입 → 지출 분류 등)
         if (pickerOpen && was !== f.type) {
           const k = pickerKind;
-          const nk = f.type === '이체' ? (k === 'to' || k === 'asset' ? 'to' : 'from') : (k === 'asset' || k === 'to' ? 'asset' : 'cat');
+          const nk = k === 'amt' ? 'amt' : f.type === '이체' ? (k === 'to' || k === 'asset' ? 'to' : 'from') : (k === 'asset' || k === 'to' ? 'asset' : 'cat');
           openPicker(nk);
         }
       });
@@ -1151,9 +1153,7 @@
       const day = $('#hfDay', root); if (day) day.onchange = () => { f.day = Number(day.value); };
       const fs = $('#hfStart', root); if (fs) fs.onchange = () => { f.start = fs.value; };
       const fe = $('#hfEnd', root); if (fe) fe.onchange = () => { f.end = fe.value; };
-      const amt = $('#hfAmt', root);
-      bindMoneyInput(amt, f.type === '수정');
-      amt.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); readInputs(); amt.blur(); if (f.type === '수정') $('#hfText', root).focus(); else openPicker(f.type === '이체' ? 'from' : 'cat'); } };
+      $('#hfAmt', root).onclick = () => { readInputs(); openPicker('amt'); };
       const cat = $('#hfCat', root); if (cat) cat.onclick = () => { readInputs(); openPicker(f.type === '이체' ? 'from' : 'cat'); };
       $('#hfAsset', root).onclick = () => { readInputs(); openPicker(f.type === '이체' ? 'to' : 'asset'); };
       const iv = $('#hfInv', root); if (iv) iv.onclick = () => { readInputs(); openPicker('inv'); };
@@ -1192,12 +1192,41 @@
 
     // 아래에서 올라오는 고르기 창 (분류 → 소분류, 자산)
     let pickerOpen = false, pickerKind = '';
+    // 금액 숫자판 (편한가계부와 같은 모양). kp: 입력 중인 식 ('17300+2500'), null 이면 닫힘
+    let kp = null, kpFresh = false, kpCalc = false;
+    function kpEval(ex) {
+      ex = String(ex || '').replace(/[-+*/]+$/, '');
+      if (!ex || ex === '-') return 0;
+      const tk = ex.match(/^-?\d+|[-+*/]|\d+/g) || [];
+      const terms = []; let op = '+', cur = null;
+      const flush = () => { if (cur !== null) terms.push(cur); };
+      for (const t of tk) {
+        if (/^[-+*/]$/.test(t)) { op = t; continue; }
+        const n = Number(t);
+        if (op === '*' || op === '/') cur = op === '*' ? cur * n : (n ? cur / n : cur);
+        else { flush(); cur = op === '-' ? -n : n; }
+      }
+      flush();
+      return Math.round(terms.reduce((a, b) => a + b, 0));
+    }
+    function kpCommit() { if (kp === null) return; const v = kpEval(kp); f.amt = Math.abs(v); f.neg = f.type === '수정' && v < 0; kp = null; kpCalc = false; }
+    function amtShow() {
+      if (kp === null) return f.amt ? `${f.neg ? '−' : ''}${fmt(f.amt)}<span class="u">원</span>` : '0<span class="u">원</span>';
+      if (!kp) return '0<span class="u">원</span>';
+      const body = kp.replace(/\d+/g, d => Number(d).toLocaleString('ko-KR')).replace(/^-/, '−').replace(/(.)([-+*/])/g, (m, a, o) => `${a} ${({ '-': '−', '+': '+', '*': '×', '/': '÷' })[o]} `);
+      const ops = /\d[-+*/]/.test(kp);
+      const r = ops ? kpEval(kp) : null;
+      return `${body}${ops ? '' : '<span class="u">원</span>'}${ops ? `<small class="kp-res">= ${r < 0 ? '−' : ''}${fmt(Math.abs(r))}원</small>` : ''}`;
+    }
     function openPicker(kind) {
       pickerKind = kind;
       const box = $('#hfPicker', pg);
-      const close = () => { box.hidden = true; box.innerHTML = ''; pickerOpen = false; pg.classList.remove('picking'); };
+      const close = () => { box.hidden = true; box.innerHTML = ''; box.classList.remove('kp'); pickerOpen = false; pg.classList.remove('picking', 'kping'); if (kp !== null) { kpCommit(); draw(); } };
       if (!pickerOpen) { pickerOpen = true; pushState(close); }
+      if (kind !== 'amt' && kp !== null) { kpCommit(); draw(); }
       pg.classList.add('picking');
+      pg.classList.toggle('kping', kind === 'amt');
+      box.classList.toggle('kp', kind === 'amt');
       box.hidden = false;
       const done = next => {
         draw();
@@ -1205,6 +1234,42 @@
         back();
         setTimeout(() => { const t = $('#hfText', root); if (t && !f.text) t.focus(); }, 260);
       };
+      if (kind === 'amt') {
+        if (kp === null) { kp = f.amt ? `${f.neg ? '-' : ''}${f.amt}` : ''; kpFresh = true; }
+        const allowNeg = f.type === '수정';
+        const k = (v, lab, cls = '') => `<button class="kp-k ${cls}" data-k="${v}">${lab}</button>`;
+        const paint = () => {
+          const a = $('#hfAmt', root); if (a) { a.innerHTML = amtShow(); a.classList.remove('ph'); }
+          const row = a && a.closest('.hf-row'); if (row) row.classList.add('kp-on');
+          $('#kpOps', box).hidden = !kpCalc; $('[data-k="calc"]', box).classList.toggle('on', kpCalc);
+        };
+        box.innerHTML = `<div class="pk-head"><b>금액</b><button class="icon-btn" id="pkX" aria-label="닫기">${ico.close}</button></div>
+          <div class="kp-ops" id="kpOps" ${kpCalc ? '' : 'hidden'}>${k('+', '+')}${k('*', '×')}${k('/', '÷')}${k('=', '=')}</div>
+          <div class="kp-grid">${k(1, 1)}${k(2, 2)}${k(3, 3)}${k('bs', ico.bksp, 'fn')}${k(4, 4)}${k(5, 5)}${k(6, 6)}${k('-', '−', 'fn')}${k(7, 7)}${k(8, 8)}${k(9, 9)}${k('calc', ico.calc, 'fn')}${k('00', '00')}${k(0, 0)}${k('000', '000')}${k('ok', '완료', 'ok')}</div>`;
+        box.style.setProperty('--kc', f.type === '수입' ? 'var(--inc)' : f.type === '지출' ? 'var(--exp)' : 'var(--ink)');
+        box.style.setProperty('--kt', f.type === '수입' || f.type === '지출' ? '#fff' : 'var(--bg)');
+        $('#pkX', box).onclick = () => back();
+        $$('[data-k]', box).forEach(b => b.onclick = () => {
+          const v = b.dataset.k;
+          if (v === 'ok') { kpCommit(); draw(); if (f.type === '수정') { back(); setTimeout(() => { const t = $('#hfText', root); if (t) t.focus(); }, 260); } else openPicker(f.type === '이체' ? 'from' : 'cat'); return; }
+          if (v === 'calc') { kpCalc = !kpCalc; paint(); return; }
+          if (v === '=') { const r = kpEval(kp); kp = r ? String(r) : ''; kpFresh = true; paint(); return; }
+          if (v === 'bs') { kp = kp.slice(0, -1); kpFresh = false; paint(); return; }
+          if (/^[-+*/]$/.test(v)) {
+            kpFresh = false;
+            if (kp === '' || kp === '-') { if (v === '-' && allowNeg) kp = '-'; paint(); return; }
+            kp = /[-+*/]$/.test(kp) ? kp.slice(0, -1) + v : kp + v;
+            if (v !== '-' || /[+*/]/.test(kp)) kpCalc = true;
+            paint(); return;
+          }
+          if (kpFresh) { kp = ''; kpFresh = false; }
+          const last = kp.split(/[-+*/]/).pop();
+          if (last.length + v.length > 13) return;
+          if (last === '0' || (last === '' && /^0+$/.test(v))) { if (v === '0' || v === '00' || v === '000') return; kp = kp.slice(0, -1); }
+          kp += v; paint();
+        });
+        return;
+      }
       if (kind === 'inv') {
         const dir = invDir(), o = D.invOptions ? D.invOptions() : null;
         if (!o) { box.innerHTML = `<div class="pk-head"><b>투자 앱</b><button class="icon-btn" id="pkX" aria-label="닫기">${ico.close}</button></div><p class="empty">투자 앱 자료를 불러오는 중입니다.<br>잠시 뒤 다시 누르십시오.</p>`; $('#pkX', box).onclick = () => back(); if (D.ensureInv) D.ensureInv(); return; }
@@ -1326,7 +1391,7 @@
         commitTx(t, e, newRule);
         Object.assign(f, { amt: 0, neg: false, cat: '', sub: '', text: '', memo: '', repeat: false, to: '', inv: null });
         draw();
-        setTimeout(() => $('#hfAmt', root).focus(), 50);
+        setTimeout(() => openPicker('amt'), 50);
         toast('저장했습니다. 이어서 입력하십시오');
       } else {
         back();
@@ -1349,7 +1414,7 @@
     };
     const cp = $('#hfCopy', pg);
     if (cp) cp.onclick = () => back(1, () => openForm({ copy: e, date: today() }));
-    if (!e && !isRule && !opts.copy) setTimeout(() => { const a = $('#hfAmt', root); if (a) a.focus(); }, 280);
+    if (!e && !isRule && !opts.copy) setTimeout(() => openPicker('amt'), 280);
   }
 
   // 화면에 먼저 반영하고 서버에 저장. 실패하면 되돌림

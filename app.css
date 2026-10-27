@@ -1345,3 +1345,23 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .ask .sheet-actions .btn { min-height: 46px; padding: 10px 12px; font-size: 15.5px; border-radius: 14px; }
 .ask .ask-in { font-size: 16px; }
 @media (prefers-reduced-motion: reduce) { .sheet.pop .sheet-panel:has(.ask), .sheet.pop.open .sheet-panel:has(.ask) { transform: translate(-50%, -50%); } }
+
+/* ── 금액 숫자판 (편한가계부) ── */
+.hf-amt { border: 0; background: none; color: var(--ink); font: inherit; font-size: 20px; font-weight: 700; text-align: left; padding: 13px 0; width: 100%; min-height: 52px; display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 2px; cursor: pointer; letter-spacing: -.2px; }
+.hf-amt.ph { color: var(--ink-4); }
+.hf-amt .u { font-size: 17px; font-weight: 600; margin-left: 1px; }
+.hf-amt .kp-res { flex-basis: 100%; font-size: 13.5px; font-weight: 600; color: var(--ink-3); margin-top: 2px; }
+.hf-row.kp-on { border-bottom-color: var(--hh); }
+.hf-row.kp-on .hf-amt::after { content: ''; width: 2px; height: 20px; background: var(--hh); align-self: center; margin-left: 2px; animation: kpBlink 1s steps(1) infinite; }
+@keyframes kpBlink { 50% { opacity: 0; } }
+.hf-picker.kp { height: auto; }
+.hh-page.kping .hh-pbody { padding-bottom: 330px; }
+.kp-grid, .kp-ops { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+.kp-ops[hidden] { display: none; }
+.kp-k { border: 0; border-radius: 0; background: var(--card); color: var(--ink); font: inherit; font-size: 24px; font-weight: 600; height: 62px; display: grid; place-items: center; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+.kp-k:active { background: var(--fill); }
+.kp-ops .kp-k { height: 48px; font-size: 22px; color: var(--hh); background: color-mix(in srgb, var(--hh) 7%, var(--card)); }
+.kp-k.fn { color: var(--ink-2); }
+.kp-k.fn.on { color: var(--hh); }
+.kp-k.ok { background: var(--kc, var(--hh)); color: var(--kt, #fff); font-size: 18px; font-weight: 800; }
+.kp-k.ok:active { filter: brightness(.92); }
