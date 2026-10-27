@@ -631,14 +631,15 @@
         ${k === '__sel' ? `<p class="note cm-tip">${esc(C.cats.map(cn).join(' + '))}</p>` : ''}
         <div class="cm-legend">${ys.map((y, j) => `<span><i style="background:${YC[j]}"></i>${y}</span>`).join('')}</div>
         <div class="card cm-chart"><svg viewBox="0 0 ${W} ${Hh}" width="100%">${grid}${xs}${lines}${C.sel != null ? `<line x1="${x(C.sel)}" x2="${x(C.sel)}" y1="${T}" y2="${Hh - B}" class="cm-cur"/>` : ''}${hits}</svg></div>
-        <div class="card cm-sum">${C.sel != null ? `<div class="cm-sh"><span>연도</span><span>${C.sel + 1}월</span><span>합계 · 월평균</span></div>` : '<p class="note cm-tip">그래프를 누르면 그 달 금액이 아래 표에 나옵니다.</p>'}${ys.map((y, j) => `<div class="cm-sr ${C.sel != null ? 'w-sel' : ''}"><span><i style="background:${YC[j]}"></i>${y}${y === new Date().getFullYear() ? ` <small>(${monthsOf(y)}월까지)</small>` : ''}</span>${C.sel != null ? `<b class="num cm-mv">${selV(j)}</b>` : ''}<span><b class="num">${won(totOf(y, k))}</b><small class="num">월평균 ${won(totOf(y, k) / monthsOf(y))}</small></span></div>`).join('')}</div>`;
+        <div class="card cm-sum">${C.sel != null ? `<div class="cm-sh"><span>연도</span><span>${C.sel + 1}월</span><span>연간 합계</span></div>` : '<p class="note cm-tip">그래프를 누르면 그 달 금액이 아래 표에 나옵니다.</p>'}${ys.map((y, j) => `<div class="cm-sr ${C.sel != null ? 'w-sel' : ''}"><span><i style="background:${YC[j]}"></i>${y}${y === new Date().getFullYear() ? ` <small>(${monthsOf(y)}월까지)</small>` : ''}</span>${C.sel != null ? `<b class="num cm-mv">${selV(j)}</b>` : ''}<span><b class="num">${won(totOf(y, k))}</b></span></div>`).join('')}</div>`;
     } else {
       const blocks = shown.map(k => {
         const vs = C.years.map(y => val(y, k)), mx = Math.max(1, ...vs);
-        const n = vs.length, ch = n >= 2 && vs[n - 2] ? (vs[n - 1] - vs[n - 2]) / vs[n - 2] : null;
-        const good = C.type === '수입' ? ch > 0 : ch < 0;
-        return `<button class="cm-blk" data-trend="${esc(k)}"><div class="cm-bt"><b>${esc(cn(k))}${k === '__sel' ? `<small>${esc(C.cats.map(cn).join(' + '))}</small>` : ''}</b>${ch != null ? `<em class="${good ? 'good' : 'bad'}">${String(C.years[n - 2]).slice(2)}→${String(C.years[n - 1]).slice(2)} ${ch >= 0 ? '+' : '−'}${Math.abs(ch * 100).toFixed(1)}%</em>` : ''}${ico.chev}</div>
-          ${C.years.map((y, j) => `<div class="cm-bar"><span>${String(y).slice(2)}</span><i style="width:${Math.max(1.5, vs[j] / mx * 100)}%;background:${YC[j]}"></i><b class="num">${fmt(vs[j])}</b></div>`).join('')}</button>`;
+        // 전년 대비 증감: 연도마다 바로 앞 연도와 비교 (첫 연도는 비교 없음)
+        const chg = j => { if (!j || !vs[j - 1]) return ''; const c = (vs[j] - vs[j - 1]) / vs[j - 1], good = C.type === '수입' ? c > 0 : c < 0;
+          return `<em class="${Math.abs(c) < 0.0005 ? '' : good ? 'good' : 'bad'}">${c >= 0 ? '+' : '−'}${Math.abs(c * 100).toFixed(1)}%</em>`; };
+        return `<button class="cm-blk" data-trend="${esc(k)}"><div class="cm-bt"><b>${esc(cn(k))}${k === '__sel' ? `<small>${esc(C.cats.map(cn).join(' + '))}</small>` : ''}</b>${ico.chev}</div>
+          ${C.years.map((y, j) => `<div class="cm-bar"><span>${String(y).slice(2)}</span><i style="width:${Math.max(1.5, vs[j] / mx * 100)}%;background:${YC[j]}"></i><b class="num">${fmt(vs[j])}</b>${chg(j) || '<em></em>'}</div>`).join('')}</button>`;
       }).join('');
       body = `<div class="cm-lb">연도 <small>최대 3개</small></div>
         <div class="cm-chips">${D0.years.map(y => { const j = C.years.indexOf(y); return `<button class="${j >= 0 ? 'on y' : ''}" style="${j >= 0 ? `--yc:${YC[j]}` : ''}" data-y="${y}">${y}</button>`; }).join('')}</div>
@@ -646,7 +647,7 @@
         <div class="cm-head"><span>보기</span>${modeSeg}</div>
         <div class="cm-head"><span>금액</span>${pill}</div>
         ${C.years.length ? `<div class="card cm-card">${blocks}</div>` : emptyHtml(`${C.type} 내역이 없습니다.`)}
-        <p class="note">대분류를 누르면 월별 추이를 연도별로 겹쳐 봅니다.<br>올해는 지난 개월 수로 월평균을 냅니다.</p>`;
+        <p class="note">%는 바로 앞 연도 대비 증감입니다.<br>대분류를 누르면 월별 추이를 연도별로 겹쳐 봅니다.<br>올해는 지난 개월 수로 월평균을 냅니다.</p>`;
     }
     $('#hh-stats').innerHTML = `
       <div class="hh-sticky">
