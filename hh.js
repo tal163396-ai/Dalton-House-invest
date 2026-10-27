@@ -1948,7 +1948,7 @@
     let invOn = a.link === INVLINK;
     const payOpts = () => H.assets.filter(x => x.name !== a.name && !x.link && !isCheckG(x.group) && x.group !== '카드');
     const pg = pushPage({
-      title: isNew ? '자산 추가' : '자산 고치기', cls: 'hf-page ae-page',
+      title: isNew ? '자산 추가' : '자산 설정', cls: 'hf-page ae-page',
       actions: !isNew ? `<button class="icon-btn" id="eDel" aria-label="자산 삭제">${ico.trash}</button>` : '',
       body: `<div class="hf ae">
         <button class="hf-row ae-g" id="eGroupBtn" type="button"><span class="hf-l">그룹</span><span class="hf-v" id="eGroupV">${esc(group)}</span>${ico.chev}</button>
@@ -2007,7 +2007,7 @@
       reindex();
       payload.assets = assetsArr();
       const btn = $('#eSave', pg); btn.disabled = true; btn.textContent = '저장 중…';
-      const ok = await saveSettings(payload, isNew ? '자산을 추가했습니다' : '자산을 고쳤습니다');
+      const ok = await saveSettings(payload, isNew ? '자산을 추가했습니다' : '자산 설정을 저장했습니다');
       if (!ok) { btn.disabled = false; btn.textContent = '저장하기'; return; }
       back(); rerender();
       const diff = Number.isFinite(target) ? Math.round(target) - (isNew ? 0 : curBal) : 0;
