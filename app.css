@@ -1500,3 +1500,22 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .cm-bt b small { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-top: 2px; word-break: keep-all; }
 .sel-list button b { color: var(--hh); }
 body.hh-mode .sheet .btn.primary { background: var(--hh); }
+
+/* ── 기타 보정: 반짝임 + 상세 ── */
+@keyframes adjBlink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+.blink { animation: adjBlink 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .blink { animation: none; text-decoration: underline dotted; } }
+button.adj-open { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: none; color: inherit; font: inherit; padding: 0; text-align: left; cursor: pointer; }
+button.adj-open b { margin-left: auto; font-weight: 800; }
+button.adj-open i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+button.am-adj { border: 0; background: none; color: inherit; font: inherit; padding: 0; text-align: left; display: grid; cursor: pointer; }
+.ad-box { max-height: 80dvh; overflow-y: auto; }
+.ad-m { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.ad-h { display: flex; justify-content: space-between; align-items: baseline; }
+.ad-h b { font-size: 16px; } .ad-h em { font-style: normal; font-weight: 800; font-size: 15px; }
+.ad-f { font-size: 12px; color: var(--ink-3); margin: 4px 0 6px; word-break: keep-all; }
+.ad-g { font-size: 12.5px; font-weight: 800; color: var(--ink-3); margin: 10px 0 2px; }
+.ad-it { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--fill); }
+.ad-it span { display: grid; min-width: 0; } .ad-it b { font-size: 14px; font-weight: 700; word-break: keep-all; }
+.ad-it small { font-size: 11.5px; color: var(--ink-3); word-break: keep-all; }
+.ad-it em { font-style: normal; font-weight: 800; font-size: 14px; white-space: nowrap; }

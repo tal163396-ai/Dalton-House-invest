@@ -884,7 +884,7 @@
         <div class="gw-legend num">
           <span><i style="background:var(--accent)"></i>저축 <small class="lg-sub">(근로·기타소득 − 지출)</small> <b>${won0(last.saveCum)}</b></span>
           <span><i style="background:${last.pnlCum >= 0 ? 'var(--up)' : 'var(--down)'}"></i>투자 손익 (실현) <b class="${cls(last.pnlCum)}">${won0(last.pnlCum)}</b></span>
-          ${Math.abs(last.adjCum) >= 10000 ? `<span><i style="background:var(--ink-4)"></i>기타 보정 <small class="lg-sub">(빠진 기록 확인 필요)</small> <b class="${cls(last.adjCum)}">${won0(last.adjCum)}</b></span>` : ''}
+          ${Math.abs(last.adjCum) >= 10000 ? `<button class="adj-open" data-adjopen><i style="background:var(--ink-4)"></i>기타 보정 <small class="lg-sub">(눌러서 내역 보기)</small> <b class="${cls(last.adjCum)} blink">${won0(last.adjCum)}</b></button>` : ''}
         </div>
         <div class="legend">${series.map(s => `<span><i class="${s.key === 'inv' || s.key === 'save' ? 'dash' : ''}" style="border-color:${s.color}"></i>${s.label}</span>`).join('')}</div>
         ${lineChart(pts, series, { L: 46, fmt: v => compact(v), noDot: true, noZero: true, interactive: true, areaKey: 'nw', tagFmt: v => compact(v), valFmt: v => `${compact(v)}원`, meta })}
@@ -1850,6 +1850,42 @@
   }
 
   // 월 마감 (자동): 2026년 10월부터 가계부 내역으로 계산, 말일 밤 자동 저장
+  // 기타 보정 상세: 순자산 변화 − 저축 − 투자손익 을 가계부 내역·투자 앱 원금 변화로 나눠 보여 줌
+  function openAdjDetail(only) {
+    const D = state.data, H = D.household;
+    const blocks = H.map((h, i) => ({ h, prev: i > 0 ? H[i - 1] : null })).filter(x => x.h.auto && x.prev)
+      .map(({ h, prev }) => {
+        const ym = `${h.y}-${String(h.m).padStart(2, '0')}`;
+        const d = h.nw - prev.nw, sv = h.inc - h.exp, adj = d - sv - h.pnl;
+        return { h, prev, ym, d, sv, adj };
+      }).filter(x => (only ? x.ym === only : Math.abs(x.adj) >= 1)).reverse();
+    const W = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(Math.round(v)).toLocaleString('ko-KR')}원`;
+    const item = (t, sub, v, cls2 = '') => `<div class="ad-it ${cls2}"><span><b>${esc(t)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><em class="num ${cls(v)}">${W(v)}</em></div>`;
+    const body = blocks.map(({ h, prev, ym, d, sv, adj }) => {
+      const it = window.DH.hhAdjItems ? window.DH.hhAdjItems(ym) : null;
+      let rows = '';
+      if (it) {
+        const hhSum = it.adj.reduce((a, x) => a + x.amt, 0) + it.onInv.reduce((a, x) => a + x.amt, 0);
+        const unl = it.unlinked.reduce((a, x) => a + x.amt, 0);
+        // 투자 앱 원금 변화 중 가계부 이체·실현손익으로 설명 안 되는 부분 (투자 비용은 원금과 무관하므로 되돌림)
+        const invPart = (h.book - prev.book) - h.flow - (h.pnl - it.cost);
+        const direct = invPart - unl;
+        const rest = adj - hhSum - invPart;
+        const g = (title, list) => (list.length ? `<div class="ad-g">${title}</div>${list.map(x => item(x.text, `${x.d.slice(5).replace('-', '/')} · ${x.sub}`, x.amt)).join('')}` : '');
+        rows = g('가계부 잔액 보정', it.adj) + g('투자 계좌에 적은 수입·지출', it.onInv) + g('투자 앱에 연결 안 된 이체', it.unlinked)
+          + (Math.abs(direct) >= 1 ? `<div class="ad-g">투자 앱</div>${item('원금을 직접 고친 금액', '수정 탭 원금·새 종목 등록 등 (가계부와 연결 없이)', direct)}` : '')
+          + (Math.abs(rest) >= 1 ? `<div class="ad-g">그 외</div>${item('지난달 기준과의 차이', prev.auto ? '반올림 등' : '지난달은 편한가계부 월별 기록, 이번 달은 앱 계산 (첫 자동 달)', rest)}` : '');
+        if (!rows) rows = '<p class="note">보정이 없습니다.</p>';
+      } else rows = '<p class="note">가계부를 한 번 열면 상세 내역이 보입니다.</p>';
+      return `<section class="ad-m"><div class="ad-h"><b>${String(h.y).slice(2)}.${h.m}</b><em class="num ${cls(adj)}">기타 보정 ${W(adj)}</em></div>
+        <div class="ad-f num">순자산 변화 ${W(d)} − 저축 ${W(sv)} − 투자손익 ${W(h.pnl)}</div>${rows}</section>`;
+    }).join('') || '<p class="note">기타 보정이 없습니다.</p>';
+    openSheet(`<div class="ask ad-box"><h2 id="sheetTitle">기타 보정 내역</h2><p class="note ask-note">순자산 변화 중 저축·투자손익으로<br>설명되지 않는 금액입니다.<br>아래 내역을 고치면 보정이 줄어듭니다.</p>${body}
+      <div class="sheet-actions"><button class="btn" data-close>닫기</button></div></div>`, 'pop');
+  }
+
+  document.addEventListener('click', ev => { const b = ev.target.closest && ev.target.closest('[data-adjopen]'); if (b && state.data) openAdjDetail(b.dataset.adjopen || null); });
+
   function autoMonthCard() {
     const D = state.data, H = D.household;
     const autos = H.filter(h => h.auto);
@@ -1859,7 +1895,7 @@
       return `<div class="am-row num"><b>${String(h.y).slice(2)}.${h.m}</b>
         <span><small>저축</small><em class="${cls(sv)}">${won0(sv)}</em></span>
         <span><small>투자손익</small><em class="${cls(h.pnl)}">${won0(h.pnl)}</em></span>
-        <span><small>기타 보정</small><em class="${cls(adj)}">${won0(adj)}</em></span>
+        <button class="am-adj" data-adjopen="${h.y}-${String(h.m).padStart(2, '0')}"><small>기타 보정</small><em class="${cls(adj)} ${Math.abs(adj) >= 10000 ? 'blink' : ''}">${won0(adj)}</em></button>
         <span><small>순자산</small><em>${compact(h.nw)}</em></span></div>`;
     }).join('');
     return `

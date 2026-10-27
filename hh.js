@@ -1244,6 +1244,19 @@
     return `<button class="${none ? 'on' : ''}" ${attr}-i="">종목 미선택</button>` + k.items.map((it, i) => `<button class="${kSel && kSel.asset === it.asset && kSel.sub === it.sub ? 'on' : ''}" ${attr}-i="${i}">${esc(it.label)}</button>`).join('');
   };
   const costSel = (kind, idx) => { const k = invKinds().find(x => x.kind === kind); if (!k) return null; const it = idx === '' ? null : k.items[Number(idx)]; return it ? { kind, asset: it.asset, sub: it.sub } : { kind, asset: k.asset, sub: k.kind }; };
+  // 투자 앱 '기타 보정' 상세: 그 달 가계부에서 보정의 원인이 되는 내역 (app.js 가 부름)
+  D.hhAdjItems = ym => {
+    if (!H.loaded || !H.ready) return null;
+    const L = monthTx(ym), inv = H.inv;
+    const adj = L.filter(t => t.type === '수정' && t.invType !== '비용' && !inv.has(t.asset))
+      .map(t => ({ d: t.d, text: t.text || '잔액 수정', sub: t.asset, amt: t.amt }));
+    const onInv = L.filter(t => (t.type === '수입' || t.type === '지출') && inv.has(t.asset))
+      .map(t => ({ d: t.d, text: `${t.type} · ${t.cat || ''}${t.text ? ` · ${t.text}` : ''}`, sub: `${t.asset}에 기록 (생활 자산은 그대로)`, amt: t.type === '수입' ? -t.amt : t.amt }));
+    const unlinked = L.filter(t => t.type === '이체' && !t.invType && (inv.has(t.to) !== inv.has(t.asset)))
+      .map(t => ({ d: t.d, text: t.text || '이체', sub: `${t.asset} → ${t.to} · 투자 앱 연결 안 함`, amt: inv.has(t.to) ? -t.amt : t.amt }));
+    const cost = L.filter(t => t.type === '수정' && t.invType === '비용').reduce((a, t) => a + t.amt, 0);
+    return { adj, onInv, unlinked, cost };
+  };
   // 메모 칸: 안쪽 스크롤 없이 내용만큼 늘어남 (작은 스크롤바 대신 화면 전체로 스크롤)
   function autoGrow(ta) { if (!ta) return; ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight + 2}px`; }
   document.addEventListener('input', ev => { if (ev.target.matches && ev.target.matches('textarea.hf-memo')) autoGrow(ev.target); });
