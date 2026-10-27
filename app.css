@@ -1414,3 +1414,7 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .adj-pick-l { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 4px 20px 16px; max-height: 208px; overflow-y: auto; overscroll-behavior: contain; }
 .adj-pick-l button { border: 0; border-radius: 12px; background: var(--fill); color: var(--ink); font: inherit; font-size: 15px; font-weight: 600; padding: 12px 10px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .adj-pick-l button.on { background: var(--hh); color: #fff; }
+
+.hf-sub-btns { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.hf-sub-btns .btn { display: flex; align-items: center; justify-content: center; gap: 8px; background: none; border: 1.5px solid var(--line); color: var(--ink-2); font-size: 15.5px; padding: 13px 10px; }
+.hf-sub-btns .btn:active { background: var(--fill); }

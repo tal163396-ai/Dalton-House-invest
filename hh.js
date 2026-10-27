@@ -1136,8 +1136,7 @@
     if (!src && !isRule) f.asset = lastAsset(f.type);
     if (f.type === '수정' && !e) f.type = '지출';
     const title = isRule ? (rule ? '반복 내역 수정' : '반복 내역 추가') : e ? '내역 수정' : f.type;
-    const actions = e && !isRule ? `${e.type !== '수정' ? `<button class="icon-btn" id="hfCopy" aria-label="복사해서 새로 입력">${ico.copy}</button>` : ''}<button class="icon-btn" id="hfDel" aria-label="삭제">${ico.trash}</button>`
-      : rule ? `<button class="icon-btn" id="hfDel" aria-label="반복 내역 삭제">${ico.trash}</button>` : '';
+    const actions = rule ? `<button class="icon-btn" id="hfDel" aria-label="반복 내역 삭제">${ico.trash}</button>` : '';
     const pg = pushPage({ title, body: '<div class="hf" id="hf"></div><div class="hf-picker" id="hfPicker" hidden></div>', actions, cls: 'hf-page' });
     const root = $('#hf', pg);
 
@@ -1187,7 +1186,8 @@
         <div class="hf-btns">
           <button class="btn hf-save" id="hfSave">저장하기</button>
           ${!e && !isRule ? '<button class="btn hf-cont" id="hfCont">계속</button>' : ''}
-        </div>`;
+        </div>
+        ${e && !isRule ? `<div class="hf-sub-btns"><button class="btn" id="hfDel2">${ico.trash}<span>삭제</span></button>${e.type !== '수정' ? `<button class="btn" id="hfCopy2">${ico.copy}<span>복사</span></button>` : ''}</div>` : ''}`;
       bind();
     }
     function readInputs() {
@@ -1230,6 +1230,8 @@
       txt.onfocus = () => sugg(txt.value);
       txt.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); txt.blur(); } };
       pickerOnTap(root);
+      const d2 = $('#hfDel2', root); if (d2) d2.onclick = () => doDelete();
+      const c2 = $('#hfCopy2', root); if (c2) c2.onclick = () => doCopy();
       requestAnimationFrame(() => autoGrow($('#hfMemo', root)));
       $('#hfSave', root).onclick = () => submit(false);
       const c = $('#hfCont', root); if (c) c.onclick = () => submit(true);
@@ -1470,7 +1472,8 @@
 
     draw();
     const del = $('#hfDel', pg);
-    if (del) del.onclick = async () => {
+    if (del) del.onclick = () => doDelete();
+    async function doDelete() {
       if (rule) {
         if (!(await askConfirm('이 반복 내역을 지울까요?', '앞으로 자동 입력만 멈추고, 이미 들어간 내역은 그대로 남습니다.', '삭제'))) return;
         try { await D.api('hhDel', { kind: 'rule', id: rule.id }); H.rules = H.rules.filter(x => x.id !== rule.id); saveCache(); refreshPages(); back(); toast('반복 내역을 지웠습니다'); }
@@ -1480,14 +1483,21 @@
       if (!(await askConfirm('이 내역을 지울까요?', `${esc(e.text || e.cat || e.type)} · ${won(Math.abs(e.amt))}`, '삭제'))) return;
       back();
       removeTx(e);
-    };
-    const cp = $('#hfCopy', pg);
-    if (cp) cp.onclick = () => back(1, () => openForm({ copy: e, date: today() }));
+    }
+    // 복사: 저장된 내역을 그대로(투자 앱 연결 포함), 날짜·시간만 지금으로 새 내역 저장
+    function doCopy() {
+      const d = new Date();
+      const t = toTx([newId('n'), `${dOf(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`, e.type, e.cat, e.sub, e.text, e.amt, e.asset, e.to, e.memo,
+        e.cur || '', e.famt === undefined ? '' : e.famt, '', store.get('dh_name') || e.by || '',
+        e.invType || '', e.invAcct || '', e.invSub || '', e.invQty === undefined ? '' : e.invQty, e.invPrice === undefined ? '' : e.invPrice]);
+      back();
+      commitTx(t, null, null, `지금 시간(${tmLabel(t.tm)})으로 복사했습니다`);
+    }
     if (!e && !isRule && !opts.copy) setTimeout(() => openPicker('amt'), 280);
   }
 
   // 화면에 먼저 반영하고 서버에 저장. 실패하면 되돌림
-  async function commitTx(t, old, rule) {
+  async function commitTx(t, old, rule, msg) {
     H.pending.set(t.id, t);
     const i = H.tx.findIndex(x => x.id === t.id);
     if (i >= 0) H.tx[i] = t; else H.tx.push(t);
@@ -1502,7 +1512,7 @@
       reindex(); rerender(); saveCache();
       const linked = t.invType || (old && old.invType);
       if (linked && D.reloadInv) D.reloadInv();
-      toast(`${old ? '수정했습니다' : '저장했습니다'}${j.inv ? ` · 투자 앱 ${j.inv.type} 기록${j.inv.realized != null && j.inv.realized !== '' ? ` (${j.inv.realized >= 0 ? '익절' : '손절'} ${swon(j.inv.realized)})` : ''}` : ''}`);
+      toast(`${msg || (old ? '수정했습니다' : '저장했습니다')}${j.inv ? ` · 투자 앱 ${j.inv.type} 기록${j.inv.realized != null && j.inv.realized !== '' ? ` (${j.inv.realized >= 0 ? '익절' : '손절'} ${swon(j.inv.realized)})` : ''}` : ''}`);
     } catch (ex) {
       H.pending.delete(t.id);
       const k = H.tx.findIndex(x => x.id === t.id);
