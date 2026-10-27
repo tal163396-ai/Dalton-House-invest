@@ -101,11 +101,13 @@
     budClosed: new Set((() => { try { return JSON.parse(store.get('dh_hbud_closed') || '[]'); } catch { return []; } })()),
     openMonths: new Set(), openInit: new Set(),
     st: {
-      period: pick(store.get('dh_hst_p'), ['month', 'year', 'range'], 'month'),
+      period: pick(store.get('dh_hst_p'), ['month', 'year', 'range', 'cmp'], 'month'),
+      avg: store.get('dh_hst_avg') === '1',
       type: pick(store.get('dh_hst_t'), ['수입', '지출'], '지출'),
       anchor: today(), from: `${today().slice(0, 4)}-01-01`, to: today(),
     },
     active: false,
+    cmp: (() => { let c = {}; try { c = JSON.parse(store.get('dh_hcmp') || '{}') || {}; } catch { c = {}; } return { type: c.type === '수입' ? '수입' : '지출', years: Array.isArray(c.years) ? c.years.map(Number) : [], cats: Array.isArray(c.cats) ? c.cats : ['__all'], avg: c.avg !== false, trend: null, sel: null }; })(),
   };
 
   /* ───────────── 데이터 ───────────── */
@@ -286,6 +288,7 @@
       if (p === 'month') { title = ymLabel(a.slice(0, 7)); nav = true; month = a.slice(0, 7); }
       else if (p === 'year') { title = `${a.slice(0, 4)}년`; nav = true; }
       else if (p === 'week') { const [f, t] = statRange(); title = `${mdLabel(f)} ~ ${mdLabel(t)}`; nav = true; }
+      else if (p === 'cmp') title = `${H.cmp.type} 비교`;
       else title = '기간 통계';
     } else title = H.view === 'assets' ? '자산' : '더보기';
     head.innerHTML = nav
@@ -543,28 +546,105 @@
     const order = H.cats[type].map(c => c.name);
     return [...m].map(([k, v]) => ({ k, v })).sort((a, b) => b.v - a.v || order.indexOf(a.k) - order.indexOf(b.k));
   }
+  /* ── 연도 비교 (수입·지출, 대분류, 합계/월평균) ── */
+  const YC = ['#3b82f6', '#22c55e', '#f5a524'];
+  function monthsOf(y) { const n = new Date(), cy = n.getFullYear(); return y < cy ? 12 : y === cy ? n.getMonth() + 1 : 12; }
+  function cmpData(type) {
+    const tot = new Map(), mon = new Map(), years = new Set();
+    H.tx.forEach(t => {
+      if (t.type !== type) return;
+      const y = +t.d.slice(0, 4), m = +t.d.slice(5, 7), c = t.cat || '미분류';
+      years.add(y);
+      [c, '__all'].forEach(k => { tot.set(`${y}|${k}`, (tot.get(`${y}|${k}`) || 0) + t.amt); mon.set(`${y}|${m}|${k}`, (mon.get(`${y}|${m}|${k}`) || 0) + t.amt); });
+    });
+    return { tot, mon, years: [...years].sort() };
+  }
+  function saveCmp() { store.set('dh_hcmp', JSON.stringify({ type: H.cmp.type, years: H.cmp.years, cats: H.cmp.cats, avg: H.cmp.avg })); }
+  function renderCmp() {
+    const C = H.cmp, D0 = cmpData(C.type);
+    if (!C.years.length) C.years = D0.years.slice(-3);
+    C.years = C.years.filter(y => D0.years.includes(y)).sort();
+    const catList = ['__all', ...(H.cats[C.type] || []).map(c => c.name)];
+    C.cats = C.cats.filter(c => catList.includes(c)); if (!C.cats.length) C.cats = ['__all'];
+    const cn = k => (k === '__all' ? `전체 ${C.type}` : k);
+    const val = (y, k) => { const v = D0.tot.get(`${y}|${k}`) || 0; return C.avg ? v / monthsOf(y) : v; };
+    const pill = `<span class="cm-pill"><button data-avg="0" class="${C.avg ? '' : 'on'}">합계</button><button data-avg="1" class="${C.avg ? 'on' : ''}">월평균</button></span>`;
+    let body;
+    if (C.trend) {
+      const k = C.trend, ys = C.years;
+      const ser = ys.map(y => Array.from({ length: y === new Date().getFullYear() ? monthsOf(y) : 12 }, (_, i) => D0.mon.get(`${y}|${i + 1}|${k}`) || 0));
+      const mx = Math.max(1, ...ser.flat());
+      const W = 340, Hh = 200, L = 40, R = 8, T = 12, B = 22, x = i => L + i * (W - L - R) / 11, yv = v => T + (1 - v / mx) * (Hh - T - B);
+      const grid = [0, 0.5, 1].map(f => `<line x1="${L}" x2="${W - R}" y1="${yv(mx * f)}" y2="${yv(mx * f)}" class="cm-grid"/><text x="${L - 6}" y="${yv(mx * f) + 4}" text-anchor="end" class="cm-ax">${compactWon(mx * f)}</text>`).join('');
+      const xs = Array.from({ length: 12 }, (_, i) => `<text x="${x(i)}" y="${Hh - 6}" text-anchor="middle" class="cm-ax">${i + 1}</text>`).join('');
+      const lines = ser.map((a, j) => `<polyline points="${a.map((v, i) => `${x(i).toFixed(1)},${yv(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${YC[j]}" stroke-width="2.6" stroke-linejoin="round"/>${C.sel != null && C.sel < a.length ? `<circle cx="${x(C.sel)}" cy="${yv(a[C.sel])}" r="4" fill="${YC[j]}"/>` : ''}`).join('');
+      const hits = Array.from({ length: 12 }, (_, i) => `<rect x="${x(i) - 13}" y="0" width="26" height="${Hh}" fill="transparent" data-mi="${i}"/>`).join('');
+      const selRow = C.sel != null ? `<div class="cm-selm"><b>${C.sel + 1}월</b>${ys.map((y, j) => `<span><i style="background:${YC[j]}"></i>${y} <b class="num">${C.sel < ser[j].length ? won(ser[j][C.sel]) : '—'}</b></span>`).join('')}</div>` : '<p class="note cm-tip">그래프를 누르면 그 달 금액이 연도별로 나옵니다.</p>';
+      body = `<button class="cm-back" id="cmBack">${ico.left}<span>연도 비교로</span></button>
+        <div class="cm-chips">${catList.map(c => `<button class="${c === k ? 'on' : ''}" data-tk="${esc(c)}">${esc(cn(c))}</button>`).join('')}</div>
+        <div class="cm-legend">${ys.map((y, j) => `<span><i style="background:${YC[j]}"></i>${y}</span>`).join('')}</div>
+        <div class="card cm-chart"><svg viewBox="0 0 ${W} ${Hh}" width="100%">${grid}${xs}${lines}${C.sel != null ? `<line x1="${x(C.sel)}" x2="${x(C.sel)}" y1="${T}" y2="${Hh - B}" class="cm-cur"/>` : ''}${hits}</svg>${selRow}</div>
+        <div class="card cm-sum">${ys.map((y, j) => `<div class="cm-sr"><span><i style="background:${YC[j]}"></i>${y}${y === new Date().getFullYear() ? ` <small>(${monthsOf(y)}월까지)</small>` : ''}</span><span><b class="num">${won(D0.tot.get(`${y}|${k}`) || 0)}</b><small class="num">월평균 ${won((D0.tot.get(`${y}|${k}`) || 0) / monthsOf(y))}</small></span></div>`).join('')}</div>`;
+    } else {
+      const blocks = C.cats.map(k => {
+        const vs = C.years.map(y => val(y, k)), mx = Math.max(1, ...vs);
+        const n = vs.length, ch = n >= 2 && vs[n - 2] ? (vs[n - 1] - vs[n - 2]) / vs[n - 2] : null;
+        const good = C.type === '수입' ? ch > 0 : ch < 0;
+        return `<button class="cm-blk" data-trend="${esc(k)}"><div class="cm-bt"><b>${esc(cn(k))}</b>${ch != null ? `<em class="${good ? 'good' : 'bad'}">${String(C.years[n - 2]).slice(2)}→${String(C.years[n - 1]).slice(2)} ${ch >= 0 ? '+' : '−'}${Math.abs(ch * 100).toFixed(1)}%</em>` : ''}${ico.chev}</div>
+          ${C.years.map((y, j) => `<div class="cm-bar"><span>${String(y).slice(2)}</span><i style="width:${Math.max(1.5, vs[j] / mx * 100)}%;background:${YC[j]}"></i><b class="num">${fmt(vs[j])}</b></div>`).join('')}</button>`;
+      }).join('');
+      body = `<div class="cm-lb">연도 <small>최대 3개</small></div>
+        <div class="cm-chips">${D0.years.map(y => { const j = C.years.indexOf(y); return `<button class="${j >= 0 ? 'on y' : ''}" style="${j >= 0 ? `--yc:${YC[j]}` : ''}" data-y="${y}">${y}</button>`; }).join('')}</div>
+        <div class="cm-lb">대분류 <small>눌러서 고르기 · 여러 개</small></div>
+        <div class="cm-chips">${catList.map(c => `<button class="${C.cats.includes(c) ? 'on' : ''}" data-ck="${esc(c)}">${esc(cn(c))}</button>`).join('')}</div>
+        <div class="cm-head"><span>${C.avg ? '월평균' : '합계'} 기준</span>${pill}</div>
+        ${C.years.length ? `<div class="card cm-card">${blocks}</div>` : emptyHtml(`${C.type} 내역이 없습니다.`)}
+        <p class="note">대분류를 누르면 월별 추이를 연도별로 겹쳐 봅니다.<br>올해는 지난 개월 수로 월평균을 냅니다.</p>`;
+    }
+    $('#hh-stats').innerHTML = `
+      <div class="hh-sticky">
+        <div class="seg hh-pseg" role="group" aria-label="기간 단위">${[['month', '월간'], ['year', '연간'], ['range', '기간'], ['cmp', '비교']].map(([k, n]) => `<button data-p="${k}" class="${H.st.period === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+        <div class="hh-tabs two" role="tablist"><button data-ct="수입" class="${C.type === '수입' ? 'on' : ''}">수입</button><button data-ct="지출" class="${C.type === '지출' ? 'on' : ''}">지출</button></div>
+      </div>${body}`;
+    const R = () => { saveCmp(); render(); };
+    $$('#hh-stats [data-p]').forEach(b => b.onclick = () => { H.st.period = b.dataset.p; store.set('dh_hst_p', H.st.period); render(); });
+    $$('#hh-stats [data-ct]').forEach(b => b.onclick = () => { if (C.type === b.dataset.ct) return; C.type = b.dataset.ct; C.cats = ['__all']; C.trend = null; C.sel = null; R(); });
+    $$('#hh-stats [data-avg]').forEach(b => b.onclick = () => { C.avg = b.dataset.avg === '1'; R(); });
+    $$('#hh-stats [data-y]').forEach(b => b.onclick = () => { const y = +b.dataset.y; if (C.years.includes(y)) { if (C.years.length > 1) C.years = C.years.filter(x => x !== y); } else if (C.years.length >= 3) { toast('연도는 3개까지 고를 수 있습니다'); return; } else C.years.push(y); R(); });
+    $$('#hh-stats [data-ck]').forEach(b => b.onclick = () => { const k = b.dataset.ck; C.cats = C.cats.includes(k) ? C.cats.filter(x => x !== k) : [...C.cats, k]; R(); });
+    $$('#hh-stats [data-trend]').forEach(b => b.onclick = () => { C.trend = b.dataset.trend; C.sel = null; window.scrollTo({ top: 0 }); render(); });
+    $$('#hh-stats [data-tk]').forEach(b => b.onclick = () => { C.trend = b.dataset.tk; render(); });
+    $$('#hh-stats [data-mi]').forEach(b => b.onclick = () => { const i = +b.dataset.mi; C.sel = C.sel === i ? null : i; render(); });
+    const bk = $('#cmBack'); if (bk) bk.onclick = () => { C.trend = null; C.sel = null; render(); };
+  }
+
   function renderStats() {
+    if (H.st.period === 'cmp') { renderCmp(); return; }
     const [from, to] = statRange();
     const list = inRange(from, to), s = sums(list), type = H.st.type;
     const items = catTotals(list, type).map((x, i) => ({ ...x, c: COLORS[i % COLORS.length] }));
     const total = type === '수입' ? s.inc : s.exp;
-    const P = [['month', '월간'], ['year', '연간'], ['range', '기간']];
+    const P = [['month', '월간'], ['year', '연간'], ['range', '기간'], ['cmp', '비교']];
+    const yr = H.st.period === 'year', av = yr && H.st.avg, dv = yr ? monthsOf(+from.slice(0, 4)) : 1;
+    const sv = v => (av ? v / dv : v);
     $('#hh-stats').innerHTML = `
       <div class="hh-sticky">
         <div class="seg hh-pseg" role="group" aria-label="기간 단위">${P.map(([k, n]) => `<button data-p="${k}" class="${H.st.period === k ? 'on' : ''}">${n}</button>`).join('')}</div>
         ${H.st.period === 'range' ? `<div class="hh-range"><input type="date" id="stFrom" value="${H.st.from}"><span>~</span><input type="date" id="stTo" value="${H.st.to}"></div>` : ''}
         <div class="hh-tabs two" role="tablist">
-          <button data-st="수입" class="${type === '수입' ? 'on' : ''}">수입 <b class="num">${won(s.inc)}</b></button>
-          <button data-st="지출" class="${type === '지출' ? 'on' : ''}">지출 <b class="num">${won(s.exp)}</b></button>
+          <button data-st="수입" class="${type === '수입' ? 'on' : ''}">수입 <b class="num">${av ? '월 ' : ''}${won(sv(s.inc))}</b></button>
+          <button data-st="지출" class="${type === '지출' ? 'on' : ''}">지출 <b class="num">${av ? '월 ' : ''}${won(sv(s.exp))}</b></button>
         </div>
+        ${yr ? `<div class="cm-head yr"><span>${av ? `월평균 · ${dv}개월로 나눔` : '연간 합계'}</span><span class="cm-pill"><button data-yavg="0" class="${av ? '' : 'on'}">합계</button><button data-yavg="1" class="${av ? 'on' : ''}">월평균</button></span></div>` : ''}
       </div>
       ${items.length ? `<div class="card hs-pie">${pieSvg(items, total)}</div>
       <div class="card hs-list">${items.map(x => `<button class="hs-row" data-cat="${esc(x.k)}">
         <span class="hs-badge num" style="background:${x.c}">${Math.round(x.v / total * 100)}%</span>
-        <span class="hs-name">${esc(x.k)}</span><b class="num">${won(x.v)}</b>${ico.chev}</button>`).join('')}</div>`
+        <span class="hs-name">${esc(x.k)}</span><span class="hs-v">${av ? `<b class="num">${won(sv(x.v))}</b><small class="num">합계 ${fmt(x.v)}</small>` : `<b class="num">${won(x.v)}</b>`}</span>${ico.chev}</button>`).join('')}</div>`
       : emptyHtml(`이 기간에는 ${type} 내역이 없습니다.`)}`;
     $$('#hh-stats [data-p]').forEach(b => b.onclick = () => { H.st.period = b.dataset.p; store.set('dh_hst_p', H.st.period); render(); });
     $$('#hh-stats [data-st]').forEach(b => b.onclick = () => { H.st.type = b.dataset.st; store.set('dh_hst_t', H.st.type); render(); });
+    $$('#hh-stats [data-yavg]').forEach(b => b.onclick = () => { H.st.avg = b.dataset.yavg === '1'; store.set('dh_hst_avg', H.st.avg ? '1' : '0'); render(); });
     pickerOnTap($('#hh-stats'));
     const f = $('#stFrom'), t = $('#stTo');
     if (f) f.onchange = () => { if (f.value) { H.st.from = f.value; render(); } };
