@@ -650,7 +650,9 @@ function ensureHeaders_(name, headers) {
   let end = head.indexOf(''); if (end < 0) end = head.length;
   headers.forEach(h => {
     if (head.indexOf(h) >= 0) return;
-    sh.insertColumnBefore(end + 1);
+    // 시트에 빈 열이 없으면(가져오기로 만든 탭) 맨 끝 뒤에 새 열을 붙임
+    const maxC = typeof sh.getMaxColumns === 'function' ? sh.getMaxColumns() : Infinity;
+    if (end + 1 > maxC) sh.insertColumnAfter(maxC); else sh.insertColumnBefore(end + 1);
     sh.getRange(1, end + 1).setValue(h).setFontWeight('bold');
     head.splice(end, 0, h); end++;
   });
