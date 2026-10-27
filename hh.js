@@ -827,10 +827,10 @@
         <button class="hmo-row" data-go="reload"><span>새로고침 <small class="hmo-sub">(가계부 새로 불러오기)</small></span>${ico.chev}</button>
         <button class="hmo-row" data-go="inv"><span>투자 화면으로</span>${ico.chev}</button>
       </div>
-      <p class="note hmo-note">가계부는 구글 시트의 '가계부' 탭들에 저장되어 두 사람 휴대폰에 바로 같이 보입니다(동기화). 시트에서 직접 고친 뒤 새로 불러오면 앱에 반영됩니다.<br>
-      백업·복원: 구글 시트의 '버전 기록'으로 예전 상태로 되돌릴 수 있고, CSV로도 내려받을 수 있습니다.<br>
-      PC에서도 같은 주소를 브라우저로 열면 그대로 쓸 수 있습니다.<br>
-      매월 반복 내역은 그 날짜가 지난 뒤 앱을 처음 열 때 자동으로 들어갑니다.</p>`;
+      <p class="note hmo-note">가계부는 구글 시트에 저장되어 두 사람 휴대폰에 바로 같이 보입니다.<br>
+      시트에서 직접 고친 뒤 새로고침하면 앱에 반영됩니다.<br>
+      예전 상태로 되돌리기: 구글 시트 → 버전 기록<br>
+      매월 반복 내역은 그 날짜가 지난 뒤 앱을 열 때 자동으로 들어갑니다.</p>`;
     $$('#hh-more [data-go]').forEach(b => b.onclick = () => {
       const g = b.dataset.go;
       if (g.startsWith('cat-')) openCatSettings(g.slice(4));
@@ -1519,10 +1519,10 @@
       const amt = !check && !inv;
       box.innerHTML = `
         ${amt ? `<div class="hf-row"><span class="hf-l">금액</span><div class="hf-v"><input id="eBal" inputmode="numeric" placeholder="0" autocomplete="off" value="${balTxt === '' ? '' : Number(balTxt).toLocaleString('ko-KR')}"><span class="hf-unit">원</span></div></div>
-          ${isDebtG(group) ? `<p class="hf-info ae-hint">${esc(group)}을 입력하실 때에는 금액에 '−'를 함께 입력하셔야 부채에 합산됩니다. '−'가 없으면 자산에 합산됩니다.</p>` : ''}
+          ${isDebtG(group) ? `<p class="hf-info ae-hint">금액 앞에 '−'를 붙여야 부채에 합산됩니다.<br>'−'가 없으면 자산에 합산됩니다.</p>` : ''}
           ${!isNew ? '<p class="hf-info ae-hint">금액을 바꾸면 차액만큼 잔액수정 내역이 들어갑니다.</p>' : ''}` : ''}
         ${check ? `<div class="hf-row"><span class="hf-l">결제</span><div class="hf-v"><select id="ePay" class="hf-sel wide"><option value="">선택 안 함</option>${payOpts().map(x => `<option ${x.name === pay ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div></div>
-          <p class="hf-info ae-hint">체크카드 그룹은 이월·누적되지 않으며, 쓴 금액은 결제 통장 잔액에서 바로 빠집니다. 금액 이월·누적을 원하시면 그룹을 은행으로 설정하십시오.</p>` : ''}
+          <p class="hf-info ae-hint">쓴 금액은 결제 통장 잔액에서 바로 빠집니다.<br>잔액을 따로 쌓고 싶으면 그룹을 은행으로 바꾸십시오.</p>` : ''}
         ${invG ? `<label class="hf-switch"><span>투자 앱 원금으로 보기</span><input type="checkbox" id="eInv" ${invOn ? 'checked' : ''}><i></i></label>
           <p class="hf-info ae-hint">켜면 금액을 투자 앱의 원금으로 보여 주고, 가계부에는 보낸 돈·찾은 돈만 적습니다.</p>` : ''}`;
       const bal = $('#eBal', pg);
@@ -1583,7 +1583,7 @@
     const pg = pushPage({ title: '예산설정', cls: 'bs-page', body: '', refresh: p => draw(p) });
     function draw(p = pg) {
       const list = H.cats['지출'];
-      $('.hh-pbody', p).innerHTML = budBanner('추가된 예산은 <b>가계부탭 - 결산</b>에서 확인하실 수 있습니다.') + `
+      $('.hh-pbody', p).innerHTML = budBanner('추가된 예산은<br><b>가계부탭 - 결산</b>에서 확인하실 수 있습니다.') + `
         <div class="bs-list">${list.map((c, i) => {
           const has = c.subs.length > 0, on = open.has(c.name);
           return `<div class="bs-row"><button class="bs-name" ${has ? `data-bo="${i}" aria-expanded="${on}"` : `data-bc="${i}"`}><span>${esc(c.name)}</span>${has ? `<i class="bs-chev ${on ? 'open' : ''}">${ico.chev}</i>` : ''}</button>
@@ -1611,7 +1611,7 @@
       const base = baseOf(c.name, sub);
       const months = Array.from({ length: 12 }, (_, i) => `${year}-${pad(12 - i)}`);
       const shown = ym => (isCat ? catBudget(c, ym) : budgetOf(c.name, sub, ym));
-      $('.hh-pbody', p).innerHTML = budBanner('기본 예산을 변경하면, 기본 예산은 다음달부터 적용됩니다. 월을 선택하면, 월별 예산을 설정할 수 있습니다. 대분류 예산이 0원이면, 대분류 예산은 소분류 예산의 합으로 표시됩니다.') + `
+      $('.hh-pbody', p).innerHTML = budBanner('기본 예산을 바꾸면 다음 달부터 적용됩니다.<br>월을 누르면 그 달만 예산을 정할 수 있습니다.<br>대분류 예산이 0원이면 소분류 예산의 합으로 표시됩니다.') + `
         <button class="bs-base" id="bBase"><b>기본예산</b><b class="num">${won(isCat && !base ? catBase(c) : base)}</b></button>
         <div class="bs-months">${months.map(ym => {
           const e = H.budgets.get(key), own = e && e.months.has(ym);
@@ -1664,7 +1664,7 @@
         <div class="card hs-sum num"><span>${act.length}개</span><span class="exp">매월 지출 ${won(tot)}</span></div>
         ${act.length ? `<section class="card hd">${act.map(row).join('')}</section>` : '<p class="empty">반복 내역이 없습니다.</p>'}
         ${ended.length ? `<h3 class="se-gh">끝난 반복</h3><section class="card hd">${ended.map(row).join('')}</section>` : ''}
-        <p class="note">그 날짜가 지난 뒤 앱을 처음 열 때 자동으로 들어갑니다. 이미 들어간 내역은 각각 고칠 수 있습니다.</p>`;
+        <p class="note">그 날짜가 지난 뒤 앱을 처음 열 때 자동으로 들어갑니다.<br>이미 들어간 내역은 각각 고칠 수 있습니다.</p>`;
       $$('[data-rule]', p).forEach(b => b.onclick = () => openForm({ mode: 'rule', rule: H.rules.find(r => r.id === b.dataset.rule) }));
     }
     draw();

@@ -1591,10 +1591,10 @@
   /* ── 기록 ── */
   const TYPE_HELP = {
     '매수': '주식·코인을 샀을 때. 수량과 평단이 바뀌고,<br>연결된 예수금에서 차감됩니다.',
-    '매도': '팔았을 때.<br>실현손익(익절·손절)이 자동 계산되어 월별 수익에 반영됩니다.',
-    '입금': '계좌에 새 돈을 넣었을 때 (예: 월급에서 ISA로 이체).<br>원금과 예수금이 함께 늘어나 수익으로 잘못 잡히지 않습니다.',
+    '매도': '팔았을 때.<br>실현손익(익절·손절)이 자동 계산되어<br>월별 수익에 반영됩니다.',
+    '입금': '계좌에 새 돈을 넣었을 때 (예: 월급에서 ISA로 이체).<br>원금과 예수금이 함께 늘어나<br>수익으로 잘못 잡히지 않습니다.',
     '출금': '계좌에서 돈을 뺐을 때.<br>원금과 예수금이 함께 줄어듭니다.',
-    '금액 수정': '증권사 화면과 다를 때 지금 값으로 맞춥니다.<br>종목은 수량·평단·원금, 예수금·금처럼 직접 관리하는 항목은 금액을 고칩니다.',
+    '금액 수정': '증권사 화면과 다를 때 지금 값으로 맞춥니다.<br>종목은 수량·평단·원금을,<br>예수금·금처럼 직접 관리하는 항목은 금액을 고칩니다.',
   };
 
   const isTradable = r => !/예수금/.test(r.sub) && !r.method.startsWith('수동') && r.kind !== '현금';
@@ -1620,7 +1620,7 @@
       body = `
         <label class="field"><span>수정할 항목</span><select id="fManual">${groups}</select></label>
         ${trad ? `
-        <p class="fix-note">증권사 앱의 <b>체결잔고·매입단가·매입금액</b>을 그대로 넣으십시오. 비워 둔 칸은 바뀌지 않습니다.</p>
+        <p class="fix-note">증권사 앱의 <b>체결잔고·매입단가·매입금액</b>을 그대로 넣으십시오.<br>비워 둔 칸은 바뀌지 않습니다.</p>
         <div class="two">
           <label class="field"><span>수량</span><input id="fxQty" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.qty}"></label>
           <label class="field"><span id="fxAvgL">평단가 (${usd ? '달러' : '원'})</span><input id="fxAvg" type="number" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur.avg || ''}"></label>
@@ -1725,7 +1725,7 @@
             <span><span class="tag ${t['구분'] === '매수' ? 'buy' : t['구분'] === '매도' ? 'sell' : ''}">${esc(t['구분'])}</span>${esc(t['세부종목'] || t['자산'])}${t['수량'] ? ` ${esc(t['수량'])}주` : ''}<br>
               <small>${fmtDate(new Date(t['날짜']))}${t['입력자'] ? ` · ${esc(t['입력자'])}` : ''}${t['메모'] ? ` · ${esc(t['메모'])}` : ''}</small></span>
             <span class="num" style="text-align:right">${won(num(t['금액(원)']))}${isNum(t['실현손익(원)']) && t['실현손익(원)'] !== '' ? `<br><small class="${cls(num(t['실현손익(원)']))}">${signWon(num(t['실현손익(원)']))}</small>` : ''}</span>
-          </div>`).join('') : `<p class="empty">아직 앱에서 기록한 거래가 없습니다.<br>매수·매도를 기록하면 보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
+          </div>`).join('') : `<p class="empty">아직 앱에서 기록한 거래가 없습니다.<br>매수·매도를 기록하면<br>보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
       </div>
       </div><div class="page">${monthCloseCard() || '<div class="card"><p class="empty">가계부월별 탭이 없습니다.</p></div>'}</div></div>`;
     recPagerApi = setupPager($('#rPager'), $$('#rTabs button'), { start: state.rPage || 0, onChange: i => { state.rPage = i; sess.set('dh_rpage', i); } });
@@ -1826,7 +1826,7 @@
             <div><small>실현손익 ${C.kept ? '(저장된 값)' : '(앱 기록)'}</small><b class="${cls(C.pnl)}">${signWon(C.pnl)}</b></div>
             <div><small>순입금 ${C.kept ? '(저장된 값)' : '(앱 입금−출금)'}</small><b>${signWon(C.flow)}</b></div>
           </div>
-          <p class="note" style="margin:0">편한가계부 수입에 포함된 ${m}월 익절 ${compact(C.gains)}원은 투자손익으로 따로 계산되므로, 수입에서는 빼고 저장합니다.${C.saved ? '<br><b>이미 저장된 달이라 실현손익·순입금은 유지하고 나머지 칸만 수정합니다.</b>' : ''}</p>
+          <p class="note" style="margin:0">편한가계부 수입에 포함된 ${m}월 익절 ${compact(C.gains)}원은<br>투자손익으로 따로 계산되므로,<br>수입에서는 빼고 저장합니다.${C.saved ? '<br><b>이미 저장된 달이라 실현손익·순입금은 유지하고<br>나머지 칸만 수정합니다.</b>' : ''}</p>
           <p id="mcErr" class="form-error" role="alert"></p>
           <button class="btn primary" id="mcSave">${y}년 ${m}월 마감 저장</button>
         </div>
@@ -1999,7 +1999,7 @@
       <p class="kind">${name ? `${esc(name)} 님으로 사용 중` : ''}</p>
       <button class="menu-item" id="mName">사용자 바꾸기</button>
       <button class="menu-item" id="mLogout">로그아웃 (이 기기에서 비밀번호 지우기)</button>
-      <p class="note">숫자는 구글 시트에서 직접 고쳐도 됩니다. 수정 후 새로고침을 누르면 반영됩니다.</p>`);
+      <p class="note">숫자는 구글 시트에서 직접 고쳐도 됩니다.<br>수정 후 새로고침을 누르면 반영됩니다.</p>`);
     $('#mName').onclick = () => { closeSheet(); showLogin('', true); };
     $('#mLogout').onclick = () => { closeSheet(); logout(); };
   }
