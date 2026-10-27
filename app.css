@@ -1418,3 +1418,4 @@ button.hf-dt { border: 0; background: none; color: var(--ink); font: inherit; fo
 .hf-sub-btns { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
 .hf-sub-btns .btn { display: flex; align-items: center; justify-content: center; gap: 8px; background: none; border: 1.5px solid var(--line); color: var(--ink-2); font-size: 15.5px; padding: 13px 10px; }
 .hf-sub-btns .btn:active { background: var(--fill); }
+.adj-back { border: 0; background: none; color: var(--hh); font: inherit; font-weight: 700; padding: 0 6px 0 0; cursor: pointer; }

@@ -835,7 +835,7 @@
   // 잔액 수정: 실제 잔액을 숫자판으로 받고, 차액을 '보정'(수입·지출 제외) 또는 수입·지출 내역으로 기록
   function adjustBalance(name) {
     const cur = H.bal.get(name) || 0;
-    let v = String(cur), fresh = true, mode = store.get('dh_adj_mode') === 'rec' ? 'rec' : 'adj', cat = '', picking = false;
+    let v = String(cur), fresh = true, mode = store.get('dh_adj_mode') === 'rec' ? 'rec' : 'adj', cat = '', sub = '', picking = false;
     const val = () => (v === '' || v === '-' ? NaN : Number(v));
     const typeOf = d => (d < 0 ? '지출' : '수입');
     const defCat = ty => { const l = H.cats[ty] || []; const last = store.get(`dh_adj_cat_${ty}`); return (l.find(c => c.name === last) || l.find(c => c.name === '기타') || l[0] || {}).name || ''; };
@@ -844,17 +844,21 @@
     const k = (x, lab, cls = '') => `<button class="kp-k ${cls}" data-k="${x}">${lab}</button>`;
     const draw = () => {
       const n = val(), diff = Number.isFinite(n) ? n - cur : 0, ty = typeOf(diff);
-      if (mode === 'rec' && diff && (!cat || !(H.cats[ty] || []).some(c => c.name === cat))) cat = defCat(ty);
+      if (mode === 'rec' && diff && (!cat || !(H.cats[ty] || []).some(c => c.name === cat))) { cat = defCat(ty); const co = (H.cats[ty] || []).find(c => c.name === cat), ls = store.get(`dh_adj_sub_${ty}_${cat}`) || ''; sub = co && co.subs.includes(ls) ? ls : ''; }
+      const catObj = (H.cats[ty] || []).find(c => c.name === cat);
       const cats = H.cats[ty] || [];
       box.innerHTML = `<div class="adj-top"><h2 id="sheetTitle">잔액 수정</h2><span>${esc(name)} · 앱 잔액 ${won(cur)}</span></div>
         <div class="adj-amt"><small>실제 잔액</small><b>${v === '' ? '0' : v === '-' ? '−' : `${n < 0 ? '−' : ''}${fmt(Math.abs(n))}`}<span class="u">원</span></b>
           <em class="${diff > 0 ? 'p' : diff < 0 ? 'm' : ''}">${diff ? `차액 ${swon(diff)}` : '차액 없음'}</em></div>
         <div class="adj-seg" role="tablist"><button data-md="adj" class="${mode === 'adj' ? 'on' : ''}">보정<small>수입·지출 제외</small></button><button data-md="rec" class="${mode === 'rec' ? 'on' : ''}">수입·지출로 기록<small>통계·예산에 반영</small></button></div>
-        ${mode === 'rec' ? (diff ? `<button class="adj-catbtn" id="adjCat"><small>${ty} 분류</small><b>${esc(cat) || '고르기'}</b>${ico.chev}</button>` : '<p class="adj-hint">실제 잔액을 입력하면<br>모자라면 지출, 남으면 수입으로 기록합니다.</p>') : '<p class="adj-hint">차액만큼 \'잔액수정\' 내역이 생기고,<br>수입·지출 통계에는 들어가지 않습니다.</p>'}
-        ${picking && mode === 'rec' && diff ? `<div class="adj-pick"><div class="adj-pick-h">${ty} 분류 고르기</div><div class="adj-pick-l">${cats.map(c => `<button class="${c.name === cat ? 'on' : ''}" data-c="${esc(c.name)}">${esc(c.name)}</button>`).join('') || '<p class="note">분류가 없습니다</p>'}</div></div>` : `<div class="kp-grid adj-kp">${k(1, 1)}${k(2, 2)}${k(3, 3)}${k('bs', ico.bksp, 'fn')}${k(4, 4)}${k(5, 5)}${k(6, 6)}${k('-', '−', 'fn')}${k(7, 7)}${k(8, 8)}${k(9, 9)}${k('00', '00')}${k('x', '취소', 'fn sm')}${k(0, 0)}${k('000', '000')}${k('ok', '저장', 'ok')}</div>`}`;
-      const cb = $('#adjCat', box); if (cb) cb.onclick = () => { picking = !picking; draw(); };
+        ${mode === 'rec' ? (diff ? `<button class="adj-catbtn" id="adjCat"><small>${ty} 분류</small><b>${cat ? esc(cat + (sub ? ` / ${sub}` : '')) : '고르기'}</b>${ico.chev}</button>` : '<p class="adj-hint">실제 잔액을 입력하면<br>모자라면 지출, 남으면 수입으로 기록합니다.</p>') : '<p class="adj-hint">차액만큼 \'잔액수정\' 내역이 생기고,<br>수입·지출 통계에는 들어가지 않습니다.</p>'}
+        ${picking === 'cat' && mode === 'rec' && diff ? `<div class="adj-pick"><div class="adj-pick-h">${ty} 분류 고르기</div><div class="adj-pick-l">${cats.map(c => `<button class="${c.name === cat ? 'on' : ''}" data-c="${esc(c.name)}">${esc(c.name)}${c.subs.length ? ' ›' : ''}</button>`).join('') || '<p class="note">분류가 없습니다</p>'}</div></div>`
+          : picking === 'sub' && mode === 'rec' && diff && catObj ? `<div class="adj-pick"><div class="adj-pick-h"><button class="adj-back" id="adjBack">‹ ${esc(cat)}</button> 소분류 고르기</div><div class="adj-pick-l"><button class="${!sub ? 'on' : ''}" data-s="">소분류 없음</button>${catObj.subs.map(x => `<button class="${x === sub ? 'on' : ''}" data-s="${esc(x)}">${esc(x)}</button>`).join('')}</div></div>` : `<div class="kp-grid adj-kp">${k(1, 1)}${k(2, 2)}${k(3, 3)}${k('bs', ico.bksp, 'fn')}${k(4, 4)}${k(5, 5)}${k(6, 6)}${k('-', '−', 'fn')}${k(7, 7)}${k(8, 8)}${k(9, 9)}${k('00', '00')}${k('x', '취소', 'fn sm')}${k(0, 0)}${k('000', '000')}${k('ok', '저장', 'ok')}</div>`}`;
+      const cb = $('#adjCat', box); if (cb) cb.onclick = () => { picking = picking ? false : 'cat'; draw(); };
+      const ab = $('#adjBack', box); if (ab) ab.onclick = () => { picking = 'cat'; draw(); };
+      $$('[data-s]', box).forEach(b => b.onclick = () => { sub = b.dataset.s; picking = false; draw(); });
       $$('[data-md]', box).forEach(b => b.onclick = () => { mode = b.dataset.md; store.set('dh_adj_mode', mode); draw(); });
-      $$('[data-c]', box).forEach(b => b.onclick = () => { cat = b.dataset.c; picking = false; draw(); });
+      $$('[data-c]', box).forEach(b => b.onclick = () => { if (b.dataset.c !== cat) sub = ''; cat = b.dataset.c; const co = (H.cats[typeOf(val() - cur)] || []).find(c => c.name === cat); picking = co && co.subs.length ? 'sub' : false; draw(); });
       $$('[data-k]', box).forEach(b => b.onclick = () => {
         const x = b.dataset.k;
         if (x === 'x') { D.closeSheet(); return; }
@@ -879,8 +883,8 @@
       if (mode === 'rec') {
         const ty = typeOf(diff);
         if (!cat) { toast('분류를 고르십시오', true); return; }
-        store.set(`dh_adj_cat_${ty}`, cat);
-        t = toTx([newId('n'), at, ty, cat, '', '잔액 맞춤', Math.abs(diff), name, '', '', '', '', '', by]);
+        store.set(`dh_adj_cat_${ty}`, cat); store.set(`dh_adj_sub_${ty}_${cat}`, sub);
+        t = toTx([newId('n'), at, ty, cat, sub, '잔액 맞춤', Math.abs(diff), name, '', '', '', '', '', by]);
       } else t = toTx([newId('n'), at, '수정', '잔액수정', '', '잔액 수정', diff, name, '', '', '', '', '', by]);
       D.closeSheet();
       await commitTx(t, null);
