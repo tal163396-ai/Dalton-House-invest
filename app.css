@@ -1274,3 +1274,7 @@ html.hh-locked, html.hh-locked body { overflow: hidden; }
 .ce-sw { border: 1.5px solid var(--ink-4); background: none; color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 10px; white-space: nowrap; }
 .ce-sw:active { background: var(--fill); }
 .ce-page .hf-row.ce-one { grid-template-columns: minmax(0, 1fr); }
+/* 분류 상세: 소분류 눌러 거르기 */
+.hb-row.tap { cursor: pointer; border-radius: 10px; margin: 0 -8px; padding-left: 8px; padding-right: 8px; transition: opacity .15s, background .15s; }
+.hb-row.tap.on { background: var(--fill); }
+.hb-row.tap.dim { opacity: .4; }

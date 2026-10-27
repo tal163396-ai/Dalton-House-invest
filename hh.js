@@ -392,9 +392,9 @@
     }).join('')}</div>`;
   }
 
-  function barRows(rows, total, color) {
+  function barRows(rows, total, color, sel) {
     const mx = Math.max(...rows.map(r => Math.abs(r.v)), 1);
-    return rows.map(r => `<div class="hb-row"><div class="hb-top"><span>${esc(r.k)}${r.n ? ` <small>${r.n}건</small>` : ''}</span><b class="num">${won(r.v)}${total ? ` <small>${Math.round(r.v / total * 100)}%</small>` : ''}</b></div>
+    return rows.map(r => `<div class="hb-row ${sel === undefined ? '' : `tap ${sel === r.k ? 'on' : sel ? 'dim' : ''}`}" ${sel === undefined ? '' : `data-sub="${esc(r.k)}" role="button" tabindex="0" aria-pressed="${sel === r.k}"`}><div class="hb-top"><span>${esc(r.k)}${r.n ? ` <small>${r.n}건</small>` : ''}</span><b class="num">${won(r.v)}${total ? ` <small>${Math.round(r.v / total * 100)}%</small>` : ''}</b></div>
       <div class="hb-meter"><i style="width:${Math.max(1.5, Math.abs(r.v) / mx * 100)}%;background:${r.c || color}"></i></div></div>`).join('');
   }
   // 결산 = 예산 대비 지출 (편한가계부와 같은 모양) + 자산별 수입·지출
@@ -566,32 +566,40 @@
     return `${from.slice(2).replace(/-/g, '.')} ~ ${to.slice(2).replace(/-/g, '.')}`;
   }
   function openCatDetail(type, cat, from, to) {
-    let winEnd = to.slice(0, 7);
+    let winEnd = to.slice(0, 7), sel = null;
+    const subOf = t => t.sub || '(소분류 없음)';
     const build = () => {
-      const list = inRange(from, to).filter(t => t.type === type && (t.cat || '미분류') === cat);
-      const total = list.reduce((a, t) => a + t.amt, 0);
-      const subs = new Map(); list.forEach(t => { const k = t.sub || '(소분류 없음)'; const r = subs.get(k) || { k, v: 0, n: 0 }; r.v += t.amt; r.n++; subs.set(k, r); });
+      const all = inRange(from, to).filter(t => t.type === type && (t.cat || '미분류') === cat);
+      if (sel && !all.some(t => subOf(t) === sel)) sel = null;
+      const list = sel ? all.filter(t => subOf(t) === sel) : all;
+      const total = all.reduce((a, t) => a + t.amt, 0);
+      const subs = new Map(); all.forEach(t => { const k = t.sub || '(소분류 없음)'; const r = subs.get(k) || { k, v: 0, n: 0 }; r.v += t.amt; r.n++; subs.set(k, r); });
       const endYm = to.slice(0, 7), months = Array.from({ length: 12 }, (_, i) => addMonths(winEnd, i - 11));
       const oneMonth = from.slice(0, 7) === endYm && from.endsWith('-01');
-      const mv = months.map(ym => monthTx(ym).filter(t => t.type === type && (t.cat || '미분류') === cat).reduce((a, t) => a + t.amt, 0));
+      const mv = months.map(ym => monthTx(ym).filter(t => t.type === type && (t.cat || '미분류') === cat && (!sel || subOf(t) === sel)).reduce((a, t) => a + t.amt, 0));
       const avg = mv.reduce((a, b) => a + b, 0) / 12;
       return `
         <section class="card">
-          <div class="hcd-top"><span>${periodLabel(from, to)} · ${list.length}건</span></div>
+          <div class="hcd-top"><span>${periodLabel(from, to)} · ${all.length}건</span></div>
           <div class="hcd-total num ${type === '수입' ? 'inc' : 'exp'}">${won(total)}</div>
-          ${barRows([...subs.values()].sort((a, b) => b.v - a.v), total, type === '수입' ? 'var(--inc)' : 'var(--exp)')}
+          ${barRows([...subs.values()].sort((a, b) => b.v - a.v), total, type === '수입' ? 'var(--inc)' : 'var(--exp)', sel)}
+          ${subs.size > 1 ? `<p class="note mb-note">${sel ? `<b>${esc(sel)}</b>만 보는 중 · 한 번 더 누르면 전체` : '소분류를 누르면 그 내역만 봅니다.'}</p>` : ''}
         </section>
         <section class="card">
           <div class="mb-head"><h3 class="hh-h3">${months[0].slice(2, 4)}.${+months[0].slice(5)} ~ ${months[11].slice(2, 4)}.${+months[11].slice(5)} <small>월평균 ${won(avg)}</small></h3>
             <span class="mb-nav"><button class="hh-arrow" data-mw="-1" aria-label="이전 달">${ico.left}</button><button class="hh-arrow" data-mw="1" aria-label="다음 달" ${endYm >= ymOf(new Date()) ? 'disabled' : ''}>${ico.right}</button></span></div>
           ${monthBars(months, mv, type === '수입' ? 'var(--inc)' : 'var(--exp)', oneMonth ? endYm : null, true)}
-          <p class="note mb-note">막대를 누르면 그 달 내역을 봅니다.</p>
+          <p class="note mb-note">${sel ? `<b>${esc(sel)}</b> 기준 · ` : ''}막대를 누르면 그 달 내역을 봅니다.</p>
         </section>
         ${[...groupByDay(list)].map(([ds, l]) => `<section class="card hd">${dayHead(ds, l)}${l.map(t => rowHtml(t)).join('')}</section>`).join('')}`;
     };
     const bindBars = pg => {
       $$('[data-mb]', pg).forEach(r => r.onclick = () => {
         const ym = r.dataset.mb; from = `${ym}-01`; to = `${ym}-${pad(daysIn(ym))}`;
+        $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg);
+      });
+      $$('[data-sub]', pg).forEach(r => r.onclick = () => {
+        sel = sel === r.dataset.sub ? null : r.dataset.sub;
         $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg);
       });
       $$('[data-mw]', pg).forEach(b => b.onclick = () => {
