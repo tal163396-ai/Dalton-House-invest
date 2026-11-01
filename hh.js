@@ -856,16 +856,16 @@
       const avg = mv.reduce((a, b) => a + b, 0) / 12;
       return `
         <section class="card">
-          <div class="hcd-top"><span>${periodLabel(from, to)} · ${all.length}건</span></div>
-          <div class="hcd-total num ${type === '수입' ? 'inc' : 'exp'}">${won(total)}</div>
-          ${barRows([...subs.values()].sort((a, b) => b.v - a.v), total, type === '수입' ? 'var(--inc)' : 'var(--exp)', sel)}
-          ${subs.size > 1 ? `<p class="note mb-note">${sel ? `<b>${esc(sel)}</b>만 보는 중 · 한 번 더 누르면 전체` : '소분류를 누르면 그 내역만 봅니다.'}</p>` : ''}
-        </section>
-        <section class="card">
           <div class="mb-head"><h3 class="hh-h3">${months[0].slice(2, 4)}.${+months[0].slice(5)} ~ ${months[11].slice(2, 4)}.${+months[11].slice(5)} <small>월평균 ${won(avg)}</small></h3>
             <span class="mb-nav"><button class="hh-arrow" data-mw="-1" aria-label="이전 달">${ico.left}</button><button class="hh-arrow" data-mw="1" aria-label="다음 달" ${endYm >= ymOf(new Date()) ? 'disabled' : ''}>${ico.right}</button></span></div>
           ${monthBars(months, mv, type === '수입' ? 'var(--inc)' : 'var(--exp)', oneMonth ? endYm : null, true)}
           <p class="note mb-note">${sel ? `<b>${esc(sel)}</b> 기준 · ` : ''}막대를 누르면 그 달 내역을 봅니다.</p>
+        </section>
+        <section class="card">
+          <div class="hcd-top"><span>${periodLabel(from, to)} · ${all.length}건</span></div>
+          <div class="hcd-total num ${type === '수입' ? 'inc' : 'exp'}">${won(total)}</div>
+          ${barRows([...subs.values()].sort((a, b) => b.v - a.v), total, type === '수입' ? 'var(--inc)' : 'var(--exp)', sel)}
+          ${subs.size > 1 ? `<p class="note mb-note">${sel ? `<b>${esc(sel)}</b>만 보는 중 · 한 번 더 누르면 전체` : '소분류를 누르면 그 내역만 봅니다.'}</p>` : ''}
         </section>
         ${[...groupByDay(list)].map(([ds, l]) => `<section class="card hd">${dayHead(ds, l)}${l.map(t => rowHtml(t)).join('')}</section>`).join('')}`;
     };
