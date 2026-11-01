@@ -130,6 +130,7 @@
   const ruleObj = r => ({ ID: r.id, 주기: r.period || '매월', 일: r.day, 구분: r.type, 분류: r.cat, 소분류: r.sub, 내용: r.text, 금액: r.amt, 자산: r.asset, 받는자산: r.to, 메모: r.memo, 시작: r.start, 종료: r.end, 마지막생성: r.last, 투자구분: r.invType || '', 투자계좌: r.invAcct || '', 투자종목: r.invSub || '' });
   const toRule = a => ({ id: String(a[0]), period: PERIODS.includes(String(a[1] || '').trim()) ? String(a[1]).trim() : '매월', day: Number(a[2]) || 1, type: String(a[3] || ''), cat: String(a[4] || ''), sub: String(a[5] || ''), text: String(a[6] || ''), amt: Number(a[7]) || 0, asset: String(a[8] || ''), to: String(a[9] || ''), memo: String(a[10] || ''), start: String(a[11] || ''), end: String(a[12] || ''), last: String(a[13] || ''), invType: String(a[14] || ''), invAcct: String(a[15] || ''), invSub: String(a[16] || '') });
   // 투자 앱 연결 표시: 'ISA 입금', 'TIGER … 3주 매수'
+  const INV_OLD_UNTIL = '2026-10';   // 이 달까지의 월별 투자 원금은 편한가계부 기준 (11월부터 증권사 기준)
   const INV_KEEP = '기존';   // 이미 투자 앱에 반영된 이체: 연결 표시만, 투자 앱 숫자는 그대로
   const invLabel = (t, opts) => {
     if (!t.invType) return '';
@@ -1049,9 +1050,23 @@
       return `
         <section class="card hp-asset">
           ${isInv ? '' : `<span class="hp-ag">${esc(a ? a.group : '목록에 없는 자산')}${a && a.hidden ? ' · 숨김' : ''}</span>`}
-          ${isInv ? (() => { const t = invTotal(); const pl = t ? t.value - t.cost : 0, r = t && t.cost ? pl / t.cost * 100 : 0;
-              return `<div class="hp-invrow"><div class="hp-invl"><span class="hp-invlb">투자 앱 원금</span><div class="hp-bal sm num">${t ? won(t.cost) : '—'}</div></div>
-                ${t ? `<div class="hp-chips"><span class="hp-chip num">평가금 ${compactWon(t.value)}</span><span class="hp-chip num ${pl < 0 ? 'neg' : 'pos'}">${pl >= 0 ? '+' : ''}${compactWon(pl)} · ${pl >= 0 ? '+' : '−'}${Math.abs(r).toFixed(1)}%</span></div>` : ''}</div>`; })()
+          ${isInv ? (() => {
+              const mLabel = `${+ym.slice(5)}월`;
+              if (ym === ymOf(new Date())) {
+                const t = invTotal(); const pl = t ? t.value - t.cost : 0, r = t && t.cost ? pl / t.cost * 100 : 0;
+                return `<div class="hp-invrow"><div class="hp-invl"><span class="hp-invlb">${mLabel} 원금</span><span class="hp-basis live">실시간 · 증권사 기준</span><div class="hp-bal sm num">${t ? won(t.cost) : '—'}</div></div>
+                  ${t ? `<div class="hp-chips"><span class="hp-chip num">평가금 ${compactWon(t.value)}</span><span class="hp-chip num ${pl < 0 ? 'neg' : 'pos'}">${pl >= 0 ? '+' : ''}${compactWon(pl)} · ${pl >= 0 ? '+' : '−'}${Math.abs(r).toFixed(1)}%</span></div>` : ''}</div>`;
+              }
+              // 지난달: 가계부월별에 저장된 '투자 장부잔액' (자동 추정 달은 쓰지 않음). 2026-10까지는 편한가계부에서 옮긴 값
+              const saved = (D.household ? D.household() : []).map(h => ({ y: h.y, m: h.m, book: h.auto ? h.savedBook : h.book })).filter(h => h.book);
+              const key = h => `${h.y}-${pad(h.m)}`;
+              const rec = saved.find(h => key(h) === ym), prev = saved.find(h => key(h) === addMonths(ym, -1));
+              const old = ym <= INV_OLD_UNTIL;
+              if (!rec) return `<div class="hp-invrow"><div class="hp-invl"><span class="hp-invlb">${mLabel} 말 원금</span><span class="hp-basis none">기록 없음</span><div class="hp-bal sm num">—</div></div></div>`;
+              const d = prev ? rec.book - prev.book : null;
+              return `<div class="hp-invrow"><div class="hp-invl"><span class="hp-invlb">${mLabel} 말 원금</span><span class="hp-basis ${old ? 'old' : 'live'}">${old ? '편한가계부 기준' : '월 마감 · 증권사 기준'}</span><div class="hp-bal sm num">${won(rec.book)}</div></div>
+                ${d !== null ? `<div class="hp-chips"><span class="hp-chip num">전월 대비 ${d >= 0 ? '+' : '−'}${fmt(Math.abs(d))}</span></div>` : ''}</div>
+                ${old ? '<p class="hp-bnote">편한가계부에서 옮긴 장부 값입니다. 증권사 원금과 수십만 원 다를 수 있습니다.</p>' : ''}`; })()
             : card ? `<div class="hp-bal num">${won(out - inn)}</div><p class="note">${ymLabel(ym)} 사용 금액입니다. 결제 계좌 <b>${esc(card)}</b> 잔액에서 바로 빠집니다.</p>`
             : `<div class="hp-bal num ${bal < 0 ? 'exp' : ''}">${won(bal)}</div>${linked.length ? `<p class="note">${linked.map(esc).join(', ')} 사용 금액이 이 잔액에 들어 있습니다.</p>` : ''}`}
           ${a && a.memo && !isInv ? `<button class="hp-memo" id="aMemo" aria-label="메모 보기"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="#F5C518" d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/></svg></button>` : ''}

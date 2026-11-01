@@ -1643,3 +1643,9 @@ button.cm-sr:active { background: var(--fill); }
 
 .cash-flow { margin: -4px 0 0; font-size: 14px; color: var(--ink-2); background: var(--fill); border-radius: 10px; padding: 9px 12px; }
 .cash-flow b { color: var(--accent); font-weight: 700; }
+
+.hp-basis { display: table; margin: 4px 0 2px; font-size: 11.5px; font-weight: 750; padding: 3px 8px; border-radius: 999px; }
+.hp-basis.live { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.hp-basis.old { background: rgba(245,165,36,.16); color: #F5A524; }
+.hp-basis.none { background: var(--fill); color: var(--ink-3); }
+.hp-bnote { font-size: 12.5px; color: var(--ink-3); text-align: left; margin: 10px 0 0; line-height: 1.5; }
