@@ -182,7 +182,7 @@
       const old = byKey.get(key);
       const cost = key === curKey ? costNow : (snap[key] ?? (old ? old.book : costNow));
       const pnl = realized.filter(r => r.year === a.y && r.month === a.m).reduce((t, r) => t + r.amount, 0);
-      byKey.set(key, { y: a.y, m: a.m, nw: Math.round(a.life + cost), inc: a.inc, exp: a.exp, pnl, flow: a.flow, book: Math.round(cost), jeonse: a.jeonse, loan: a.loan, auto: true, savedBook: old && !old.auto ? old.book : null });
+      byKey.set(key, { y: a.y, m: a.m, nw: Math.round(a.life + cost), inc: a.inc, exp: a.exp, pnl, flow: a.flow, book: Math.round(cost), jeonse: a.jeonse, loan: a.loan, auto: true, savedBook: old && !old.auto ? old.book : null, savedPnl: old && !old.auto ? old.pnl : null, savedFlow: old && !old.auto ? old.flow : null });
     });
     return [...byKey.values()];
   }
