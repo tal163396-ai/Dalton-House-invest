@@ -1553,7 +1553,7 @@ button.ad-it:active { background: var(--fill); }
 .ad-it em { margin-left: auto; text-align: right; }
 
 /* 좌우 밀어서 달 넘기기: 세로 스크롤은 브라우저가, 가로는 앱이 처리 */
-#hh-book, #hh-stats { touch-action: pan-y; backface-visibility: hidden; }
+#hh-book, #hh-stats, .hh-pbody { touch-action: pan-y; backface-visibility: hidden; }
 body { overflow-x: clip; }
 
 /* ── 운동 공약 ── */
@@ -1637,3 +1637,5 @@ button.cm-sr:active { background: var(--fill); }
 /* 단가 통화 바꾸기 (달러 ⇄ 원) */
 .pcur-btn { border: 1px solid var(--line); background: var(--fill); color: var(--ink-2); border-radius: 8px; font: inherit; font-size: 13px; font-weight: 700; padding: 3px 8px; margin-left: 4px; cursor: pointer; }
 .hf-v .pcur-btn { font-size: 14px; padding: 4px 9px; }
+
+.bud[data-bopen] { cursor: pointer; } .bud[data-bopen]:active { background: var(--fill); }

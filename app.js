@@ -74,6 +74,16 @@
   let pendingScroll = null;
   let spinN = 0;
   function spin(on) { spinN = Math.max(0, spinN + (on ? 1 : -1)); $('.topbar').classList.toggle('loading', spinN > 0); }
+  function keepTyped() {
+    const root = $('#view-record');
+    if (!root || root.hidden) return () => {};
+    const vals = $$('input, textarea, select', root).filter(i => i.id && i.type !== 'button').map(i => [i.id, i.value]);
+    const act = document.activeElement && root.contains(document.activeElement) ? document.activeElement.id : '';
+    return () => {
+      vals.forEach(([id, v]) => { const i = document.getElementById(id); if (i && root.contains(i) && i.value !== v && v !== '') { i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); } });
+      const a = act && document.getElementById(act); if (a) { try { a.focus({ preventScroll: true }); const n = a.value.length; a.setSelectionRange && a.type === 'text' && a.setSelectionRange(n, n); } catch { /* */ } }
+    };
+  }
   async function load({ quiet = false } = {}) {
     const btn = $('#refreshBtn');
     btn.classList.add('spin'); spin(true);
@@ -82,7 +92,9 @@
       state.data = prepare(j.data); state.loadedAt = Date.now();
       store.set(LS.cache, JSON.stringify(j.data));
       if (state.app === 'hh') { pendingScroll = null; render(); if (window.HH) window.HH.invUpdated(); return; }
-      const y = pendingScroll ?? window.scrollY; pendingScroll = null; render(); requestAnimationFrame(() => window.scrollTo({ top: y }));
+      // 기록 화면에서 입력 중이면 새로 받은 자료로 다시 그려도 적던 값은 그대로 (자동 새로고침 때 숫자가 사라지던 문제)
+      const typed = keepTyped();
+      const y = pendingScroll ?? window.scrollY; pendingScroll = null; render(); typed(); requestAnimationFrame(() => window.scrollTo({ top: y }));
       if (!quiet) toast('최신 데이터로 갱신했습니다');
     } catch (e) {
       if (e.code === 'auth') { logout('비밀번호가 바뀌었거나 틀렸습니다. 다시 입력하십시오.'); return; }

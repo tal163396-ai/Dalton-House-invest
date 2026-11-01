@@ -315,7 +315,10 @@
   }
   // 가계부·통계 화면을 좌우로 밀면 이전·다음 달: 손가락을 따라 화면이 움직이고, 놓으면 부드럽게 넘어감
   (() => {
-    let x0 = 0, y0 = 0, t0 = 0, dx = 0, dir = null, v = null, busy = false;
+    let x0 = 0, y0 = 0, t0 = 0, dx = 0, dir = null, v = null, busy = false, pageNav = null;
+    // 열린 화면(분류 상세·자산 상세 등)에 ‹ › 달 버튼이 있으면 그 화면에서도 밀어서 넘김
+    const NAV = '[data-am], [data-mw]';
+    const pageArrow = (pg, k) => [...pg.querySelectorAll(NAV)].find(b => Number(b.dataset.am || b.dataset.mw) === k && !b.disabled);
     const skip = '.cm-chips, .hh-tabs, .seg, input, textarea, select, .hh-scroll-x, [data-noswipe]';
     const EASE = 'cubic-bezier(.22,.8,.24,1)';
     const set = (el, x, op, tr) => { el.style.transition = tr || 'none'; el.style.transform = x ? `translate3d(${x}px,0,0)` : ''; el.style.opacity = op === 1 ? '' : String(op); };
@@ -324,10 +327,17 @@
       v = null; dir = null; dx = 0;
       if (busy || e.touches.length !== 1) return;
       // 내용이 짧은 달(빈 메모 등)도 넘기도록: 화면 아래 빈 곳에서 밀어도 지금 보이는 화면을 움직임
-      if (!H.active || (H.view !== 'book' && H.view !== 'stats') || !e.target.closest || e.target.closest('#hhHead, .tabbar, #hhFab, #hhLayer, #sheet, .topbar')) return;
+      if (!H.active || !e.target.closest) return;
+      const top = [...stack].reverse().find(x => x.pg);
+      if (top) {
+        if ($('#sheet.open') || !e.target.closest('.hh-pbody') || e.target.closest(skip) || e.target.closest('.hf, .hf-picker') || !top.pg.querySelector(NAV)) return;
+        pageNav = top.pg; v = $('.hh-pbody', top.pg); x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+        return;
+      }
+      if ((H.view !== 'book' && H.view !== 'stats') || e.target.closest('#hhHead, .tabbar, #hhFab, #hhLayer, #sheet, .topbar')) return;
       const el = H.view === 'book' ? $('#hh-book') : $('#hh-stats');
       if (!el || el.hidden || e.target.closest(skip) || !$('#hhHead .hh-arrow') || stack.some(x => x.pg) || $('#sheet.open')) return;
-      v = el; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+      pageNav = null; v = el; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
     }, { passive: true });
     document.addEventListener('touchmove', e => {
       if (!v) return;
@@ -342,11 +352,12 @@
       if (!v || dir !== 'h') { v = null; return; }
       const el = v, w = el.clientWidth || 360, speed = Math.abs(dx) / Math.max(1, Date.now() - t0);
       if (Math.abs(dx) < w * 0.22 && !(speed > 0.45 && Math.abs(dx) > 40)) { set(el, 0, 1, `transform .28s ${EASE}, opacity .28s ${EASE}`); setTimeout(() => clear(el), 300); v = null; return; }
-      const k = dx < 0 ? 1 : -1;
+      const k = dx < 0 ? 1 : -1, pgN = pageNav, arrow = pgN && pageArrow(pgN, k);
+      if (pgN && !arrow) { set(el, 0, 1, `transform .28s ${EASE}, opacity .28s ${EASE}`); setTimeout(() => clear(el), 300); v = null; return; }   // 더 갈 달이 없음
       busy = true;
       set(el, -k * w * 0.6, 0, 'transform .16s ease-in, opacity .16s ease-in');   // 지금 달은 미는 쪽으로 빠지고
       setTimeout(() => {
-        moveHead(k);
+        if (arrow) arrow.click(); else moveHead(k);
         set(el, k * w * 0.35, 0);                                                      // 새 달은 반대쪽에서
         void el.offsetWidth;
         set(el, 0, 1, `transform .3s ${EASE}, opacity .26s ease-out`);               // 부드럽게 들어옴
@@ -395,6 +406,13 @@
     $$('#hh-book [data-bt]').forEach(b => b.onclick = () => { H.btab = b.dataset.bt; sess.set('dh_hbtab', H.btab); $('#hhFab').hidden = H.btab === 'habit'; window.scrollTo({ top: 0 }); render(); });
     bindRows($('#hh-book'));
     if (H.btab === 'close') {
+      // 분류를 누르면 그 달 상세 내역 (꺾쇠는 소분류 펼치기·접기)
+      $$('#hh-book [data-bopen]').forEach(r => r.addEventListener('click', ev => {
+        if (ev.target.closest('[data-btog]')) return;
+        ev.stopImmediatePropagation();
+        const ym = H.ym;
+        openCatDetail('지출', r.dataset.bopen, `${ym}-01`, `${ym}-${pad(daysIn(ym))}`, { sel: r.dataset.bsub || null, budget: true });
+      }, true));
       $$('#hh-book [data-bcat]').forEach(r => r.onclick = () => {
         const k = r.dataset.bcat;
         if (k.startsWith('__all__|')) {
@@ -516,13 +534,14 @@
     const own = baseOf(c.name, '');
     return own > 0 ? own : c.subs.reduce((a, s) => a + baseOf(c.name, s), 0);
   }
-  function budRow(name, b, spent, { kind = 'cat', marker = null, toggle = null, open = true } = {}) {
+  function budRow(name, b, spent, { kind = 'cat', marker = null, toggle = null, open = true, cat = null, sub = '' } = {}) {
     const pct = b > 0 ? spent / b : Infinity, over = spent > b, rem = b - spent;
     const pTxt = !Number.isFinite(pct) || pct > 9.99 ? '-' : `${Math.floor(pct * 100)}%`;
     const fill = Math.min(100, (Number.isFinite(pct) ? pct : 1) * 100);
     const tg = toggle ? `data-bcat="${esc(toggle)}" role="button" tabindex="0" aria-expanded="${open}"` : '';
-    return `<div class="bud ${kind}" ${tg}>
-      <div class="bud-l"><span class="bud-n"><span>${esc(name)}</span>${toggle ? `<i class="bud-chev ${open ? 'open' : ''}">${ico.chev}</i>` : ''}</span><b class="num">${won(b)}</b></div>
+    const op = cat ? `data-bopen="${esc(cat)}" data-bsub="${esc(sub)}"` : '';
+    return `<div class="bud ${kind}" ${tg} ${op}>
+      <div class="bud-l"><span class="bud-n"><span>${esc(name)}</span>${toggle ? `<i class="bud-chev ${open ? 'open' : ''}" data-btog="1">${ico.chev}</i>` : ''}</span><b class="num">${won(b)}</b></div>
       <div class="bud-r">
         <div class="bud-bar ${over ? 'over' : ''}"><i style="width:${fill.toFixed(1)}%"></i>${marker !== null ? `<s style="left:${(marker * 100).toFixed(1)}%"></s>${kind === 'top' ? `<span class="bud-today" style="left:${(marker * 100).toFixed(1)}%">오늘</span>` : ''}` : ''}<em class="num ${fill >= 96 ? 'in' : ''}">${pTxt}</em></div>
         <div class="bud-v num"><span class="${over ? 'exp' : 'inc'}">${won(spent)}</span><span>${rem < 0 ? `초과 −${fmt(-rem)}원` : won(rem)}</span></div>
@@ -546,8 +565,8 @@
       const subs = c.subs.filter(s => budgetOf(c.name, s, ym) > 0);
       const open = !H.budClosed.has(c.name);
       if (subs.length) togg.push(c.name);
-      rows.push(budRow(c.name, b, byCat.get(c.name) || 0, { kind: 'cat', marker, toggle: subs.length ? c.name : null, open }));
-      if (subs.length && open) subs.forEach(s => rows.push(budRow(s, budgetOf(c.name, s, ym), bySub.get(BK(c.name, s)) || 0, { kind: 'sub', marker })));
+      rows.push(budRow(c.name, b, byCat.get(c.name) || 0, { kind: 'cat', marker, toggle: subs.length ? c.name : null, open, cat: c.name }));
+      if (subs.length && open) subs.forEach(s => rows.push(budRow(s, budgetOf(c.name, s, ym), bySub.get(BK(c.name, s)) || 0, { kind: 'sub', marker, cat: c.name, sub: s })));
     });
     const budget = rows.length
       ? budRow('전체예산', tb, total, { kind: 'top', marker, toggle: togg.length ? `__all__|${togg.join('|')}` : null, open: togg.length > 0 && togg.every(n => !H.budClosed.has(n)) }) + rows.join('')
@@ -822,8 +841,8 @@
     if (from.endsWith('-01-01') && to.endsWith('-12-31') && from.slice(0, 4) === to.slice(0, 4)) return `${from.slice(0, 4)}년`;
     return `${from.slice(2).replace(/-/g, '.')} ~ ${to.slice(2).replace(/-/g, '.')}`;
   }
-  function openCatDetail(type, cat, from, to) {
-    let winEnd = to.slice(0, 7), sel = null;
+  function openCatDetail(type, cat, from, to, opts = {}) {
+    let winEnd = to.slice(0, 7), sel = opts.sel || null;
     const subOf = t => t.sub || '(소분류 없음)';
     const build = () => {
       const all = inRange(from, to).filter(t => t.type === type && (t.cat || '미분류') === cat);
@@ -868,7 +887,10 @@
         const y = window.scrollY; $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg);
       });
     };
-    pushPage({ title: esc(cat), body: build(), refresh: pg => { $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg); }, onMount: pg => { bindRows(pg); bindBars(pg); } });
+    const cObj = (H.cats[type] || []).find(c => c.name === cat);
+    const pen = opts.budget && cObj ? `<button class="icon-btn" id="cdBud" aria-label="예산 수정">${ico.pen}</button>` : '';
+    pushPage({ title: esc(cat), actions: pen, body: build(), refresh: pg => { $('.hh-pbody', pg).innerHTML = build(); bindRows(pg); bindBars(pg); },
+      onMount: pg => { bindRows(pg); bindBars(pg); const b = $('#cdBud', pg); if (b) b.onclick = () => openBudgetEdit(cObj, sel && cObj.subs.includes(sel) ? sel : ''); } });
   }
   function monthBars(months, vals, color, hi, tap = false) {
     const W = 336, Hh = 120, bw = W / months.length, mx = Math.max(...vals, 1);
@@ -1162,7 +1184,7 @@
         <button class="hmo-row" data-go="reload"><span>새로고침 <small class="hmo-sub">(가계부 새로 불러오기)</small></span>${ico.chev}</button>
         <button class="hmo-row" data-go="inv"><span>투자 화면으로</span>${ico.chev}</button>
       </div>
-      <p class="note hmo-note">가계부는 구글 시트에 저장되어 두 사람 휴대폰에 바로 같이 보입니다.<br>
+      <p class="note hmo-note">
       시트에서 직접 고친 뒤 새로고침하면 앱에 반영됩니다.<br>
       예전 상태로 되돌리기: 구글 시트 → 버전 기록<br>
       매월 반복 내역은 그 날짜가 지난 뒤 앱을 열 때 자동으로 들어갑니다.</p>`;
