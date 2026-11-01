@@ -635,12 +635,13 @@
           draw(); });
       };
       D.openSheet(`<div class="ask"><h2 id="sheetTitle">대분류 고르기</h2><p class="note ask-note" id="mcCount"></p><div class="sel-list"></div>
-        <div class="sheet-actions two"><button class="btn" id="mcClr">모두 해제</button><button class="btn primary" id="mcOk">완료</button></div></div>`, 'pop');
+        <div class="sheet-actions two"><button class="btn" id="mcAll">모두 선택</button><button class="btn" id="mcClr">모두 해제</button></div><div class="sheet-actions mc-ok"><button class="btn primary" id="mcOk">완료</button></div></div>`, 'pop');
       let done = false;
       const fin = v => { if (done) return; done = true; obs.disconnect(); res(v); };
       const sh = $('#sheet');
       const obs = new MutationObserver(() => { if (!sh.classList.contains('open') || sh.hidden) fin(null); });
       setTimeout(() => obs.observe(sh, { attributes: true, attributeFilter: ['class', 'hidden'] }), 60);
+      $('#mcAll').onclick = () => { sel = new Set(list.filter(c => c !== '__all')); draw(); };   // 대분류 전부 체크 → 몇 개만 빼기 쉽게
       $('#mcClr').onclick = () => { sel = new Set(); draw(); };   // 선택만 모두 풀기 (창은 그대로, 완료 누르면 0개 = 전체 지출)
       $('#mcOk').onclick = () => { fin(list.filter(c => sel.has(c))); D.closeSheet(); };
       draw();

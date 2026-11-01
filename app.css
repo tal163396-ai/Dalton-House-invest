@@ -1653,3 +1653,5 @@ button.cm-sr:active { background: var(--fill); }
 .hp-why { font-size: 13px; color: var(--ink-3); text-align: left; margin: 6px 0 0; font-weight: 600; }
 .hp-why b { font-weight: 750; color: var(--ink-2); }
 .hp-why b.dn { color: var(--down); } .hp-why b.up { color: var(--up); }
+
+.ask .sheet-actions.mc-ok { margin-top: 8px; }
