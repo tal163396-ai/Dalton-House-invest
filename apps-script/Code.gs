@@ -51,6 +51,26 @@ function renameOnce_() {
     P.setProperty('RENAMED_MAIN_CASH', '1');
   });
 }
+/* 2026-11-01 메인 계좌 예수금을 달러로: 증권사에 달러로 있으므로 TQQQ(나예) 달러 예수금과 같은 형식
+ *  (수량 = 달러, 현재가 1, 평가금 = 달러 × 환율). 원금(원)은 그대로. 스크립트 속성 USD_MAIN_CASH 로 한 번만 */
+function usdOnce_() {
+  const P = PropertiesService.getScriptProperties();
+  if (P.getProperty('USD_MAIN_CASH')) return;
+  withLock_(() => {
+    if (P.getProperty('USD_MAIN_CASH')) return;
+    const t = holdings_(), r = findRow_(t, '예수금', '메인 계좌 예수금');
+    if (r >= 0 && String(t.values[r][t.col['통화']]).trim() !== 'USD') {
+      const krw = num_(t.values[r][t.col['직접평가(원)']]) || num_(t.values[r][t.col['평가금(원)']]);
+      const usd = round_(krw / rate_(), 2);
+      const k = t.col['평가금(원)'] + 1;
+      t.sh.getRange(2, k, 1, 3).copyTo(t.sh.getRange(r + 1, k, 1, 3));   // 평가금·평가손익·수익률 수식
+      setCell_(t, r, '티커', 'USD'); setCell_(t, r, '통화', 'USD'); setCell_(t, r, '수량', usd);
+      setCell_(t, r, '현재가', 1); setCell_(t, r, '직접평가(원)', '');
+      if ('시세방식' in t.col) setCell_(t, r, '시세방식', '수동(달러 금액)');
+    }
+    P.setProperty('USD_MAIN_CASH', '1');
+  });
+}
 function cashLinks_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('CASH_LINKS') || '{}'); } catch (e) { return {}; } }
 function cashOf_(asset) {
   if (CASH[asset]) return CASH[asset];
@@ -142,13 +162,13 @@ function doPost(e) {
 
   try {
     switch (req.action) {
-      case 'data':   renameOnce_(); return json_({ ok: true, data: readAll_() });
+      case 'data':   renameOnce_(); usdOnce_(); return json_({ ok: true, data: readAll_() });
       case 'trade':  return json_(withLock_(() => recordTrade_(req.trade)));
       case 'manual': return json_(withLock_(() => setManual_(req.manual)));
       case 'month':  return json_(withLock_(() => saveMonth_(req.month)));
       case 'tradeDel':  return json_(withLock_(() => tradeDel_(req)));
       case 'tradeEdit': return json_(withLock_(() => tradeEdit_(req)));
-      case 'hh':        renameOnce_(); return json_({ ok: true, hh: readHH_() });
+      case 'hh':        renameOnce_(); usdOnce_(); return json_({ ok: true, hh: readHH_() });
       case 'hhSave':    return json_(withLock_(() => hhSave_(req)));
       case 'hhDel':     return json_(withLock_(() => hhDel_(req)));
       case 'hhSettings':return json_(withLock_(() => hhSettings_(req)));

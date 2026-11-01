@@ -1674,7 +1674,7 @@
 
   // 달러 종목 단가 통화: 종목마다 기억 (원화로 사는 종목이 많음)
   // 새 자산을 살 때 고를 수 있는 예수금: 원화 예수금 줄 (원금을 그 줄에서 관리하는 것만)
-  const linkCash = () => (state.data ? state.data.rows.filter(r => /예수금/.test(r.sub) && r.cur !== 'USD') : []);
+  const linkCash = () => (state.data ? state.data.rows.filter(r => /예수금/.test(r.sub) && (r.cur !== 'USD' || r.kind === '현금')) : []);
   const linkOpts = () => linkCash().map(r => ({ asset: r.asset, sub: r.sub })).sort((a, b) => (/메인/.test(b.sub) ? 1 : 0) - (/메인/.test(a.sub) ? 1 : 0));
   const linkLabel = l => (l && l.sub ? `${l.sub}에서 빼기` : '예수금 없음');
   const pcurKey = F => `dh_pcur_${F.key || ''}`;
