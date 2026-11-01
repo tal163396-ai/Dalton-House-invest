@@ -2051,7 +2051,8 @@
   const tradeSig = t => ({ type: t['구분'], asset: t['자산'], sub: t['세부종목'], amt: num(t['금액(원)']) });
   function openTrade(t) {
     const type = t['구분'], linked = !!String(t['연결'] || '').trim(), trade = type === '매수' || type === '매도';
-    const editable = !linked && ['매수', '매도', '입금', '출금'].includes(type);
+    const locked = String(t['날짜'] || '').slice(0, 10) < '2026-11-01';   // 증권사 기준 출발점 전 기록 (Code.gs INV_BASE_DATE)
+    const editable = !linked && !locked && ['매수', '매도', '입금', '출금'].includes(type);
     const rows = [
       ['종목', t['세부종목'] && t['세부종목'] !== t['자산'] ? `${t['자산']} · ${t['세부종목']}` : t['자산']],
       ['날짜', fmtDate(new Date(t['날짜']))],
@@ -2061,7 +2062,10 @@
       t['메모'] ? ['메모', t['메모']] : null,
       t['입력자'] ? ['입력자', t['입력자']] : null,
     ].filter(Boolean);
-    const acts = linked
+    const acts = locked && !linked
+      ? `<p class="note ask-note">🔒 11월 1일 이전 기록은 수정·삭제할 수 없습니다.<br>증권사 기준으로 맞춘 원금이 틀어지기 때문입니다.<br>숫자가 다르면 '수정' 탭에서 지금 값으로 맞추십시오.</p>
+         <div class="sheet-actions"><button class="btn" data-close>닫기</button></div>`
+      : linked
       ? `<p class="note ask-note">가계부 내역과 연결된 기록입니다.<br>가계부 내역에서 고치거나 지우면 함께 바뀝니다.</p>
          <div class="sheet-actions two"><button class="btn" data-close>닫기</button><button class="btn primary" id="tdHh">가계부 내역 열기</button></div>`
       : `<div class="sheet-actions ${editable ? 'two' : ''}"><button class="btn danger-line" id="tdDel">삭제</button>${editable ? '<button class="btn primary" id="tdEdit">수정</button>' : ''}</div>

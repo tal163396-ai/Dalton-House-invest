@@ -71,6 +71,13 @@ function usdOnce_() {
     P.setProperty('USD_MAIN_CASH', '1');
   });
 }
+/* 2026-11-01 증권사 기준 출발점: 이 날짜 전의 투자 기록(앱 거래기록, 가계부 투자 연결)은 고치거나 지우지 못하게 함.
+ *  지우면 예전 기록을 지금 계산 방식으로 되돌려 맞춰 둔 원금·예수금이 틀어지기 때문 */
+const INV_BASE_DATE = '2026-11-01';
+const INV_LOCK_MSG = '11월 1일 이전 기록은 수정·삭제할 수 없습니다. 증권사 기준으로 맞춘 원금이 틀어지기 때문입니다. 숫자가 다르면 수정 탭에서 지금 값으로 맞추십시오.';
+const HH_LOCK_MSG = '11월 1일 이전에 투자 앱과 연결된 내역입니다. 금액·투자 연결은 바꾸거나 지울 수 없습니다. 내용·분류·메모만 고칠 수 있습니다.';
+const ymd_ = x => (Object.prototype.toString.call(x) === '[object Date]' ? Utilities.formatDate(x, sheetTz_(), 'yyyy-MM-dd') : String(x || '').slice(0, 10));   // 시트 날짜 = 벽시계 시각
+const invLocked_ = spec => !!spec && spec.type !== '비용' && ymd_(spec.date) < INV_BASE_DATE;
 function cashLinks_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('CASH_LINKS') || '{}'); } catch (e) { return {}; } }
 function cashOf_(asset) {
   if (CASH[asset]) return CASH[asset];
@@ -1081,6 +1088,7 @@ function tradeAt_(req) {
     && String(v('세부종목')).trim() === String(g.sub || '').trim() && Math.round(num_(v('금액(원)'))) === Math.round(num_(g.amt));
   if (!same) throw new Error('그사이 기록이 바뀌었습니다. 새로고침 후 다시 하십시오');
   if ('연결' in lt.col && String(v('연결')).trim()) throw new Error('가계부와 연결된 기록입니다. 가계부 내역에서 고치십시오');
+  if (ymd_(v('날짜')) < INV_BASE_DATE) throw new Error(INV_LOCK_MSG);
   return { lt, r, v };
 }
 
@@ -1130,6 +1138,7 @@ function tradeEdit_(req) {
 /** 내역 저장 전후 비교: 연결이 바뀌었으면 예전 것을 되돌리고 새로 기록 */
 function hhSyncLink_(id, oldSpec, newSpec) {
   if (hhSpecKey_(oldSpec) === hhSpecKey_(newSpec)) return null;
+  if (invLocked_(oldSpec)) throw new Error(HH_LOCK_MSG);
   const undone = oldSpec ? hhUndoLink_(id) : false;
   if (!newSpec) return null;
   try { return hhApplyLink_(newSpec, id); }
@@ -1228,7 +1237,11 @@ function hhDel_(req) {
   const row = hhFindRow_(sh, hhHead_(sh), id);
   if (!row) return { ok: true, message: '이미 지워진 내역입니다' };
   let undone = false;
-  if (req.kind === 'tx') { const prev = hhTxRowObj_(id); if (prev && hhLinkSpec_(prev)) undone = hhUndoLink_(id); }
+  if (req.kind === 'tx') {
+    const prev = hhTxRowObj_(id), spec = prev ? hhLinkSpec_(prev) : null;
+    if (invLocked_(spec)) throw new Error(HH_LOCK_MSG);
+    if (spec) undone = hhUndoLink_(id);
+  }
   sh.deleteRow(row);
   return { ok: true, invUndone: undone };
 }

@@ -1920,9 +1920,13 @@
       setTimeout(() => openForm(old ? { tx: old } : { copy: t, date: t.d }), 300);
     }
   }
+  // 11월 1일 이전 투자 연결 내역(입금·출금·매수·매도): 지우면 투자 앱 출발점이 틀어짐 (Code.gs INV_BASE_DATE)
+  const invLockedTx = t => ['입금', '출금', '매수', '매도'].includes(t.invType) && t.type === '이체' && String(t.d || '') < '2026-11-01';
+  const lockSheet = () => D.openSheet(`<div class="ask"><h2 id="sheetTitle">🔒 고칠 수 없는 내역</h2><p class="note ask-note">11월 1일 이전에 투자 앱과 연결된 내역입니다.<br>금액·투자 연결은 바꾸거나 지울 수 없습니다.<br>내용·분류·메모만 고칠 수 있습니다.</p><div class="sheet-actions"><button class="btn" data-close>닫기</button></div></div>`, 'pop');
   async function removeTx(t) {
     const i = H.tx.findIndex(x => x.id === t.id);
     if (i < 0) return;
+    if (invLockedTx(t)) { lockSheet(); return; }
     H.tx.splice(i, 1); reindex(); rerender();
     try { const j = await D.api('hhDel', { kind: 'tx', id: t.id }); saveCache(); if (t.invType && D.reloadInv) D.reloadInv(); toast(j && j.invUndone ? '지웠습니다 · 투자 앱 기록도 되돌렸습니다' : '지웠습니다'); }
     catch (ex) { H.tx.push(t); reindex(); rerender(); toast(`삭제 실패: ${ex.message}`, true); }
