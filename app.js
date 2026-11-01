@@ -1648,6 +1648,9 @@
   const findRow = key => state.data.rows.find(r => rowKey(r) === key);
 
   // 달러 종목 단가 통화: 종목마다 기억 (원화로 사는 종목이 많음)
+  // 새 자산을 살 때 고를 수 있는 예수금: 원화 예수금 줄 (원금을 그 줄에서 관리하는 것만)
+  const linkCash = () => (state.data ? state.data.rows.filter(r => /예수금/.test(r.sub) && r.cur !== 'USD') : []);
+  const linkLabel = l => (l && l.sub ? `${l.sub}에서 빼기` : '연결 안 함 (새로 넣은 돈 · 원금 증가)');
   const pcurKey = F => `dh_pcur_${F.key || ''}`;
   const pcurOf = F => { try { return store.get(pcurKey(F)) === 'KRW' ? 'KRW' : 'USD'; } catch { return 'USD'; } };
   function renderRecord() {
@@ -1731,7 +1734,10 @@
             </label>
             <label class="field"><span>자산(계좌) 이름</span><input id="fNewAsset" placeholder="선택" value="${esc(F.newAsset || '')}"></label>
           </div>
-          <p class="help">자산 이름을 비우면 ${inKind.length && new Set(inKind.map(r => r.asset)).size === 1 ? `'${esc(inKind[0].asset)}' 안에` : '종목 이름으로 새 자산을 만들어'} 넣습니다.<br>새 계좌면 이름을 적으십시오.<br><span class="nw">예: 나예 주식(NH증권)</span></p>` : `
+          <p class="help">자산 이름을 비우면 ${inKind.length && new Set(inKind.map(r => r.asset)).size === 1 ? `'${esc(inKind[0].asset)}' 안에` : '종목 이름으로 새 자산을 만들어'} 넣습니다.<br>새 계좌면 이름을 적으십시오.<br><span class="nw">예: 나예 주식(NH증권)</span></p>
+          <div class="field"><span>산 돈이 나가는 예수금</span>
+            <button type="button" class="pick-btn" id="fLinkBtn"><small>새 자산일 때만 적용</small><b>${esc(linkLabel(F.cashLink))}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>
+          <p class="help">이미 예수금이 연결된 계좌(ISA, SOXL 등) 이름을 적으면 그 계좌 예수금을 그대로 씁니다.</p>` : `
           <p class="preview num">${row ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''}</p>`}
         <div class="two">
           <label class="field"><span>수량</span><input id="fQty" class="dec" type="text" inputmode="decimal" autocomplete="off"></label>
@@ -1798,6 +1804,16 @@
       $$('#sheet [data-pk]').forEach(b => b.onclick = () => { F.key = b.dataset.pk; closeSheet(); renderRecord(); });
     });
     on('#fCash', 'change', e => { F.cashAsset = e.target.value; });
+    on('#fLinkBtn', 'click', () => {
+      const keep = { n: $('#fNewName')?.value, t: $('#fNewTicker')?.value, a: $('#fNewAsset')?.value, q: $('#fQty')?.value, p: $('#fPrice')?.value, k: $('#fKrw')?.value };
+      const opts = [null, ...linkCash().map(r => ({ asset: r.asset, sub: r.sub }))];
+      const same = (a, b) => (!a && !b) || (a && b && a.asset === b.asset && a.sub === b.sub);
+      openSheet(`<h2 id="sheetTitle">산 돈이 나가는 예수금</h2><div class="pick-list">${opts.map((o, i) => `<button class="pick-i ${same(o, F.cashLink) ? 'on' : ''}" data-li="${i}"><span>${esc(linkLabel(o))}</span>${same(o, F.cashLink) ? '<b>✓</b>' : ''}</button>`).join('')}</div>`);
+      $$('#sheet [data-li]').forEach(b => b.onclick = () => {
+        F.cashLink = opts[Number(b.dataset.li)]; F.newName = keep.n; F.newTicker = keep.t; F.newAsset = keep.a; closeSheet(); renderRecord();
+        if ($('#fQty')) { $('#fQty').value = keep.q || ''; $('#fPrice').value = keep.p || ''; $('#fKrw').value = keep.k || ''; }
+      });
+    });
     on('#fNewCur', 'change', e => { F.newCur = e.target.value; F.newName = $('#fNewName').value; F.newTicker = $('#fNewTicker').value; F.newAsset = $('#fNewAsset').value; renderRecord(); });
     const upd = () => {
       const p = $('#fPreview', el); if (!p) return;
@@ -2128,6 +2144,7 @@
         const assets = [...new Set(D.rows.filter(r => r.kind === F.kind && isTradable(r)).map(r => r.asset))];
         const named = $('#fNewAsset').value.trim();
         t.asset = named || (assets.length === 1 && assets[0] !== D.rows.find(r => r.asset === assets[0]).sub ? assets[0] : t.sub);
+        if (F.cashLink) t.cashLink = { asset: F.cashLink.asset, sub: F.cashLink.sub };
       } else {
         const row = findRow(F.key);
         if (!row) { err.textContent = '종목을 선택하십시오.'; return; }

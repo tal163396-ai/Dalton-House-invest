@@ -27,6 +27,21 @@ const CASH = {
   'QLD':        { mode: 'shared', asset: '예수금', sub: '메인 계좌 원화 예수금' },
   'SOXL':       { mode: 'shared', asset: '예수금', sub: '메인 계좌 원화 예수금' },
 };
+/* 새 종목(새 계좌)을 살 때 앱에서 고른 예수금 연결 (2026-11-01). 스크립트 속성 CASH_LINKS = {자산: {asset, sub}}
+ *  - 예수금 줄이 같은 자산 안에 있으면 internal, 다른 자산이면 shared 와 같은 방식으로 움직임
+ *  - 위 CASH 에 있는 자산은 언제나 CASH 가 우선 */
+function cashLinks_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('CASH_LINKS') || '{}'); } catch (e) { return {}; } }
+function cashOf_(asset) {
+  if (CASH[asset]) return CASH[asset];
+  const m = cashLinks_()[asset];
+  if (m && m.sub) return m.asset === asset ? { mode: 'internal', sub: m.sub } : { mode: 'shared', asset: m.asset, sub: m.sub };
+  return { mode: 'none' };
+}
+function setCashLink_(asset, link) {
+  const all = cashLinks_();
+  all[asset] = { asset: String(link.asset || '').trim(), sub: String(link.sub || '').trim() };
+  PropertiesService.getScriptProperties().setProperty('CASH_LINKS', JSON.stringify(all));
+}
 
 const HCOL = ['자산', '종류', '세부종목', '티커', '통화', '수량', '평단가', '원금(원)', '현재가', '직접평가(원)', '평가금(원)'];
 
@@ -129,7 +144,7 @@ function readAll_() {
   return {
     updatedAt: Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm'),
     rate: rate_(),
-    cashLinked: Object.keys(CASH),
+    cashLinked: Object.keys(CASH).concat(Object.keys(cashLinks_())),
     holdings: applyLiveQuotes_(rowsAsObjects_('보유현황', o => !o['자산'] || o['자산'] === '합계')),
     composition: rowsAsObjects_('연도별구성', o => !o['연도']),
     realized: rowsAsObjects_('실현손익', o => !o['날짜']),
@@ -268,7 +283,13 @@ function recordTrade_(tr) {
 
   let t = holdings_();
   const rate = rate_();
-  const cash = CASH[asset] || { mode: 'none' };
+  // 새 자산을 처음 살 때 고른 예수금 연결을 먼저 저장 (이미 연결된 자산이면 무시)
+  let newLink = null;
+  if (type === '매수' && tr.cashLink && tr.cashLink.sub && !CASH[asset] && !cashLinks_()[asset] && findFirstRow_(holdings_(), asset) < 0) {
+    newLink = { asset: String(tr.cashLink.asset || '').trim(), sub: String(tr.cashLink.sub).trim() };
+    if (findRow_(holdings_(), newLink.asset, newLink.sub) < 0) throw new Error(`예수금 '${newLink.sub}'을 보유현황에서 찾지 못했습니다`);
+  }
+  const cash = newLink ? { mode: 'shared', asset: newLink.asset, sub: newLink.sub } : cashOf_(asset);
   let realized = null, amountKrw = 0, qty = '', price = '', cur = 'KRW'; let unitTxt = '';
 
   if (type === '매수' || type === '매도') {
@@ -329,6 +350,7 @@ function recordTrade_(tr) {
     }
   }
 
+  if (newLink) setCashLink_(asset, newLink);   // 매수가 끝난 뒤에 연결 저장 (실패하면 남지 않음)
   if (tr.nolog) return { ok: true, amountKrw, realized };
   appendByHeader_('거래기록', {
     '날짜': kstWall_(date), '자산': asset, '세부종목': sub, '구분': type, '수량': qty, '단가': price,
@@ -965,7 +987,7 @@ function undoTradeAt_(lt, r, dropRealized) {
     setCell_(t, h, '원금(원)', Math.round(num_(t.values[h][t.col['원금(원)']]) - diff));
     dropRealized();
   } else {
-    const t = holdings_(), rate = rate_(), cash = CASH[asset] || { mode: 'none' };
+    const t = holdings_(), rate = rate_(), cash = cashOf_(asset);
     const h = findRow_(t, asset, sub);
     if (h < 0) throw new Error(`되돌릴 종목 '${asset} / ${sub}'을 보유현황에서 찾지 못했습니다`);
     const cur = String(t.values[h][t.col['통화']]).trim() || 'KRW';
