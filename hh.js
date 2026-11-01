@@ -1883,6 +1883,7 @@
         catch (ex) { toast(`삭제 실패: ${ex.message}`, true); }
         return;
       }
+      if (invLockedTx(e)) { lockSheet(); return; }   // 확인 창 없이 바로 안내 (닫기 누를 때까지 그대로)
       if (!(await askConfirm('이 내역을 지울까요?', `${esc(e.text || e.cat || e.type)} · ${won(Math.abs(e.amt))}`, '삭제'))) return;
       back();
       removeTx(e);

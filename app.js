@@ -2252,7 +2252,7 @@
   function closeSheet() {
     const s = $('#sheet');
     s.classList.remove('open');
-    setTimeout(() => { s.hidden = true; }, 240);
+    setTimeout(() => { if (!s.classList.contains('open')) s.hidden = true; }, 240);   // 그사이 새 창이 열렸으면 숨기지 않음
   }
 
   let toastTimer;
