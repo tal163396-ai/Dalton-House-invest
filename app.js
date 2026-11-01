@@ -1764,7 +1764,7 @@
           <p class="help">이미 예수금이 연결된 계좌(ISA, SOXL 등) 이름을 적으면 그 계좌 예수금을 그대로 씁니다.</p>` : `
           <p class="preview num">${row ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''}</p>
           ${row && D.cashMap ? (() => { const c = D.cashMap[row.asset], buy = F.type === '매수';
-            return `<p class="cash-flow">${c && c.sub ? `${buy ? '산 돈은' : '판 돈은'} <b>${esc(c.sub)}</b>${buy ? '에서 빠집니다' : '으로 들어갑니다'}` : `예수금과 연결 없음 · ${buy ? '원금만 늘어납니다' : '원금만 줄어듭니다'}`}</p>`; })() : ''}`}
+            return `<p class="cash-flow">${c && c.sub ? `${buy ? '매수한 종목은' : '매도한 종목은'} <b>${esc(c.sub)}</b>${buy ? '에서 빠집니다' : '으로 들어갑니다'}` : `예수금과 연결 없음 · ${buy ? '원금만 늘어납니다' : '원금만 줄어듭니다'}`}</p>`; })() : ''}`}
         <div class="two">
           <label class="field"><span>수량</span><input id="fQty" class="dec" type="text" inputmode="decimal" autocomplete="off"></label>
           <label class="field"><span>단가 ${curr === 'USD' ? `<button type="button" class="pcur-btn" id="fPcur" aria-label="단가 통화 바꾸기">${pcurOf(F) === 'KRW' ? '원' : '달러'} ⇄</button>` : '(원)'}</span><input id="fPrice" class="dec" type="text" inputmode="decimal" autocomplete="off"></label>
