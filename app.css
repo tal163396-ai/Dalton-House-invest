@@ -866,7 +866,7 @@ body.hh-mode #hhSearchBtn { display: grid; }
 .app-switch { color: var(--hh); }
 .app-switch .ic-inv { display: none; }
 .app-switch img.ic-pig { width: 30px; height: 30px; object-fit: contain; display: block; }
-body.hh-mode .app-switch { color: var(--accent); }
+body.hh-mode .app-switch { color: var(--ink); }
 body.hh-mode .app-switch .ic-pig { display: none; }
 body.hh-mode .app-switch .ic-inv { display: block; }
 .hh-arrow { width: 34px; height: 40px; flex: none; display: grid; place-items: center; border: 0; background: none; color: var(--ink-2); border-radius: 10px; }
