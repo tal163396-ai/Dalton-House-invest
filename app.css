@@ -865,6 +865,7 @@ body.hh-mode #refreshBtn { display: none; }
 body.hh-mode #hhSearchBtn { display: grid; }
 .app-switch { color: var(--hh); }
 .app-switch .ic-inv { display: none; }
+.app-switch img.ic-pig { width: 30px; height: 30px; object-fit: contain; display: block; }
 body.hh-mode .app-switch { color: var(--accent); }
 body.hh-mode .app-switch .ic-pig { display: none; }
 body.hh-mode .app-switch .ic-inv { display: block; }
