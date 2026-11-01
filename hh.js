@@ -250,7 +250,7 @@
       const j = await D.api('hh');
       if (!j.hh || !j.hh.ready) { H.ready = false; H.loaded = true; render(); return; }
       H.ready = true;
-      ingest(j.hh); H.loaded = true; saveCache();
+      ingest(j.hh); H.loaded = true; H.loadedAt = Date.now(); saveCache();
       const y = window.scrollY; render(); window.scrollTo({ top: y });
       refreshPages();
       if (j.hh.made) toast(`매월 반복 내역 ${j.hh.made}건을 자동으로 넣었습니다`);
@@ -2778,7 +2778,8 @@
     if (!H.loaded) loadCache();
     render();
     requestAnimationFrame(() => { setTopH(); const y = Number(sess.get(`dh_scroll_hh_${H.view}`)) || 0; if (y) window.scrollTo({ top: y }); });
-    load();
+    // 2분 안에 불러온 적이 있으면 다시 불러오지 않음 (투자 화면과 같은 규칙, 새로고침 버튼으로 언제든 다시)
+    if (!H.loadedAt || Date.now() - H.loadedAt > 120000) load();
   }
   function leave() { H.active = false; closeAllPages(); $('#hhFab').hidden = true; }
   function bindOnce() {
