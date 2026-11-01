@@ -16,8 +16,10 @@ const TZ = 'Asia/Seoul';
 
 /**
  * 매매할 때 돈이 어디서 나가고 어디로 들어오는지.
- *  internal : 같은 자산 안의 예수금 줄 (원금은 그대로, 예수금만 늘고 줆)
- *  shared   : 다른 자산(메인 계좌 예수금)과 공유 (원금도 같이 이동)
+ *  internal : 같은 자산 안의 예수금 줄
+ *  shared   : 다른 자산(메인 계좌 예수금)과 공유
+ *  2026-11-01부터 둘 다 같은 방식: 매수 = 예수금 줄 값·원금 → 종목 줄 원금으로 이동, 매도 = 판 돈 전체가 예수금 줄 값·원금으로.
+ *  (증권사 기준: 종목 원금 = 매입금액, 예수금 원금 = 예수금 잔액. 그 전 기록을 지우면 옛 방식과 달라 어긋날 수 있음)
  *  목록에 없는 자산 : 예수금 연결 없음 (매수 = 새 돈 투입)
  */
 const CASH = {
@@ -145,6 +147,7 @@ function readAll_() {
     updatedAt: Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm'),
     rate: rate_(),
     cashLinked: Object.keys(CASH).concat(Object.keys(cashLinks_())),
+    cashMap: Object.keys(CASH).concat(Object.keys(cashLinks_())).reduce((m, a) => { const c = cashOf_(a); m[a] = { mode: c.mode, sub: c.sub || '' }; return m; }, {}),
     holdings: applyLiveQuotes_(rowsAsObjects_('보유현황', o => !o['자산'] || o['자산'] === '합계')),
     composition: rowsAsObjects_('연도별구성', o => !o['연도']),
     realized: rowsAsObjects_('실현손익', o => !o['날짜']),
@@ -316,13 +319,14 @@ function recordTrade_(tr) {
     if (type === '매수') {
       setCell_(t, r, '수량', round_(oldQty + qty, 8));
       if (oldAvg > 0 || oldQty === 0) setCell_(t, r, '평단가', round_((oldQty * oldAvg + qty * price) / (oldQty + qty), 4));
-      if (cash.mode !== 'internal') setCell_(t, r, '원금(원)', Math.round(oldCost + amountKrw));
+      setCell_(t, r, '원금(원)', Math.round(oldCost + amountKrw));   // 2026-11-01: internal 도 종목 줄 원금에 더하고 예수금 줄 원금에서 뺌 (자산 합계는 그대로)
       moveCash_(t, cash, cashRow, -qty * price, -amountKrw, cur, rate);
     } else {
       if (qty > oldQty + 1e-9) throw new Error(`보유 수량(${oldQty})보다 많이 팔 수 없습니다`);
       if (cash.mode === 'internal') {
         if (!(oldAvg > 0)) throw new Error('평단가가 없어 손익을 계산할 수 없습니다. 보유현황에 평단가를 입력해 주세요');
         realized = Math.round((price - oldAvg) * qty * fx);
+        setCell_(t, r, '원금(원)', Math.round(oldCost - (amountKrw - realized)));
       } else {
         const basis = oldQty > 0 ? oldCost * qty / oldQty : 0;
         realized = Math.round(amountKrw - basis);
@@ -337,9 +341,7 @@ function recordTrade_(tr) {
     const sign = type === '입금' ? 1 : -1;
     if (cash.mode === 'internal' || cash.mode === 'shared') {
       const cashRow = resolveCash_(t, cash);
-      moveCash_(t, cash, cashRow, null, sign * amountKrw, 'KRW', rate);
-      // internal: 그 자산 안의 예수금 + 원금 증가 / shared: 메인 예수금(값·원금)만 증가
-      if (cash.mode === 'internal') addCost_(t, cashRow, sign * amountKrw);
+      moveCash_(t, cash, cashRow, null, sign * amountKrw, 'KRW', rate);   // 예수금 줄의 값·원금이 함께 늘고 줆
     } else {
       const r = findRow_(t, asset, sub) >= 0 ? findRow_(t, asset, sub) : findFirstRow_(t, asset);
       if (r < 0) throw new Error(`보유현황에 '${asset}' 줄이 없습니다`);
@@ -401,7 +403,8 @@ function setManual_(m) {
     setCell_(t, r, '수량', round_(num_(m.usd), 2));
   } else {
     const v = Math.round(num_(m.value));
-    const isCash = String(t.values[r][t.col['종류']]).trim() === '현금';
+    const ca = cashOf_(String(m.asset).trim());
+    const isCash = String(t.values[r][t.col['종류']]).trim() === '현금' || (ca.mode === 'internal' && ca.sub === String(m.sub || '').trim());
     const diff = isCash ? v - Math.round(num_(t.values[r][t.col['원금(원)']])) : 0;
     setCell_(t, r, '직접평가(원)', v);
     if (isCash) setCell_(t, r, '원금(원)', v);
@@ -462,8 +465,8 @@ function moveCash_(t, cash, r, foreignAmt, krwAmt, tradeCur, rate) {
     setCell_(t, r, '수량', round_(num_(t.values[r][t.col['수량']]) + usd, 2));
   } else {
     setCell_(t, r, '직접평가(원)', Math.round(num_(t.values[r][t.col['직접평가(원)']]) + krwAmt));
-    if (cash.mode === 'shared') addCost_(t, r, krwAmt);
   }
+  addCost_(t, r, krwAmt);   // shared·internal 모두 예수금 줄 원금도 같이 움직임 (2026-11-01 증권사 기준)
 }
 
 function addCost_(t, r, amt) {
@@ -1001,12 +1004,12 @@ function undoTradeAt_(lt, r, dropRealized) {
       if (nq < -1e-9) throw new Error('되돌릴 수량이 보유 수량보다 많습니다');
       setCell_(t, h, '수량', Math.max(0, nq));
       if (nq > 1e-9 && A > 0) setCell_(t, h, '평단가', round_((Q * A - qty * price) / nq, 4));
-      if (cash.mode !== 'internal') setCell_(t, h, '원금(원)', Math.round(C - amt));
+      setCell_(t, h, '원금(원)', Math.round(C - amt));
       moveCash_(t, cash, cashRow, qty * price, amt, cur, rate);
     } else {
       const realized = num_(v('실현손익(원)'));
       setCell_(t, h, '수량', round_(Q + qty, 8));
-      if (cash.mode !== 'internal') setCell_(t, h, '원금(원)', Math.round(C + (amt - realized)));
+      setCell_(t, h, '원금(원)', Math.round(C + (amt - realized)));
       moveCash_(t, cash, cashRow, -qty * price, -amt, cur, rate);
       dropRealized();
     }
