@@ -758,7 +758,10 @@ const HH_KIND = { tx: '가계부', rule: '가계부반복', memo: '가계부메�
 
 function readHH_() {
   if (!SpreadsheetApp.getActive().getSheetByName('가계부')) return { ready: false };
-  const made = withLock_(() => { hhEnsureDaily_(); return hhRunRules_(); });
+  // 잠금은 정말 쓸 일이 있을 때만 (오늘 점검 전이거나 반복 내역을 넣어야 할 때). 그냥 읽기는 잠금 없이 → 다른 저장을 막지 않음
+  const key = HH_SCHEMA_VER + '|' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  const need = PropertiesService.getScriptProperties().getProperty('HH_ENSURED') !== key || hhRunRules_(true) > 0;
+  const made = need ? withLock_(() => { hhEnsureDaily_(); return hhRunRules_(); }) : 0;
   const read = name => {
     try { return hhRows_(name).rows; }
     catch (e) { withLock_(() => hhEnsure_()); return hhRows_(name).rows; }   // 그날 탭이 지워졌으면 다시 만들고 읽음
@@ -1258,7 +1261,7 @@ function hhMove_(rn) {
 }
 
 /** 반복 내역: 마지막으로 만든 달 다음 달부터 이번 달(오늘 날짜까지)까지 채움 */
-function hhRunRules_() {
+function hhRunRules_(dry) {
   const rt = table_('가계부반복'), c = rt.col;
   if (rt.values.length < 2) return 0;
   const now = new Date();
@@ -1288,6 +1291,7 @@ function hhRunRules_() {
     }
     if (made) done.push([r + 1, made]);
   }
+  if (dry) return add.length;   // 잠금 없이 '넣을 것이 있는지'만 확인
   let n = 0;
   if (add.length) {
     const sh = sheet_('가계부'), head = hhHead_(sh), idc = head.indexOf('ID') + 1, last = sh.getLastRow();
@@ -1408,7 +1412,7 @@ function rate_() {
 
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  if (!lock.tryLock(30000)) throw new Error('다른 저장이 진행 중입니다. 잠시 뒤 다시 저장하십시오.');
   try { const res = fn(); SpreadsheetApp.flush(); return res; }
   finally { lock.releaseLock(); }
 }

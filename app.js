@@ -59,7 +59,15 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   /* ───────────── 서버 ───────────── */
-  async function api(action, extra = {}) {
+  // 저장이 겹쳐 잠금 대기가 길어지면(잠금 시간초과) 잠시 뒤 한 번 더 시도
+  async function api(action, extra = {}, retry = true) {
+    try { return await api1(action, extra); }
+    catch (e) {
+      if (retry && action !== 'data' && action !== 'hh' && /잠금|lock|진행 중입니다/i.test(e.message || '')) { await new Promise(r => setTimeout(r, 2500)); return api1(action, extra); }
+      throw e;
+    }
+  }
+  async function api1(action, extra = {}) {
     const res = await fetch(API, {
       method: 'POST',
       body: JSON.stringify({ action, password: store.get(LS.pw), ...extra }),
