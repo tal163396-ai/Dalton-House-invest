@@ -700,6 +700,17 @@
     // 비중: 포트폴리오에서 고른 기준(원금/평가금)을 따름
     const share = basis === 'cost' ? (D.total.cost > 0 ? a.cost / D.total.cost : 0) : a.weight;
 
+    // 해외 종목: 달러 원금(수량×평단)과 수익률을 주가분·환율분으로 나눠 보여 줌 (저장은 원화 원금 그대로)
+    const usdSplit = (r, a) => {
+      if (r.cur !== 'USD' || !(r.avg > 0) || !(r.qty > 0) || !(r.price > 0)) return '';
+      const usdCost = r.qty * r.avg, px = r.price / r.avg - 1;
+      const $ = v => `$${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+      // 같은 자산 안에 예수금 줄이 있으면(나예 TQQQ처럼) 원금에 예수금이 섞여 있어 환율분을 나눌 수 없음
+      const mixed = a.rows.some(x => x !== r && /예수금/.test(x.sub));
+      if (mixed || !(r.cost > 0)) return `<div class="holding-pl num usd-split"><span>달러 원금 ${$(usdCost)}</span><span>주가 <b class="${cls(px)}">${pct(px, 1)}</b></span></div>`;
+      const tot = r.value / r.cost - 1, fx = tot - px;
+      return `<div class="holding-pl num usd-split"><span>달러 원금 ${$(usdCost)}</span><span>주가 <b class="${cls(px)}">${pct(px, 1)}</b> · 환율 <b class="${cls(fx)}">${pct(fx, 1)}</b></span></div>`;
+    };
     const holdings = a.rows.map(r => {
       const isCash = /예수금/.test(r.sub) || r.method.startsWith('수동');
       const unitRet = r.avg > 0 && r.price > 0 ? (r.price - r.avg) / r.avg : null;
@@ -714,6 +725,7 @@
             <span class="${cls(unitRet)}">${unitRet === null ? '' : pct(unitRet, 1)}</span>
           </div>
           ${r.cost > 0 ? `<div class="holding-pl num"><span>원금 ${compact(r.cost)}원</span><span>평가손익 <b class="${cls(r.value - r.cost)}">${signWon(r.value - r.cost)}</b> <b class="${cls(r.value - r.cost)}">(${pct((r.value - r.cost) / r.cost, 1)})</b></span></div>` : ''}
+          ${usdSplit(r, a)}
           ${(() => { const rz = state.data.realized.filter(x => x.asset === r.asset && String(x.sub || '') === r.sub); const t = rz.reduce((q, x) => q + x.amount, 0);
             return rz.length ? `<div class="holding-pl num"><span>실현 ${rz.length}건</span><span>실현손익 <b class="${cls(t)}">${signWon(t)}</b></span></div>` : ''; })()}`}
         </div>`;
