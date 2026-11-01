@@ -1060,14 +1060,10 @@
               // 지난달: 가계부월별에 저장된 '투자 장부잔액' (자동 추정 달은 쓰지 않음). 2026-10까지는 편한가계부에서 옮긴 값
               const saved = (D.household ? D.household() : []).map(h => ({ y: h.y, m: h.m, book: h.auto ? h.savedBook : h.book, pnl: h.auto ? h.savedPnl : h.pnl, flow: h.auto ? h.savedFlow : h.flow })).filter(h => h.book);
               const key = h => `${h.y}-${pad(h.m)}`;
-              const rec = saved.find(h => key(h) === ym), prev = saved.find(h => key(h) === addMonths(ym, -1));
+              const rec = saved.find(h => key(h) === ym);
               const old = ym <= INV_OLD_UNTIL;
               if (!rec) return `<div class="hp-invrow"><div class="hp-invl"><span class="hp-invlb">${mLabel} 말 원금</span><span class="hp-basis none">기록 없음</span><div class="hp-bal sm num">—</div></div></div>`;
-              const d = prev ? rec.book - prev.book : null;
-              return `<div class="hp-invrow"><div class="hp-invl"><span class="hp-invlb">${mLabel} 말 원금</span><span class="hp-basis ${old ? 'old' : 'live'}">${old ? '편한가계부 기준' : '월 마감 · 증권사 기준'}</span><div class="hp-bal sm num">${won(rec.book)}</div></div>
-                ${d !== null ? `<div class="hp-chips"><span class="hp-chip num">${+addMonths(ym, -1).slice(5)}월 말 대비 ${d >= 0 ? '+' : '−'}${fmt(Math.abs(d))}</span></div>` : ''}</div>
-                ${d !== null && rec.pnl ? `<p class="hp-why num">그중 실현손익 <b class="${rec.pnl < 0 ? 'dn' : 'up'}">${rec.pnl > 0 ? '+' : '−'}${fmt(Math.abs(rec.pnl))}</b></p>` : ''}
-                ${d !== null && rec.flow !== null && rec.flow !== undefined && Math.round(rec.flow) !== Math.round(inn - out) ? `<p class="hp-why num">편한가계부 순입금 <b>${rec.flow < 0 ? '−' : '+'}${fmt(Math.abs(rec.flow))}</b></p>` : ''}
+              return `<div class="hp-invrow"><div class="hp-invl"><span class="hp-invlb">${mLabel} 말 원금</span><span class="hp-basis ${old ? 'old' : 'live'}">${old ? '편한가계부 기준' : '월 마감 · 증권사 기준'}</span><div class="hp-bal sm num">${won(rec.book)}</div></div></div>
                 ${old ? '<p class="hp-bnote">편한가계부에서 옮긴 장부 값입니다.<br>증권사 원금과 수십만 원 다를 수 있습니다.</p>' : ''}`; })()
             : card ? `<div class="hp-bal num">${won(out - inn)}</div><p class="note">${ymLabel(ym)} 사용 금액입니다. 결제 계좌 <b>${esc(card)}</b> 잔액에서 바로 빠집니다.</p>`
             : `<div class="hp-bal num ${bal < 0 ? 'exp' : ''}">${won(bal)}</div>${linked.length ? `<p class="note">${linked.map(esc).join(', ')} 사용 금액이 이 잔액에 들어 있습니다.</p>` : ''}`}
