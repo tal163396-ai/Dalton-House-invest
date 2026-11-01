@@ -628,7 +628,11 @@
       const draw = () => {
         $('#sheetBody .sel-list').innerHTML = list.map(c => `<button class="${sel.has(c) ? 'on' : ''}" data-mc="${esc(c)}"><span>${esc(nameOf(c))}</span><b>${sel.has(c) ? '✓' : ''}</b></button>`).join('');
         $('#mcCount').textContent = `${sel.size}개 선택`;
-        $$('#sheetBody [data-mc]').forEach(b => b.onclick = () => { const k = b.dataset.mc; sel.has(k) ? sel.delete(k) : sel.add(k); draw(); });
+        $$('#sheetBody [data-mc]').forEach(b => b.onclick = () => {
+          const k = b.dataset.mc;
+          if (k === '__all') sel = new Set(['__all']);            // 전체 지출을 누르면 나머지 선택은 모두 풀림
+          else { sel.delete('__all'); sel.has(k) ? sel.delete(k) : sel.add(k); }
+          draw(); });
       };
       D.openSheet(`<div class="ask"><h2 id="sheetTitle">대분류 고르기</h2><p class="note ask-note" id="mcCount"></p><div class="sel-list"></div>
         <div class="sheet-actions two"><button class="btn" id="mcClr">모두 해제</button><button class="btn primary" id="mcOk">완료</button></div></div>`, 'pop');
@@ -637,7 +641,7 @@
       const sh = $('#sheet');
       const obs = new MutationObserver(() => { if (!sh.classList.contains('open') || sh.hidden) fin(null); });
       setTimeout(() => obs.observe(sh, { attributes: true, attributeFilter: ['class', 'hidden'] }), 60);
-      $('#mcClr').onclick = () => { sel = new Set(); draw(); };
+      $('#mcClr').onclick = () => { fin([]); D.closeSheet(); };   // 한 번에 모두 풀고 닫기 → 전체 지출
       $('#mcOk').onclick = () => { fin(list.filter(c => sel.has(c))); D.closeSheet(); };
       draw();
     });
