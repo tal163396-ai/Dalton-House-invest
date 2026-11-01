@@ -802,7 +802,8 @@ const HH_TABS = {
   '공약규칙':   ['ID', '적용일', '항목', '완수', '완수+위반', '미완', '미완+위반', '내용', '입력자'],
   '공약기록':   ['ID', '날짜', '값', '면제', '메모', '입력자'],
 };
-const HH_TEXT = { '가계부': ['ID', '일시'], '가계부반복': ['ID', '시작', '종료', '마지막생성'], '가계부메모': ['ID', '날짜'], '가계부예산': ['월'], '공약규칙': ['ID', '적용일'], '공약기록': ['ID', '날짜'] };
+// 글자로 저장할 칸 (시트가 '23:39', '1/2' 같은 글자를 시각·날짜로 바꾸지 않게)
+const HH_TEXT = { '가계부': ['ID', '일시', '내용', '메모'], '가계부반복': ['ID', '시작', '종료', '마지막생성', '내용', '메모'], '가계부메모': ['ID', '날짜', '내용'], '가계부예산': ['월'], '공약규칙': ['ID', '적용일', '항목', '내용'], '공약기록': ['ID', '날짜', '메모'] };
 const HH_KIND = { tx: '가계부', rule: '가계부반복', memo: '가계부메모', habit: '공약기록', hrule: '공약규칙' };
 
 function readHH_() {
@@ -878,6 +879,7 @@ function hhRows_(name) {
 }
 
 function hhVal_(v, h) {
+  if (v instanceof Date && v.getFullYear() < 1900) return Utilities.formatDate(v, sheetTz_(), 'H:mm');   // 시트가 '23:39'를 시각으로 바꿔 둔 예전 칸
   if (v instanceof Date) {
     const f = h === '일시' ? 'yyyy-MM-dd HH:mm:ss' : (h === '시작' || h === '종료' || h === '마지막생성' || h === '월') ? 'yyyy-MM' : 'yyyy-MM-dd';
     return Utilities.formatDate(v, sheetTz_(), f);
