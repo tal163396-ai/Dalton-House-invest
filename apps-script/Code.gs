@@ -25,13 +25,32 @@ const TZ = 'Asia/Seoul';
 const CASH = {
   'ISA':        { mode: 'internal', sub: 'ISA 예수금' },
   'TQQQ(나예)': { mode: 'internal', sub: '달러 예수금' },
-  'ETHU':       { mode: 'shared', asset: '예수금', sub: '메인 계좌 원화 예수금' },
-  'QLD':        { mode: 'shared', asset: '예수금', sub: '메인 계좌 원화 예수금' },
-  'SOXL':       { mode: 'shared', asset: '예수금', sub: '메인 계좌 원화 예수금' },
+  'ETHU':       { mode: 'shared', asset: '예수금', sub: '메인 계좌 예수금' },
+  'QLD':        { mode: 'shared', asset: '예수금', sub: '메인 계좌 예수금' },
+  'SOXL':       { mode: 'shared', asset: '예수금', sub: '메인 계좌 예수금' },
 };
 /* 새 종목(새 계좌)을 살 때 앱에서 고른 예수금 연결 (2026-11-01). 스크립트 속성 CASH_LINKS = {자산: {asset, sub}}
  *  - 예수금 줄이 같은 자산 안에 있으면 internal, 다른 자산이면 shared 와 같은 방식으로 움직임
  *  - 위 CASH 에 있는 자산은 언제나 CASH 가 우선 */
+/* 2026-11-01 이름 바꾸기: '메인 계좌 원화 예수금' → '메인 계좌 예수금'.
+ *  보유현황·거래기록·실현손익·가계부의 같은 글자 칸과 CASH_LINKS 를 한 번만 바꿈 (스크립트 속성 RENAMED_MAIN_CASH 로 표시) */
+function renameOnce_() {
+  const P = PropertiesService.getScriptProperties();
+  if (P.getProperty('RENAMED_MAIN_CASH')) return;
+  withLock_(() => {
+    if (P.getProperty('RENAMED_MAIN_CASH')) return;
+    const OLD = '메인 계좌 원화 예수금', NEW = '메인 계좌 예수금', ss = SpreadsheetApp.getActive();
+    ['보유현황', '거래기록', '실현손익', '가계부'].forEach(n => {
+      const sh = ss.getSheetByName(n); if (!sh || sh.getLastRow() < 1) return;
+      const v = sh.getDataRange().getValues();
+      v.forEach((row, r) => row.forEach((x, c) => { if (String(x).trim() === OLD) sh.getRange(r + 1, c + 1).setValue(NEW); }));
+    });
+    const links = cashLinks_();
+    Object.keys(links).forEach(a => { if (links[a].sub === OLD) links[a].sub = NEW; });
+    P.setProperty('CASH_LINKS', JSON.stringify(links));
+    P.setProperty('RENAMED_MAIN_CASH', '1');
+  });
+}
 function cashLinks_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('CASH_LINKS') || '{}'); } catch (e) { return {}; } }
 function cashOf_(asset) {
   if (CASH[asset]) return CASH[asset];
@@ -123,13 +142,13 @@ function doPost(e) {
 
   try {
     switch (req.action) {
-      case 'data':   return json_({ ok: true, data: readAll_() });
+      case 'data':   renameOnce_(); return json_({ ok: true, data: readAll_() });
       case 'trade':  return json_(withLock_(() => recordTrade_(req.trade)));
       case 'manual': return json_(withLock_(() => setManual_(req.manual)));
       case 'month':  return json_(withLock_(() => saveMonth_(req.month)));
       case 'tradeDel':  return json_(withLock_(() => tradeDel_(req)));
       case 'tradeEdit': return json_(withLock_(() => tradeEdit_(req)));
-      case 'hh':        return json_({ ok: true, hh: readHH_() });
+      case 'hh':        renameOnce_(); return json_({ ok: true, hh: readHH_() });
       case 'hhSave':    return json_(withLock_(() => hhSave_(req)));
       case 'hhDel':     return json_(withLock_(() => hhDel_(req)));
       case 'hhSettings':return json_(withLock_(() => hhSettings_(req)));
