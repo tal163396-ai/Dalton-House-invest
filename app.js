@@ -1664,8 +1664,8 @@
   const qtyUnit = r => (!r ? '' : (r.kind === '코인' || /^(ETH|BMB|BTC|XRP|SOL|USDT)$/i.test(String(r.ticker || '')) ? '개' : String(r.ticker || '').trim() ? '주' : ''));
   const isTradable = r => !/예수금/.test(r.sub) && !r.method.startsWith('수동') && r.kind !== '현금';
   const isCashRow = r => /예수금/.test(r.sub) || r.kind === '현금';
-  // 고르기 목록 이름: 'ISA 예수금' → '예수금 · ISA', '메인 계좌 예수금' → '예수금 · 메인 계좌' (달러 예수금은 그대로)
-  const pickLabel = r => { const m = /^(.+?)\s*예수금$/.exec(r.sub || ''); if (m && m[1] !== '달러') return `예수금 · ${m[1]}`;
+  // 고르기 목록 이름: 'ISA 예수금' → '예수금 · ISA', '메인 계좌 예수금' → '예수금 · 메인 계좌', '달러 예수금' → '예수금 · 자산 이름'
+  const pickLabel = r => { const m = /^(.+?)\s*예수금$/.exec(r.sub || ''); if (m) return `예수금 · ${m[1] === '달러' ? r.asset : m[1]}`;
     return `${r.sub || r.asset}${r.asset !== r.sub && r.asset !== r.kind ? ` · ${r.asset}` : ''}`; };
   // 금액 수정 때 원금도 같이 맞추는 예수금: 종류 '현금' 줄 + 자산 안의 연결 예수금(ISA 예수금 등)
   const isAdjCash = r => r.kind === '현금' || (() => { const c = (state.data && state.data.cashMap || {})[r.asset]; return !!(c && c.mode === 'internal' && c.sub === r.sub); })();
