@@ -571,23 +571,10 @@
     const budget = rows.length
       ? budRow('전체예산', tb, total, { kind: 'top', marker, toggle: togg.length ? `__all__|${togg.join('|')}` : null, open: togg.length > 0 && togg.every(n => !H.budClosed.has(n)) }) + rows.join('')
       : `<p class="empty">예산이 없습니다.<br><span class="sub">예산설정에서 분류별 한 달 예산을 넣으십시오.</span></p>`;
-    // 자산별 수입·지출 (체크카드는 카드 이름 그대로)
-    const byAsset = new Map();
-    list.forEach(t => {
-      if (t.type !== '수입' && t.type !== '지출') return;
-      const r = byAsset.get(t.asset) || { k: t.asset, inc: 0, exp: 0 };
-      if (t.type === '수입') r.inc += t.amt; else r.exp += t.amt;
-      byAsset.set(t.asset, r);
-    });
-    const as = [...byAsset.values()].sort((a, b) => b.exp - a.exp || b.inc - a.inc);
     return `
       <section class="card hbud">
         <div class="hbud-head"><b>예산</b><button class="hbud-set" id="hhBudSet">예산설정 ${ico.chev}</button></div>
         ${budget}
-      </section>
-      <section class="card hbud-as">
-        <div class="hbud-head"><b>자산</b><span class="num">${ym.slice(2, 4)}.${+ym.slice(5)}.1 ~ ${ym.slice(2, 4)}.${+ym.slice(5)}.${daysIn(ym)}</span></div>
-        ${as.length ? `<div class="has-row head"><span>자산</span><span>수입</span><span>지출</span></div>${as.map(r => `<div class="has-row"><span>${esc(r.k)}</span><b class="num inc">${fmt(r.inc)}</b><b class="num exp">${fmt(r.exp)}</b></div>`).join('')}` : '<p class="empty">이 달에는 수입·지출이 없습니다.</p>'}
       </section>`;
   }
 
