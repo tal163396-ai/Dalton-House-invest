@@ -1065,8 +1065,8 @@
               if (!rec) return `<div class="hp-invrow"><div class="hp-invl"><span class="hp-invlb">${mLabel} 말 원금</span><span class="hp-basis none">기록 없음</span><div class="hp-bal sm num">—</div></div></div>`;
               const d = prev ? rec.book - prev.book : null;
               return `<div class="hp-invrow"><div class="hp-invl"><span class="hp-invlb">${mLabel} 말 원금</span><span class="hp-basis ${old ? 'old' : 'live'}">${old ? '편한가계부 기준' : '월 마감 · 증권사 기준'}</span><div class="hp-bal sm num">${won(rec.book)}</div></div>
-                ${d !== null ? `<div class="hp-chips"><span class="hp-chip num">전월 대비 ${d >= 0 ? '+' : '−'}${fmt(Math.abs(d))}</span></div>` : ''}</div>
-                ${old ? '<p class="hp-bnote">편한가계부에서 옮긴 장부 값입니다. 증권사 원금과 수십만 원 다를 수 있습니다.</p>' : ''}`; })()
+                ${d !== null ? `<div class="hp-chips"><span class="hp-chip num">${+addMonths(ym, -1).slice(5)}월 말 대비 ${d >= 0 ? '+' : '−'}${fmt(Math.abs(d))}</span></div>` : ''}</div>
+                ${old ? '<p class="hp-bnote">편한가계부에서 옮긴 장부 값입니다.<br>증권사 원금과 수십만 원 다를 수 있습니다.</p>' : ''}`; })()
             : card ? `<div class="hp-bal num">${won(out - inn)}</div><p class="note">${ymLabel(ym)} 사용 금액입니다. 결제 계좌 <b>${esc(card)}</b> 잔액에서 바로 빠집니다.</p>`
             : `<div class="hp-bal num ${bal < 0 ? 'exp' : ''}">${won(bal)}</div>${linked.length ? `<p class="note">${linked.map(esc).join(', ')} 사용 금액이 이 잔액에 들어 있습니다.</p>` : ''}`}
           ${a && a.memo && !isInv ? `<button class="hp-memo" id="aMemo" aria-label="메모 보기"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="#F5C518" d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/></svg></button>` : ''}

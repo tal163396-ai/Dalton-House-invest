@@ -726,7 +726,7 @@
       const unit = qtyUnit(r);
       return `
         <div class="holding">
-          <div class="holding-top"><span>${esc(r.sub)}</span><span class="num">${won(r.value)}</span></div>
+          <div class="holding-top"><span>${esc(r.asset !== '예수금' && /예수금$/.test(r.sub) ? '예수금' : r.sub)}</span><span class="num">${won(r.value)}</span></div>
           ${isCash ? (r.cur === 'USD' && r.qty ? `<div class="holding-sub num"><span>${money(r.qty)}</span></div>` : '') : `
           <div class="holding-sub num">
             <span>${r.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${r.avg ? ` · 평단 ${money(r.avg)}` : ''} · 현재 ${money(r.price)}${r.src ? ` <small class="live" title="${esc(r.src)}"><i class="live-src">${esc(r.src.trim().charAt(0) === '네' ? 'N' : r.src.trim().charAt(0) === '업' ? 'U' : r.src.trim().charAt(0))}</i>실시간</small>` : ''}</span>
