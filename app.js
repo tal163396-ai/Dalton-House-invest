@@ -1670,11 +1670,13 @@
   // 달러 종목 단가 통화: 종목마다 기억 (원화로 사는 종목이 많음)
   // 새 자산을 살 때 고를 수 있는 예수금: 원화 예수금 줄 (원금을 그 줄에서 관리하는 것만)
   const linkCash = () => (state.data ? state.data.rows.filter(r => /예수금/.test(r.sub) && r.cur !== 'USD') : []);
-  const linkLabel = l => (l && l.sub ? `${l.sub}에서 빼기` : '새로 넣은 돈 (원금 증가)');
+  const linkOpts = () => linkCash().map(r => ({ asset: r.asset, sub: r.sub })).sort((a, b) => (/메인/.test(b.sub) ? 1 : 0) - (/메인/.test(a.sub) ? 1 : 0));
+  const linkLabel = l => (l && l.sub ? `${l.sub}에서 빼기` : '예수금 없음');
   const pcurKey = F => `dh_pcur_${F.key || ''}`;
   const pcurOf = F => { try { return store.get(pcurKey(F)) === 'KRW' ? 'KRW' : 'USD'; } catch { return 'USD'; } };
   function renderRecord() {
     const D = state.data, F = state.form;
+    if (!F.cashLink) F.cashLink = linkOpts()[0] || null;   // 새 자산은 항상 예수금에서 빠짐 (기본: 메인 계좌)
     const el = $('#view-record');
     const types = ['매수', '매도', '금액 수정'];   // 입금·출금은 가계부 이체에서 자동 기록 (2차 ①)
     if (!types.includes(F.type)) F.type = '매수';
@@ -1826,7 +1828,7 @@
     on('#fCash', 'change', e => { F.cashAsset = e.target.value; });
     on('#fLinkBtn', 'click', () => {
       const keep = { n: $('#fNewName')?.value, t: $('#fNewTicker')?.value, a: $('#fNewAsset')?.value, q: $('#fQty')?.value, p: $('#fPrice')?.value, k: $('#fKrw')?.value };
-      const opts = [...linkCash().map(r => ({ asset: r.asset, sub: r.sub })).sort((a, b) => (/메인/.test(b.sub) ? 1 : 0) - (/메인/.test(a.sub) ? 1 : 0)), null];
+      const opts = linkOpts();
       const same = (a, b) => (!a && !b) || (a && b && a.asset === b.asset && a.sub === b.sub);
       openSheet(`<h2 id="sheetTitle">어느 돈으로 샀나요?</h2><div class="pick-list">${opts.map((o, i) => `<button class="pick-i ${same(o, F.cashLink) ? 'on' : ''}" data-li="${i}"><span>${esc(linkLabel(o))}</span>${same(o, F.cashLink) ? '<b>✓</b>' : ''}</button>`).join('')}</div>`);
       $$('#sheet [data-li]').forEach(b => b.onclick = () => {
