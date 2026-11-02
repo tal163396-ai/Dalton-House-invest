@@ -1779,6 +1779,11 @@
         <div class="field"><span>종목</span>
           <button type="button" class="pick-btn" id="fRowBtn"><small>${esc(F.kind)}</small><b>${F.key === '__new' ? '+ 새 종목 추가' : row ? esc(row.sub) : '선택'}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>
         ${F.key === '__new' ? `
+          ${(() => { const A = newAssetOf(F), ex = A && D.rows.some(r => r.asset === A), c = ex && D.cashMap ? D.cashMap[A] : null;
+            return `<div class="field"><span>자산(계좌)</span>
+            <button type="button" class="pick-btn" id="fAssetBtn"><small>${!A ? '기존 계좌를 고르거나 새 이름을 적으십시오' : ex ? '기존 계좌에 넣기' : '새 자산(계좌) 만들기'}</small><b id="fAssetLbl">${A ? esc(A) : '선택'}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button>
+            <input type="hidden" id="fNewAsset" value="${esc(A || '')}"></div>
+            ${ex ? `<p class="cash-flow">${c && c.sub ? `매수한 종목은 <b>${esc(c.sub === '달러 예수금' ? `${A} 예수금` : c.sub)}</b>에서 빠집니다` : '예수금과 연결 없음 · 원금만 늘어납니다'}</p>` : ''}`; })()}
           <div class="two">
             <label class="field"><span>종목 이름</span><input id="fNewName" placeholder="예: NAVER" value="${esc(F.newName || '')}"></label>
             <label class="field"><span>티커 (선택)</span><input id="fNewTicker" placeholder="예: SOXL, 005930" value="${esc(F.newTicker || '')}" autocapitalize="characters"></label>
@@ -1790,10 +1795,8 @@
             </label>
           </div>
           ${(() => { const A = newAssetOf(F), ex = A && D.rows.some(r => r.asset === A), c = ex && D.cashMap ? D.cashMap[A] : null;
-            return `<div class="field"><span>자산(계좌)</span>
-            <button type="button" class="pick-btn" id="fAssetBtn"><small>${!A ? '기존 계좌를 고르거나 새 이름을 적으십시오' : ex ? '기존 계좌에 넣기' : '새 자산(계좌) 만들기'}</small><b id="fAssetLbl">${A ? esc(A) : '선택'}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button>
-            <input type="hidden" id="fNewAsset" value="${esc(A || '')}"></div>
-            ${ex ? `<p class="cash-flow">${c && c.sub ? `매수한 종목은 <b>${esc(c.sub === '달러 예수금' ? `${A} 예수금` : c.sub)}</b>에서 빠집니다` : '예수금과 연결 없음 · 원금만 늘어납니다'}</p>` : `
+            return `
+            ${ex ? '' : `
           <div class="field"><span>어느 돈으로 샀나요?</span>
             <button type="button" class="pick-btn" id="fLinkBtn"><small>새 자산일 때만 적용</small><b>${esc(linkLabel(F.cashLink))}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>`}`; })()}` : `
           <p class="preview num">${row ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''}</p>
