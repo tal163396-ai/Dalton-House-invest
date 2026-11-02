@@ -1772,14 +1772,14 @@
             <label class="field"><span>종목 이름</span><input id="fNewName" placeholder="예: NAVER" value="${esc(F.newName || '')}"></label>
             <label class="field"><span>티커 (선택)</span><input id="fNewTicker" placeholder="예: KRX:035420" value="${esc(F.newTicker || '')}" autocapitalize="characters"></label>
           </div>
-          <p class="help">티커를 넣으면 시세가 자동으로 들어옵니다.<br>미국 주식: <b>SOXL</b> · 국내 주식: <b>KRX:005930</b>(종목코드 6자리)<br>비워 두면 시세 없이 '수정'에서 금액을 직접 고칩니다.</p>
+          <p class="help">티커를 넣으면 시세가 자동으로 들어옵니다.<br>미국 주식: <b>SOXL</b><br>국내 주식: <b>KRX:005930</b>(종목코드 6자리)<br>비워 두면 시세 없이 '수정'에서 금액을 직접 고칩니다.</p>
           <div class="two">
             <label class="field"><span>통화</span>
               <select id="fNewCur"><option ${curr === 'KRW' ? 'selected' : ''}>KRW</option><option ${curr === 'USD' ? 'selected' : ''}>USD</option></select>
             </label>
             <label class="field"><span>자산(계좌) 이름</span><input id="fNewAsset" placeholder="선택" value="${esc(F.newAsset || '')}"></label>
           </div>
-          <p class="help">자산 이름을 입력하지 않으면 ${inKind.length && new Set(inKind.map(r => r.asset)).size === 1 ? `'${esc(inKind[0].asset)}'이(가)` : '종목 이름이'} 자동 입력됩니다.<br>새 계좌면 이름을 적으십시오.<br><span class="nw">예: 나예 주식(NH증권)</span></p>
+          <p class="help">자산 이름을 입력하지 않으면<br>${inKind.length && new Set(inKind.map(r => r.asset)).size === 1 ? `'${esc(inKind[0].asset)}'이(가)` : '종목 이름이'} 자동 입력됩니다.<br>새 계좌면 이름을 적으십시오.<br><span class="nw">예: 나예 주식(NH증권)</span></p>
           <div class="field"><span>어느 돈으로 샀나요?</span>
             <button type="button" class="pick-btn" id="fLinkBtn"><small>새 자산일 때만 적용</small><b>${esc(linkLabel(F.cashLink))}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>
           <p class="help">이미 예수금이 연결된 계좌(ISA, SOXL 등) 이름을 적으면 그 계좌 예수금을 그대로 씁니다.</p>` : `
