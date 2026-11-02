@@ -1801,7 +1801,7 @@
             <button type="button" class="pick-btn" id="fLinkBtn"><small>새 자산일 때만 적용</small><b>${esc(linkLabel(F.cashLink))}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>`}`; })()}` : `
           <p class="preview num">${row ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''}</p>
           ${row && D.cashMap ? (() => { const c = D.cashMap[row.asset], buy = F.type === '매수';
-            return `<p class="cash-flow">${c && c.sub ? `${buy ? '매수한 종목은' : '매도한 종목은'} <b>${esc(c.sub)}</b>${buy ? '에서 빠집니다' : '으로 들어갑니다'}` : `예수금과 연결 없음 · ${buy ? '원금만 늘어납니다' : '원금만 줄어듭니다'}`}</p>`; })() : ''}`}
+            return `<p class="cash-flow">${c && c.sub ? `${buy ? '매수한 종목은' : '매도한 종목은'} <b>${esc(c.sub === '달러 예수금' ? `${row.asset} 예수금` : c.sub)}</b>${buy ? '에서 빠집니다' : '으로 들어갑니다'}` : `예수금과 연결 없음 · ${buy ? '원금만 늘어납니다' : '원금만 줄어듭니다'}`}</p>`; })() : ''}`}
         <div class="two">
           <label class="field"><span>수량</span><input id="fQty" class="dec" type="text" inputmode="decimal" autocomplete="off"></label>
           <label class="field"><span>단가 ${curr === 'USD' ? `<button type="button" class="pcur-btn" id="fPcur" aria-label="단가 통화 바꾸기">${pcurOf(F) === 'KRW' ? '원' : '달러'} ⇄</button>` : '(원)'}</span><input id="fPrice" class="dec" type="text" inputmode="decimal" autocomplete="off"></label>
@@ -2263,9 +2263,11 @@
     try {
       const r = await api(action, payload);
       const msg = r.realized !== null && r.realized !== undefined ? `${r.message} (${r.realized >= 0 ? '익절' : '손절'} ${signWon(r.realized)})` : r.message;
-      if (F.key === '__new') { F.key = ''; F.newName = ''; F.newTicker = ''; F.newAsset = ''; F.krwOk = false; }
+      if (F.key === '__new') { F.key = ''; F.newName = ''; F.newTicker = ''; F.newAsset = ''; F.krwOk = false; F.assetSel = undefined; }
       await load({ quiet: true });
       toast(msg);
+      // 저장은 됐지만 새 종목 티커로 시세를 못 불러온 경우: 막지 않고 알려만 줌
+      if (r.warn) openSheet(`<div class="ask"><h2 id="sheetTitle">시세를 불러오지 못했습니다</h2><p class="note ask-note">${esc(r.warn)}</p><div class="sheet-actions"><button class="btn primary" data-close>확인</button></div></div>`, 'pop');
     } catch (e) {
       if (e.code === 'auth') { logout('비밀번호를 다시 입력하십시오.'); return; }
       err.textContent = e.message;

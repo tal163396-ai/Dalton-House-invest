@@ -114,5 +114,15 @@ test('새 종목을 메인 계좌 돈으로 매수', () => {
   ok(/새 계좌/.test(t.G.__props.CASH_LINKS || ''), '예수금 연결 기억');
 });
 
+test('티커 없는 새 종목 · 시세 못 불러온 새 종목', () => {
+  const t = fresh();
+  let r = t.call({ action: 'trade', trade: { type: '매수', asset: 'ISA', sub: '티커없음', kind: '준환 리딩(ISA)', qty: 2, price: 5000, date: '2026-11-03T09:00:00+09:00' } });
+  ok(r.ok && t.row('ISA', '티커없음')['현재가'] === 5000, '티커 없으면 거래 단가를 현재가로', JSON.stringify(t.row('ISA', '티커없음')));
+  ok(!r.warn, '티커 없으면 경고 없음');
+  // 가짜 시트는 GOOGLEFINANCE 를 계산하지 않음 → 시세를 못 불러온 경우와 같음
+  r = t.call({ action: 'trade', trade: { type: '매수', asset: '시세없음', sub: '시세없음', ticker: 'ZZZZ', currency: 'USD', kind: '메인투자', qty: 1, price: 10, date: '2026-11-03T09:00:00+09:00' } });
+  ok(r.ok && /시세를 불러오지 못했습니다/.test(r.warn || ''), '시세 없으면 저장은 되고 경고', r.warn || r.error);
+});
+
 console.log(`\n${fail ? `✗ 실패 ${fail}건` : '모두 통과'} (확인 ${pass + fail}건)`);
 process.exit(fail ? 1 : 0);

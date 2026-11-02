@@ -339,7 +339,7 @@ function recordTrade_(tr) {
     if (findRow_(holdings_(), newLink.asset, newLink.sub) < 0) throw new Error(`예수금 '${newLink.sub}'을 보유현황에서 찾지 못했습니다`);
   }
   const cash = newLink ? { mode: 'shared', asset: newLink.asset, sub: newLink.sub } : cashOf_(asset);
-  let realized = null, amountKrw = 0, qty = '', price = '', cur = 'KRW'; let unitTxt = '';
+  let realized = null, amountKrw = 0, qty = '', price = '', cur = 'KRW'; let unitTxt = ''; let newRow = -1;
 
   if (type === '매수' || type === '매도') {
     qty = num_(tr.qty); price = num_(tr.price);
@@ -350,9 +350,12 @@ function recordTrade_(tr) {
       if (type === '매도') throw new Error(`보유현황에 '${asset} / ${sub}' 줄이 없습니다`);
       r = addHolding_(t, asset, sub, tr);
       t = holdings_();
+      newRow = r;
     }
     cur = String(t.values[r][t.col['통화']]).trim() || 'KRW';
     { const kd = String(t.values[r][t.col['종류']]).trim(), tk = String(t.values[r][t.col['티커']]).trim();
+      // 2026-11-03 티커 없는 종목: 시세가 없으므로 마지막 거래 단가를 현재가로 (평가금이 0원으로 보이지 않게)
+      if (!tk && String(t.values[r][t.col['직접평가(원)']]) === '' && price > 0) setCell_(t, r, '현재가', price);
       unitTxt = kd === '코인' || /^(ETH|BMB|BTC|XRP|SOL|USDT)$/i.test(tk) ? '개' : tk ? '주' : ''; }
     const fx = cur === 'USD' ? rate : 1;
     amountKrw = num_(tr.amountKrw) > 0 ? Math.round(num_(tr.amountKrw)) : Math.round(qty * price * fx);
@@ -414,7 +417,17 @@ function recordTrade_(tr) {
     });
   }
 
-  return { ok: true, message: `${asset} ${type} 기록 완료`, amountKrw, realized };
+  // 새 종목을 티커와 함께 만들었으면 시세가 실제로 들어오는지 확인 → 안 들어오면 경고만 (저장은 그대로)
+  let warn = '';
+  if (newRow >= 0) {
+    const tk = String(tr.ticker || '').trim();
+    if (tk) {
+      SpreadsheetApp.flush();
+      const h = holdings_(), p = num_(h.values[newRow] && h.values[newRow][h.col['현재가']]);
+      if (!(p > 0)) warn = `티커 '${tk}'로 시세를 불러오지 못했습니다. 티커가 맞는지 확인하십시오. 맞다면 몇 분 뒤 시세가 들어옵니다. 계속 안 되면 '수정'에서 티커를 고치십시오.`;
+    }
+  }
+  return { ok: true, message: `${asset} ${type} 기록 완료`, amountKrw, realized, warn };
 }
 
 /** 수동 값 갱신: manual = { asset, sub, value(원) } 또는 달러 예수금이면 { usd } */
