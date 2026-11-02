@@ -244,11 +244,15 @@
     return false;
   }
 
+  const reloadHH = () => load();
   async function load({ quiet = true } = {}) {
     if (H.loading) return;
     H.loading = true; D.spin(true);
     try {
+      const seq0 = D.writeSeq ? D.writeSeq() : 0;
       const j = await D.api('hh');
+      // 불러오는 사이에 저장한 것이 있으면 이 자료는 저장 전 것 → 버리고 저장이 끝난 뒤 다시 불러옴
+      if (D.staleSince && D.staleSince(seq0)) { D.afterWrites(reloadHH); return; }
       if (!j.hh || !j.hh.ready) { H.ready = false; H.loaded = true; render(); return; }
       H.ready = true;
       ingest(j.hh); H.loaded = true; H.loadedAt = Date.now(); saveCache();
@@ -2077,7 +2081,8 @@
   // 체크 저장: 같은 날짜를 연달아 누르면 마지막 것만 보냄
   const hbTimers = new Map();
   function saveHabit(d) {
-    clearTimeout(hbTimers.get(d));
+    if (hbTimers.has(d)) clearTimeout(hbTimers.get(d));
+    else if (D.beginWrite) D.beginWrite();   // 저장 예약 순간부터 '저장 중' → 그사이 도착한 불러오기 자료가 입력을 덮지 않음
     hbTimers.set(d, setTimeout(async () => {
       hbTimers.delete(d);
       const h = H.habits.get(d);
@@ -2086,6 +2091,7 @@
         else await D.api('hhSave', { habit: { ID: h.id, 날짜: d, 값: valsStr(h.vals), 면제: h.ex ? 'Y' : '', 메모: h.memo, 입력자: h.by } });
         saveCache();
       } catch (ex) { toast(`공약 저장 실패: ${ex.message}`, true); }
+      finally { if (D.endWrite) D.endWrite(); }
     }, 500));
   }
   function habitRec(d) {

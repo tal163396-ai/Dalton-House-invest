@@ -60,12 +60,20 @@
 
   /* ───────────── 서버 ───────────── */
   // 저장이 겹쳐 잠금 대기가 길어지면(잠금 시간초과) 잠시 뒤 한 번 더 시도
+  // 저장 추적: 불러오는 도중에 저장이 있었으면 그 불러온 자료는 버리고 저장이 끝난 뒤 다시 불러옴
+  // (불러오기 응답이 저장 전 자료라서, 새로고침 중에 입력한 값이 화면에서 사라지던 문제)
+  const writes = { seq: 0, pending: 0, idle: [] };
+  const writeDone = () => { if (--writes.pending === 0) { const f = writes.idle.splice(0); f.forEach(fn => { try { fn(); } catch (e) { /* 무시 */ } }); } };
+  const staleSince = seq0 => writes.seq !== seq0 || writes.pending > 0;
+  const afterWrites = fn => { if (writes.pending > 0) { if (!writes.idle.includes(fn)) writes.idle.push(fn); } else setTimeout(fn, 0); };
   async function api(action, extra = {}, retry = true) {
+    const write = action !== 'data' && action !== 'hh';
+    if (write) { writes.seq++; writes.pending++; }
     try { return await api1(action, extra); }
     catch (e) {
-      if (retry && action !== 'data' && action !== 'hh' && /잠금|lock|진행 중입니다/i.test(e.message || '')) { await new Promise(r => setTimeout(r, 2500)); return api1(action, extra); }
+      if (retry && write && /잠금|lock|진행 중입니다/i.test(e.message || '')) { await new Promise(r => setTimeout(r, 2500)); return api1(action, extra); }
       throw e;
-    }
+    } finally { if (write) writeDone(); }
   }
   async function api1(action, extra = {}) {
     const res = await fetch(API, {
@@ -92,11 +100,14 @@
       const a = act && document.getElementById(act); if (a) { try { a.focus({ preventScroll: true }); const n = a.value.length; a.setSelectionRange && a.type === 'text' && a.setSelectionRange(n, n); } catch { /* */ } }
     };
   }
+  const reloadQuiet = () => load({ quiet: true });
   async function load({ quiet = false } = {}) {
     const btn = $('#refreshBtn');
     btn.classList.add('spin'); spin(true);
     try {
+      const seq0 = writes.seq;
       const j = await api('data');
+      if (staleSince(seq0)) { afterWrites(reloadQuiet); return; }   // 그사이 저장이 있었음 → 저장 끝난 뒤 다시
       state.data = prepare(j.data); state.loadedAt = Date.now();
       store.set(LS.cache, JSON.stringify(j.data));
       if (state.app === 'hh') { pendingScroll = null; render(); if (window.HH) window.HH.invUpdated(); return; }
@@ -2403,6 +2414,8 @@
 
   // 가계부(hh.js)가 쓰는 공용 도구
   window.DH = {
+    writeSeq: () => writes.seq, staleSince, afterWrites,
+    beginWrite: () => { writes.seq++; writes.pending++; }, endWrite: writeDone,   // 잠시 뒤 저장(공약 버튼 등)도 '저장 중'으로 셈
     invTotal: () => (state.data ? state.data.total : null),
     rate: () => (state.data ? state.data.rate : null),
     ensureInv: () => { if (store.get(LS.pw) && (!state.data || Date.now() - state.loadedAt > 300000)) load({ quiet: true }); },
