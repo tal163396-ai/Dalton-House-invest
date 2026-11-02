@@ -1757,7 +1757,7 @@
       const trad = D.rows.filter(isTradable).filter(r => F.type === '매수' || r.qty > 0);
       // 매수는 모든 구성(현금 제외)에 새 종목을 넣을 수 있음 — 예: 기타 구성에 새 계좌
       const kinds = F.type === '매수' ? [...new Set([...kindsOf(trad), ...D.rows.filter(r => r.kind && r.kind !== '현금').map(r => r.kind)])] : kindsOf(trad);
-      if (!kinds.includes(F.kind)) F.kind = kinds[0] || '';
+      if (!kinds.includes(F.kind) && !(F.type === '매수' && F.key === '__new' && F.kind)) F.kind = kinds[0] || '';   // 새 분류로 새 종목을 적는 중이면 유지
       const inKind = trad.filter(r => r.kind === F.kind);
       if (F.key !== '__new' && !inKind.some(r => rowKey(r) === F.key)) F.key = inKind[0] ? rowKey(inKind[0]) : '__new';
       if (F.type !== '매수' && F.key === '__new') F.key = inKind[0] ? rowKey(inKind[0]) : '';
@@ -1779,7 +1779,7 @@
             </label>
             <label class="field"><span>자산(계좌) 이름</span><input id="fNewAsset" placeholder="선택" value="${esc(F.newAsset || '')}"></label>
           </div>
-          <p class="help">자산 이름을 입력하지 않으면<br>${inKind.length && new Set(inKind.map(r => r.asset)).size === 1 ? `'${esc(inKind[0].asset)}'이(가)` : '종목 이름이'} 자동 입력됩니다.<br>새 계좌면 이름을 적으십시오.<br><span class="nw">예: 나예 주식(NH증권)</span></p>
+          <p class="help">비워 두면 ${inKind.length && new Set(inKind.map(r => r.asset)).size === 1 ? `'${esc(inKind[0].asset)}'이(가)` : '종목 이름이'} 자동 입력됩니다.<br>새 계좌면 이름을 적으십시오.</p>
           <div class="field"><span>어느 돈으로 샀나요?</span>
             <button type="button" class="pick-btn" id="fLinkBtn"><small>새 자산일 때만 적용</small><b>${esc(linkLabel(F.cashLink))}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>
           <p class="help">이미 예수금이 연결된 계좌(ISA, SOXL 등)<br>이름을 적으면 그 계좌 예수금을 그대로 씁니다.</p>` : `
@@ -1845,8 +1845,21 @@
       }).join('')}` : ''; }).join('')}</div>`);
       $$('#sheet [data-pk]').forEach(b => b.onclick = () => { F.kind = b.dataset.k; F.key = b.dataset.pk; closeSheet(); renderRecord(); });
       const nb = $('#pkNew'); if (nb) nb.onclick = () => {
-        openSheet(`<h2 id="sheetTitle">어느 분류에 추가할까요?</h2><div class="pick-list">${kinds.map(k => `<button class="pick-i" data-nk="${esc(k)}"><span>${esc(k)}</span></button>`).join('')}</div>`);
+        openSheet(`<h2 id="sheetTitle">어느 분류에 추가할까요?</h2><div class="pick-list">${kinds.map(k => `<button class="pick-i" data-nk="${esc(k)}"><span>${esc(k)}</span></button>`).join('')}<button class="pick-i new" id="nkAdd"><span>+ 새 분류 만들기</span></button></div>`);
         $$('#sheet [data-nk]').forEach(b => b.onclick = () => { F.kind = b.dataset.nk; F.key = '__new'; closeSheet(); renderRecord(); });
+        // 새 분류: 이름만 정하면 그 분류로 새 종목 입력. 종목을 저장하는 순간 분류가 생김 (시트 '종류' 칸)
+        $('#nkAdd').onclick = () => {
+          openSheet(`<div class="ask"><h2 id="sheetTitle">새 분류 이름</h2><p class="note ask-note">예: 연금, 해외 배당주<br>이 분류로 첫 종목을 저장하면 분류가 만들어집니다.</p>
+            <label class="field"><input id="nkName" maxlength="20" autocomplete="off" placeholder="분류 이름"></label><p class="form-error" id="nkErr" role="alert"></p>
+            <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn primary" id="nkOk">다음</button></div></div>`, 'pop');
+          setTimeout(() => { const i = $('#nkName'); if (i) i.focus(); }, 250);
+          $('#nkOk').onclick = () => {
+            const v = $('#nkName').value.trim();
+            if (!v) { $('#nkErr').textContent = '분류 이름을 적으십시오'; return; }
+            if (v === '현금') { $('#nkErr').textContent = "'현금'은 예수금 전용 분류입니다"; return; }
+            F.kind = v; F.key = '__new'; closeSheet(); renderRecord();
+          };
+        };
       };
     });
     on('#fManualBtn', 'click', () => {
