@@ -1658,3 +1658,5 @@ button.cm-sr:active { background: var(--fill); }
 
 .pick-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .pick-head h2 { margin: 0; }
+
+#fAssetLbl .sub { font-weight: 500; color: var(--ink-3); font-size: .85em; }

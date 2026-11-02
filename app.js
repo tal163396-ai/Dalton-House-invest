@@ -1683,6 +1683,9 @@
   const isCashRow = r => /예수금/.test(r.sub) || r.kind === '현금';
   // 새 종목의 자산(계좌) 자동 입력: 그 분류에 자기 예수금이 있는 계좌 하나뿐일 때만(ISA, TQQQ(나예)) 그 계좌 안에.
   // 그 밖(기타 등 여러 종류가 섞인 분류)은 종목 이름으로 새 자산
+  const newAssetOf = F => (F.assetSel !== undefined ? F.assetSel : autoAsset(F.kind));   // 새 종목을 넣을 자산 ('' = 종목 이름으로 새 자산)
+  // 그 분류에서 '계좌'로 쓰는 자산: 종목 이름과 자산 이름이 다른 것 (ISA, TQQQ(나예), 나예 주식(NH증권) 등)
+  const kindAccounts = kind => { const D = state.data; return D ? [...new Set(D.rows.filter(r => r.kind === kind && r.asset !== r.sub).map(r => r.asset))] : []; };
   const autoAsset = kind => {
     const D = state.data; if (!D) return '';
     const assets = [...new Set(D.rows.filter(r => r.kind === kind && isTradable(r)).map(r => r.asset))];
@@ -1778,19 +1781,21 @@
         ${F.key === '__new' ? `
           <div class="two">
             <label class="field"><span>종목 이름</span><input id="fNewName" placeholder="예: NAVER" value="${esc(F.newName || '')}"></label>
-            <label class="field"><span>티커 (선택)</span><input id="fNewTicker" placeholder="예: KRX:035420" value="${esc(F.newTicker || '')}" autocapitalize="characters"></label>
+            <label class="field"><span>티커 (선택)</span><input id="fNewTicker" placeholder="예: SOXL, 005930" value="${esc(F.newTicker || '')}" autocapitalize="characters"></label>
           </div>
-          <p class="help">티커를 넣으면 시세가 자동으로 들어옵니다.<br>미국 주식: <b>SOXL</b><br>국내 주식: <b>KRX:005930</b>(종목코드 6자리)<br>비워 두면 시세 없이 '수정'에서 금액을 직접 고칩니다.</p>
+          <p class="help">티커를 넣으면 시세가 자동으로 들어옵니다.<br>미국 주식: <b>SOXL</b><br>국내 주식: <b>005930</b>(종목코드 6자리)<br>비워 두면 시세 없이 '수정'에서 금액을 직접 고칩니다.</p>
           <div class="two">
             <label class="field"><span>통화</span>
               <select id="fNewCur"><option ${curr === 'KRW' ? 'selected' : ''}>KRW</option><option ${curr === 'USD' ? 'selected' : ''}>USD</option></select>
             </label>
-            <label class="field"><span>자산(계좌) 이름</span><input id="fNewAsset" placeholder="선택" value="${esc(F.newAsset || '')}"></label>
           </div>
-          <p class="help">비워 두면 ${autoAsset(F.kind) ? `'${esc(autoAsset(F.kind))}'이(가)` : '종목 이름이'} 자동 입력됩니다.<br>새 계좌면 이름을 적으십시오.</p>
+          ${(() => { const A = newAssetOf(F), ex = A && D.rows.some(r => r.asset === A), c = ex && D.cashMap ? D.cashMap[A] : null;
+            return `<div class="field"><span>자산(계좌)</span>
+            <button type="button" class="pick-btn" id="fAssetBtn"><small>${!A ? '기존 계좌를 고르거나 새 이름을 적으십시오' : ex ? '기존 계좌에 넣기' : '새 자산(계좌) 만들기'}</small><b id="fAssetLbl">${A ? esc(A) : '선택'}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button>
+            <input type="hidden" id="fNewAsset" value="${esc(A || '')}"></div>
+            ${ex ? `<p class="cash-flow">${c && c.sub ? `매수한 종목은 <b>${esc(c.sub === '달러 예수금' ? `${A} 예수금` : c.sub)}</b>에서 빠집니다` : '예수금과 연결 없음 · 원금만 늘어납니다'}</p>` : `
           <div class="field"><span>어느 돈으로 샀나요?</span>
-            <button type="button" class="pick-btn" id="fLinkBtn"><small>새 자산일 때만 적용</small><b>${esc(linkLabel(F.cashLink))}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>
-          <p class="help">이미 예수금이 연결된 계좌(ISA, SOXL 등)<br>이름을 적으면 그 계좌 예수금을 그대로 씁니다.</p>` : `
+            <button type="button" class="pick-btn" id="fLinkBtn"><small>새 자산일 때만 적용</small><b>${esc(linkLabel(F.cashLink))}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>`}`; })()}` : `
           <p class="preview num">${row ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''}</p>
           ${row && D.cashMap ? (() => { const c = D.cashMap[row.asset], buy = F.type === '매수';
             return `<p class="cash-flow">${c && c.sub ? `${buy ? '매수한 종목은' : '매도한 종목은'} <b>${esc(c.sub)}</b>${buy ? '에서 빠집니다' : '으로 들어갑니다'}` : `예수금과 연결 없음 · ${buy ? '원금만 늘어납니다' : '원금만 줄어듭니다'}`}</p>`; })() : ''}`}
@@ -1854,7 +1859,7 @@
       $$('#sheet [data-pk]').forEach(b => b.onclick = () => { F.kind = b.dataset.k; F.key = b.dataset.pk; closeSheet(); renderRecord(); });
       const nb = $('#pkNew'); if (nb) nb.onclick = () => {
         openSheet(`<h2 id="sheetTitle">어느 분류에 추가할까요?</h2><div class="pick-list">${kinds.map(k => `<button class="pick-i" data-nk="${esc(k)}"><span>${esc(k)}</span></button>`).join('')}<button class="pick-i new" id="nkAdd"><span>+ 새 분류 만들기</span></button></div>`);
-        $$('#sheet [data-nk]').forEach(b => b.onclick = () => { F.kind = b.dataset.nk; F.key = '__new'; closeSheet(); renderRecord(); });
+        $$('#sheet [data-nk]').forEach(b => b.onclick = () => { F.kind = b.dataset.nk; F.key = '__new'; F.assetSel = undefined; closeSheet(); renderRecord(); });
         // 새 분류: 이름만 정하면 그 분류로 새 종목 입력. 종목을 저장하는 순간 분류가 생김 (시트 '종류' 칸)
         $('#nkAdd').onclick = () => {
           openSheet(`<div class="ask"><h2 id="sheetTitle">새 분류 이름</h2><p class="note ask-note">예: 연금, 해외 배당주<br>이 분류로 첫 종목을 저장하면 분류가 만들어집니다.</p>
@@ -1865,7 +1870,7 @@
             const v = $('#nkName').value.trim();
             if (!v) { $('#nkErr').textContent = '분류 이름을 적으십시오'; return; }
             if (v === '현금') { $('#nkErr').textContent = "'현금'은 예수금 전용 분류입니다"; return; }
-            F.kind = v; F.key = '__new'; closeSheet(); renderRecord();
+            F.kind = v; F.key = '__new'; F.assetSel = undefined; closeSheet(); renderRecord();
           };
         };
       };
@@ -1886,6 +1891,23 @@
         F.cashLink = opts[Number(b.dataset.li)]; F.newName = keep.n; F.newTicker = keep.t; F.newAsset = keep.a; closeSheet(); renderRecord();
         if ($('#fQty')) { $('#fQty').value = keep.q || ''; $('#fPrice').value = keep.p || ''; $('#fKrw').value = keep.k || ''; }
       });
+    });
+    // 자산(계좌) 고르기: 이 분류의 계좌 / 종목 이름으로 새 자산 / 새 계좌 이름 적기
+    on('#fAssetBtn', 'click', () => {
+      const keep = { n: $('#fNewName')?.value, t: $('#fNewTicker')?.value, q: $('#fQty')?.value, p: $('#fPrice')?.value };
+      const cur = newAssetOf(F), accts = kindAccounts(F.kind);
+      const back = () => { F.newName = keep.n; F.newTicker = keep.t; closeSheet(); renderRecord(); if ($('#fQty')) { $('#fQty').value = keep.q || ''; $('#fPrice').value = keep.p || ''; } };
+      openSheet(`<h2 id="sheetTitle">어느 자산에 넣을까요?</h2><div class="pick-list">
+        ${accts.length ? `<div class="pick-g">${esc(F.kind)}의 계좌</div>${accts.map(a => `<button class="pick-i ${cur === a ? 'on' : ''}" data-as="${esc(a)}"><span>${esc(a)}</span>${cur === a ? '<b>✓</b>' : ''}</button>`).join('')}` : ''}
+        <div class="pick-g">새로 만들기</div>
+        <button class="pick-i new ${cur && !accts.includes(cur) ? 'on' : ''}" id="asNew"><span>+ 새 자산(계좌) 이름 적기${cur && !accts.includes(cur) ? ` (지금: ${esc(cur)})` : ''}</span></button></div>`);
+      $$('#sheet [data-as]').forEach(b => b.onclick = () => { F.assetSel = b.dataset.as; back(); });
+      $('#asNew').onclick = () => {
+        openSheet(`<div class="ask"><h2 id="sheetTitle">새 자산(계좌) 이름</h2><p class="note ask-note">예: 나예 주식(키움증권), 아람코<br>같은 계좌에서 산 종목은 한 자산으로 모입니다.</p>
+          <label class="field"><input id="asName" maxlength="40" autocomplete="off" placeholder="계좌 이름" value="${esc(cur && !accts.includes(cur) ? cur : '')}"></label><p class="form-error" id="asErr" role="alert"></p>
+          <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn primary" id="asOk">확인</button></div></div>`, 'pop');
+        $('#asOk').onclick = () => { const v = $('#asName').value.trim(); if (!v) { $('#asErr').textContent = '자산(계좌) 이름을 적으십시오'; return; } F.assetSel = v; back(); };
+      };
     });
     on('#fNewCur', 'change', e => { F.newCur = e.target.value; F.newName = $('#fNewName').value; F.newTicker = $('#fNewTicker').value; F.newAsset = $('#fNewAsset').value; renderRecord(); });
     const upd = () => {
@@ -2214,12 +2236,17 @@
       if (!(t.qty > 0)) { err.textContent = '수량을 입력하십시오.'; return; }
       if (!(t.price > 0)) { err.textContent = '단가를 입력하십시오.'; return; }
       if (F.key === '__new') {
-        t.sub = $('#fNewName').value.trim(); t.ticker = $('#fNewTicker').value.trim().toUpperCase(); t.currency = $('#fNewCur').value; t.kind = F.kind;
+        // 티커: 국내 종목코드 6자리만 적어도 'KRX:'를 붙임
+        t.sub = $('#fNewName').value.trim(); t.ticker = $('#fNewTicker').value.trim().toUpperCase().replace(/^([0-9][0-9A-Z]{5})$/, 'KRX:$1'); t.currency = $('#fNewCur').value; t.kind = F.kind;
         if (!t.sub) { err.textContent = '새 종목 이름을 입력하십시오.'; return; }
         if (t.currency === 'KRW' && /^[A-Z][A-Z.\-]*$/.test(t.ticker) && !F.krwOk) { F.krwOk = true; err.textContent = `티커 ${t.ticker}는 해외 종목으로 보입니다. 통화를 USD로 바꾸십시오. KRW가 맞으면 한 번 더 누르십시오.`; return; }
-        // 그 구성에 자산이 하나뿐이면(예: ISA) 그 자산 안에, 여러 개면(예: 메인투자) 새 자산으로
+        // 자산(계좌)은 반드시 고르거나 적어야 함 (ISA 처럼 계좌가 하나로 정해진 분류는 미리 골라져 있음)
         const named = $('#fNewAsset').value.trim();
-        t.asset = named || autoAsset(F.kind) || t.sub;
+        if (!named) {
+          openSheet(`<div class="ask"><h2 id="sheetTitle">자산(계좌)이 비어 있습니다</h2><p class="note ask-note">새 자산(계좌) 이름을 입력하십시오.</p><div class="sheet-actions"><button class="btn primary" data-close>확인</button></div></div>`, 'pop');
+          return;
+        }
+        t.asset = named;
         if (F.cashLink) t.cashLink = { asset: F.cashLink.asset, sub: F.cashLink.sub };
       } else {
         const row = findRow(F.key);
