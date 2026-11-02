@@ -1770,8 +1770,9 @@
         ${F.key === '__new' ? `
           <div class="two">
             <label class="field"><span>종목 이름</span><input id="fNewName" placeholder="예: NAVER" value="${esc(F.newName || '')}"></label>
-            <label class="field"><span>티커</span><input id="fNewTicker" placeholder="예: KRX:035420" value="${esc(F.newTicker || '')}" autocapitalize="characters"></label>
+            <label class="field"><span>티커 (선택)</span><input id="fNewTicker" placeholder="예: KRX:035420" value="${esc(F.newTicker || '')}" autocapitalize="characters"></label>
           </div>
+          <p class="help">티커를 넣으면 시세가 자동으로 들어옵니다.<br>미국 주식: <b>SOXL</b> · 국내 주식: <b>KRX:005930</b>(종목코드 6자리)<br>비워 두면 시세 없이 '수정'에서 금액을 직접 고칩니다.</p>
           <div class="two">
             <label class="field"><span>통화</span>
               <select id="fNewCur"><option ${curr === 'KRW' ? 'selected' : ''}>KRW</option><option ${curr === 'USD' ? 'selected' : ''}>USD</option></select>
@@ -1837,11 +1838,16 @@
       const trad = D.rows.filter(isTradable).filter(r => buy || r.qty > 0);
       const kinds = buy ? [...new Set([...kindsOf(trad), ...D.rows.filter(r => r.kind && r.kind !== '현금').map(r => r.kind)])] : kindsOf(trad);
       const lab = r => `${r.sub}${r.asset !== r.sub && r.asset !== r.kind ? ` · ${r.asset}` : ''}`;
-      openSheet(`<h2 id="sheetTitle">${buy ? '매수할 종목' : '매도할 종목'}</h2><div class="pick-list">${kinds.map(k => `<div class="pick-g">${esc(k)}</div>${trad.filter(r => r.kind === k).map(r => {
+      // 매수: 오른쪽 위 '+ 새 종목' → 분류(메인투자·코인 등)를 고르면 새 종목 입력
+      openSheet(`<div class="pick-head"><h2 id="sheetTitle">${buy ? '매수할 종목' : '매도할 종목'}</h2>${buy ? '<button class="btn sm" id="pkNew">+ 새 종목</button>' : ''}</div><div class="pick-list">${kinds.map(k => { const rs = trad.filter(r => r.kind === k); return rs.length ? `<div class="pick-g">${esc(k)}</div>${rs.map(r => {
         const on = F.kind === k && rowKey(r) === F.key;
         return `<button class="pick-i ${on ? 'on' : ''}" data-pk="${esc(rowKey(r))}" data-k="${esc(k)}"><span>${esc(lab(r))}</span>${on ? '<b>✓</b>' : ''}</button>`;
-      }).join('')}${buy ? `<button class="pick-i new ${F.kind === k && F.key === '__new' ? 'on' : ''}" data-pk="__new" data-k="${esc(k)}"><span>+ 새 종목 추가</span></button>` : ''}`).join('')}</div>`);
+      }).join('')}` : ''; }).join('')}</div>`);
       $$('#sheet [data-pk]').forEach(b => b.onclick = () => { F.kind = b.dataset.k; F.key = b.dataset.pk; closeSheet(); renderRecord(); });
+      const nb = $('#pkNew'); if (nb) nb.onclick = () => {
+        openSheet(`<h2 id="sheetTitle">어느 분류에 추가할까요?</h2><div class="pick-list">${kinds.map(k => `<button class="pick-i" data-nk="${esc(k)}"><span>${esc(k)}</span></button>`).join('')}</div>`);
+        $$('#sheet [data-nk]').forEach(b => b.onclick = () => { F.kind = b.dataset.nk; F.key = '__new'; closeSheet(); renderRecord(); });
+      };
     });
     on('#fManualBtn', 'click', () => {
       const rows = D.rows.filter(r => r.asset);
