@@ -66,12 +66,18 @@
   const writeDone = () => { if (--writes.pending === 0) { const f = writes.idle.splice(0); f.forEach(fn => { try { fn(); } catch (e) { /* 무시 */ } }); } };
   const staleSince = seq0 => writes.seq !== seq0 || writes.pending > 0;
   const afterWrites = fn => { if (writes.pending > 0) { if (!writes.idle.includes(fn)) writes.idle.push(fn); } else setTimeout(fn, 0); };
+  const isNetErr = e => e instanceof TypeError || /Failed to fetch|Load failed|NetworkError|network/i.test(e && e.message || '');
   async function api(action, extra = {}, retry = true) {
     const write = action !== 'data' && action !== 'hh';
     if (write) { writes.seq++; writes.pending++; }
     try { return await api1(action, extra); }
     catch (e) {
       if (retry && write && /잠금|lock|진행 중입니다/i.test(e.message || '')) { await new Promise(r => setTimeout(r, 2500)); return api1(action, extra); }
+      // 불러오기만: 인터넷이 잠깐 끊겼으면(앱을 다시 열 때 등) 두 번 더 시도. 저장은 두 번 들어갈 수 있어 다시 보내지 않음
+      if (retry && !write && isNetErr(e)) {
+        for (const wait of [1500, 3500]) { await new Promise(r => setTimeout(r, wait)); try { return await api1(action, extra); } catch (e2) { if (!isNetErr(e2)) throw e2; } }
+        const n = new Error('인터넷 연결이 불안정해 새로 받지 못했습니다'); n.net = true; throw n;
+      }
       throw e;
     } finally { if (write) writeDone(); }
   }
@@ -117,7 +123,7 @@
       if (!quiet) toast('최신 데이터로 갱신했습니다');
     } catch (e) {
       if (e.code === 'auth') { logout('비밀번호가 바뀌었거나 틀렸습니다. 다시 입력하십시오.'); return; }
-      toast(state.data ? `새로고침 실패: ${e.message}` : `불러오기 실패: ${e.message}`, true);
+      toast(state.data ? (e.net ? `${e.message}. 저장된 화면을 보여 줍니다` : `새로고침 실패: ${e.message}`) : `불러오기 실패: ${e.message}`, !(e.net && state.data));
       if (!state.data) $('#view-home').innerHTML = `<div class="card"><p class="empty">데이터를 불러오지 못했습니다.<br>${esc(e.message)}<br><br>인터넷 연결을 확인하고 새로고침을 누르십시오.</p></div>`;
     } finally {
       btn.classList.remove('spin'); spin(false);

@@ -262,7 +262,8 @@
       else if (!quiet) toast('가계부를 새로 불러왔습니다');
     } catch (e) {
       if (e.code === 'auth') { D.logout('비밀번호를 다시 입력하십시오.'); return; }
-      toast(`가계부 불러오기 실패: ${e.message}`, true);
+      if (e.net && H.loaded) toast(`${e.message}. 저장된 화면을 보여 줍니다`);   // 이미 보이는 자료가 있으면 빨간 오류 대신 안내만
+      else toast(`가계부 불러오기 실패: ${e.message}`, true);
       if (!H.loaded) render();
     } finally { H.loading = false; D.spin(false); }
   }
