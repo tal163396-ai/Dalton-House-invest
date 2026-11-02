@@ -1928,7 +1928,7 @@
       reindex(); rerender();
       if (ex.code === 'auth') { D.logout('비밀번호를 다시 입력하십시오.'); return; }
       toast(`저장하지 못했습니다: ${ex.message}`, true);
-      setTimeout(() => openForm(old ? { tx: old } : { copy: t, date: t.d }), 300);
+      setTimeout(() => openForm(old ? { tx: t } : { copy: t, date: t.d }), 300);   // 고친 내용 그대로 다시 열기 (저장만 다시 누르면 됨)
     }
   }
   // 11월 1일 이전 투자 연결 내역(입금·출금·매수·매도): 지우면 투자 앱 출발점이 틀어짐 (Code.gs INV_BASE_DATE)
