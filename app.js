@@ -1782,7 +1782,7 @@
           <p class="help">자산 이름을 입력하지 않으면<br>${inKind.length && new Set(inKind.map(r => r.asset)).size === 1 ? `'${esc(inKind[0].asset)}'이(가)` : '종목 이름이'} 자동 입력됩니다.<br>새 계좌면 이름을 적으십시오.<br><span class="nw">예: 나예 주식(NH증권)</span></p>
           <div class="field"><span>어느 돈으로 샀나요?</span>
             <button type="button" class="pick-btn" id="fLinkBtn"><small>새 자산일 때만 적용</small><b>${esc(linkLabel(F.cashLink))}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>
-          <p class="help">이미 예수금이 연결된 계좌(ISA, SOXL 등) 이름을 적으면 그 계좌 예수금을 그대로 씁니다.</p>` : `
+          <p class="help">이미 예수금이 연결된 계좌(ISA, SOXL 등)<br>이름을 적으면 그 계좌 예수금을 그대로 씁니다.</p>` : `
           <p class="preview num">${row ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''}</p>
           ${row && D.cashMap ? (() => { const c = D.cashMap[row.asset], buy = F.type === '매수';
             return `<p class="cash-flow">${c && c.sub ? `${buy ? '매수한 종목은' : '매도한 종목은'} <b>${esc(c.sub)}</b>${buy ? '에서 빠집니다' : '으로 들어갑니다'}` : `예수금과 연결 없음 · ${buy ? '원금만 늘어납니다' : '원금만 줄어듭니다'}`}</p>`; })() : ''}`}
