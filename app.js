@@ -1681,6 +1681,14 @@
   const qtyUnit = r => (!r ? '' : (r.kind === '코인' || /^(ETH|BMB|BTC|XRP|SOL|USDT)$/i.test(String(r.ticker || '')) ? '개' : String(r.ticker || '').trim() ? '주' : ''));
   const isTradable = r => !/예수금/.test(r.sub) && !r.method.startsWith('수동') && r.kind !== '현금';
   const isCashRow = r => /예수금/.test(r.sub) || r.kind === '현금';
+  // 새 종목의 자산(계좌) 자동 입력: 그 분류에 자기 예수금이 있는 계좌 하나뿐일 때만(ISA, TQQQ(나예)) 그 계좌 안에.
+  // 그 밖(기타 등 여러 종류가 섞인 분류)은 종목 이름으로 새 자산
+  const autoAsset = kind => {
+    const D = state.data; if (!D) return '';
+    const assets = [...new Set(D.rows.filter(r => r.kind === kind && isTradable(r)).map(r => r.asset))];
+    const c = assets.length === 1 && D.cashMap ? D.cashMap[assets[0]] : null;
+    return c && c.mode === 'internal' ? assets[0] : '';
+  };
   // 고르기 목록 이름: 'ISA 예수금' → '예수금 · ISA', '메인 계좌 예수금' → '예수금 · 메인 계좌', '달러 예수금' → '예수금 · 자산 이름'
   const pickLabel = r => { const m = /^(.+?)\s*예수금$/.exec(r.sub || ''); if (m) return `예수금 · ${m[1] === '달러' ? r.asset : m[1]}`;
     return `${r.sub || r.asset}${r.asset !== r.sub && r.asset !== r.kind ? ` · ${r.asset}` : ''}`; };
@@ -1779,7 +1787,7 @@
             </label>
             <label class="field"><span>자산(계좌) 이름</span><input id="fNewAsset" placeholder="선택" value="${esc(F.newAsset || '')}"></label>
           </div>
-          <p class="help">비워 두면 ${inKind.length && new Set(inKind.map(r => r.asset)).size === 1 ? `'${esc(inKind[0].asset)}'이(가)` : '종목 이름이'} 자동 입력됩니다.<br>새 계좌면 이름을 적으십시오.</p>
+          <p class="help">비워 두면 ${autoAsset(F.kind) ? `'${esc(autoAsset(F.kind))}'이(가)` : '종목 이름이'} 자동 입력됩니다.<br>새 계좌면 이름을 적으십시오.</p>
           <div class="field"><span>어느 돈으로 샀나요?</span>
             <button type="button" class="pick-btn" id="fLinkBtn"><small>새 자산일 때만 적용</small><b>${esc(linkLabel(F.cashLink))}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>
           <p class="help">이미 예수금이 연결된 계좌(ISA, SOXL 등)<br>이름을 적으면 그 계좌 예수금을 그대로 씁니다.</p>` : `
@@ -2210,9 +2218,8 @@
         if (!t.sub) { err.textContent = '새 종목 이름을 입력하십시오.'; return; }
         if (t.currency === 'KRW' && /^[A-Z][A-Z.\-]*$/.test(t.ticker) && !F.krwOk) { F.krwOk = true; err.textContent = `티커 ${t.ticker}는 해외 종목으로 보입니다. 통화를 USD로 바꾸십시오. KRW가 맞으면 한 번 더 누르십시오.`; return; }
         // 그 구성에 자산이 하나뿐이면(예: ISA) 그 자산 안에, 여러 개면(예: 메인투자) 새 자산으로
-        const assets = [...new Set(D.rows.filter(r => r.kind === F.kind && isTradable(r)).map(r => r.asset))];
         const named = $('#fNewAsset').value.trim();
-        t.asset = named || (assets.length === 1 && assets[0] !== D.rows.find(r => r.asset === assets[0]).sub ? assets[0] : t.sub);
+        t.asset = named || autoAsset(F.kind) || t.sub;
         if (F.cashLink) t.cashLink = { asset: F.cashLink.asset, sub: F.cashLink.sub };
       } else {
         const row = findRow(F.key);
