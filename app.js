@@ -1761,7 +1761,7 @@
         ${pick('aLinkBtn', '예수금', '종목을 사면 빠지는 돈 · 나중에 바꿀 수 없음', l ? aLinkText(l) : '')}
         ${l && l.type === 'own' ? `<label class="field"><span>새 예수금 이름</span><input id="aCashName" maxlength="40" autocomplete="off" placeholder="${esc(cashDefault(F.aAssetName))}" value="${esc(F.aCashName || '')}"></label>${curSeg()}` : ''}
         <p class="help">${!l ? '같은 증권 계좌의 종목은 한 자산으로 모입니다.<br>새 증권 계좌라면 \'이 계좌에 새 예수금 만들기\'를 고르십시오.'
-          : l.type === 'own' ? '예수금은 0원에서 시작합니다.<br>돈은 가계부 이체에서 \'예수금 입금\'으로 넣으십시오.'
+          : l.type === 'own' ? '예수금은 0원에서 시작합니다.<br>돈은 가계부 이체에서<br>\'예수금 입금\'으로 넣으십시오.'
           : l.type === 'none' ? '예수금과 연결하지 않습니다.<br>가계부 이체에서 \'바로 매수\'로 사는 종목용입니다. (TIGER처럼)'
           : `이 자산의 종목을 사면 ${esc(cashName(l.asset, l.sub))}에서 빠집니다.`}</p>`;
     } else if (F.aWhat === 'cash') {
@@ -1770,7 +1770,7 @@
       f = ok.length ? `${pick('aCashAssetBtn', '자산(계좌)', '예수금이 없는 자산만 나옵니다', F.aCashAsset)}
         <label class="field"><span>예수금 이름</span><input id="aCashName" maxlength="40" autocomplete="off" placeholder="${esc(cashDefault(F.aCashAsset))}" value="${esc(F.aCashName || '')}"></label>
         ${curSeg()}
-        <p class="help">이 자산의 종목을 사면 이 예수금에서 빠지고, 팔면 들어옵니다.<br>0원에서 시작하니 돈은 가계부 이체 '예수금 입금'으로 넣으십시오.<br>한 번 만들면 연결은 바꿀 수 없습니다.</p>`
+        <p class="help">이 자산의 종목을 사면 이 예수금에서 빠지고,<br>팔면 들어옵니다.<br>0원에서 시작하니 돈은 가계부 이체<br>'예수금 입금'으로 넣으십시오.<br>한 번 만들면 연결은 바꿀 수 없습니다.</p>`
         : `<p class="help">예수금을 붙일 수 있는 자산이 없습니다.<br>(이미 예수금과 연결됐거나 보유 종목이 있는 자산)<br>새 계좌라면 '자산(계좌)'을 추가하면서 예수금을 함께 만드십시오.</p>`;
     } else {
       const assets = assetsOfKind(F.aKind).filter(a => !D.rows.some(r => r.asset === a && r.kind === '현금'));
