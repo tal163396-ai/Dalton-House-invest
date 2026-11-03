@@ -259,7 +259,7 @@ table.grid tr.subsub td:first-child::before { content: "└ "; color: var(--ink-
 
 /* ── 기록 ── */
 .form { display: grid; gap: 16px; }
-.type-seg { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--fill); border-radius: 12px; padding: 3px; }
+.type-seg { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--fill); border-radius: 12px; padding: 3px; }
 .type-seg button { border: 0; background: none; padding: 9px 0; border-radius: 9px; font-size: 15px; font-weight: 600; color: var(--ink-3); }
 .type-seg button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 .type-seg button.on[data-type="매수"] { color: var(--up); }
@@ -1665,3 +1665,5 @@ button.cm-sr:active { background: var(--fill); }
 .del-list { margin: 6px 0 4px; padding-left: 18px; font-size: 14.5px; line-height: 1.7; }
 .del-list .num { color: var(--ink-3); margin-left: 6px; }
 .del-warn { text-align: left; }
+
+#fDelGo { width: 100%; }
