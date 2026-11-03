@@ -1770,10 +1770,10 @@
       const ok = [...new Set([...D.rows.map(r => r.asset), ...shellsOf().assets.map(x => x.asset)])].filter(a => { const k = (D.rows.find(r => r.asset === a) || shellsOf().assets.find(x => x.asset === a) || {}).kind; return k && k !== '현금' && cashFree(a); });
       if (!ok.includes(F.aCashAsset)) F.aCashAsset = '';
       f = ok.length ? `${pick('aCashAssetBtn', '자산(계좌)', '예수금이 없는 자산만 나옵니다', F.aCashAsset)}
-        <label class="field"><span>예수금 이름</span><input id="aCashName" maxlength="40" autocomplete="off" placeholder="${esc(cashDefault(F.aCashAsset))}" value="${esc(F.aCashName || '')}"></label>
+        <label class="field"><span>예수금 이름</span><input id="aCashName" maxlength="40" autocomplete="off" placeholder="${esc(F.aCashAsset ? cashDefault(F.aCashAsset) : '예: 키움 예수금')}" value="${esc(F.aCashName || '')}"></label>
         <p class="note ad-note">이름 끝에 '예수금'이 없으면 자동으로 붙습니다.</p>
         ${curSeg()}
-        <p class="help">이 자산의 종목을 사면 이 예수금에서 빠지고,<br>팔면 들어옵니다.<br>0원에서 시작하니 돈은 가계부 이체<br>'예수금 입금'으로 넣으십시오.<br>한 번 만들면 연결은 바꿀 수 없습니다.</p>`
+        <p class="help">이 자산의 종목을 매매하면 해당 예수금에 반영됩니다.<br>0원에서 시작하니 돈은 가계부 이체<br>'예수금 입금'으로 넣으십시오.<br>한 번 만들면 연결은 바꿀 수 없습니다.</p>`
         : `<p class="help">예수금을 붙일 수 있는 자산이 없습니다.<br>(이미 예수금과 연결됐거나 보유 종목이 있는 자산)<br>새 계좌라면 '자산(계좌)'을 추가하면서 예수금을 함께 만드십시오.</p>`;
     } else {
       const assets = assetsOfKind(F.aKind).filter(a => !D.rows.some(r => r.asset === a && r.kind === '현금'));
