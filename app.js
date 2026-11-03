@@ -150,6 +150,9 @@
       a.cost += r.cost; a.value += r.value; a.rows.push(r);
     });
     const assets = [...byAsset.values()].filter(a => a.value > 0 || a.cost > 0);
+    // 금액은 0이지만 종목이 있는 자산 (추가만 해 두고 아직 안 산 종목 등): 보유자산 목록에만 보임
+    const extraAssets = [...byAsset.values()].filter(a => !assets.includes(a) && a.rows.some(r => !/예수금/.test(r.sub) && r.kind !== '현금' && !r.method.startsWith('수동')));
+    extraAssets.forEach(a => { a.pl = a.value - a.cost; a.ret = a.cost > 0 ? a.pl / a.cost : null; a.weight = 0; });
     const total = assets.reduce((s, a) => ({ cost: s.cost + a.cost, value: s.value + a.value }), { cost: 0, value: 0 });
     assets.forEach(a => {
       a.pl = a.value - a.cost;
@@ -175,7 +178,7 @@
       .filter(Boolean).sort((a, b) => a - b);
 
     return {
-      rate, rows, assets, comp, realized, years, bad, cashLinked: d.cashLinked || ['ISA', 'TQQQ(나예)', 'ETHU', 'QLD', 'SOXL'], cashMap: d.cashMap || null,
+      rate, rows, assets, comp, realized, years, bad, cashLinked: d.cashLinked || ['ISA', 'TQQQ(나예)', 'ETHU', 'QLD', 'SOXL'], cashMap: d.cashMap || null, extraAssets, shells: d.shells || { kinds: [], assets: [] },
       total: { ...total, pl: total.value - total.cost, ret: total.cost > 0 ? (total.value - total.cost) / total.cost : null },
       monthly: d.monthly || [], trades: (d.trades || []).slice().reverse(), index: d.index || null, updatedAt: d.updatedAt,
       household: mergeAuto((d.household || []).map(h => ({
@@ -555,7 +558,7 @@
     if (!sorters[state.sort]) state.sort = 'cost';
     const dir = state.sortDir === 'asc' ? -1 : 1;
     const MODES = ['cost', 'value', 'ret'];
-    const groupsFor = mode => [...groupBy(D.assets, a => a.kind)].map(([k, list]) => {
+    const groupsFor = mode => [...groupBy([...D.assets, ...(D.extraAssets || [])], a => a.kind)].map(([k, list]) => {
       const c = list.reduce((s, a) => s + a.cost, 0), v = list.reduce((s, a) => s + a.value, 0);
       return { k, list: list.slice().sort((a, b) => dir * sorters[mode](a, b)), c, v, ret: c > 0 ? (v - c) / c : null };
     }).sort((a, b) => dir * groupSort[mode](a, b));
@@ -596,7 +599,7 @@
             <span class="kl-ring" aria-hidden="true" style="background:${ringOf(i)}"><span class="kl-icon">${esc(kindShort(g.k))}</span></span>
             <span class="kl-main">
               <span class="kl-name">${esc(g.k)}</span>
-              <span class="kl-sub">${esc(subLine)}</span>
+              <span class="kl-sub">${esc(subLine)}${g.list.some(a => a.rows.some(r => isTradable(r) && !(r.qty > 0))) ? ' <small class="pre-buy blink">수량 0</small>' : ''}</span>
             </span>
             <span class="kl-right num">${right}</span>
           </button>`;
@@ -680,7 +683,7 @@
         ${g.list.map(a => `<div class="kasset">
           <button class="row" data-asset="${esc(a.name)}">
             <span>
-              <span class="row-name"><span class="rn">${esc(a.name)}</span><span class="row-go">상세 보기 ›</span></span>
+              <span class="row-name"><span class="rn">${esc(a.name)}</span>${a.rows.some(r => isTradable(r) && !(r.qty > 0)) ? '<small class="pre-buy blink">수량 0</small>' : ''}<span class="row-go">상세 보기 ›</span></span>
               <span class="row-sub num">평가금 ${compact(a.value)}원</span><br>
               <span class="row-sub num">원금 ${compact(a.cost)}원</span>
             </span>
@@ -716,7 +719,7 @@
   // basis: 비중 기준(원금/평가금). 자산별 탭에서 열면 그 탭의 정렬 기준, 그 외에는 포트폴리오 맵 기준
   function openAsset(name, basis = state.basis) {
     const D = state.data;
-    const a = D.assets.find(x => x.name === name);
+    const a = D.assets.find(x => x.name === name) || (D.extraAssets || []).find(x => x.name === name);
     if (!a) return;
     const thisYear = new Date().getFullYear();
     const rz = D.realized.filter(r => r.asset === name);
@@ -743,7 +746,7 @@
       const unit = qtyUnit(r);
       return `
         <div class="holding">
-          <div class="holding-top"><span>${esc(r.asset !== '예수금' && /예수금$/.test(r.sub) ? '예수금' : r.sub)}</span><span class="num">${won(r.value)}</span></div>
+          <div class="holding-top"><span>${esc(r.asset !== '예수금' && /예수금$/.test(r.sub) ? '예수금' : r.sub)}${!isCash && isTradable(r) && !(r.qty > 0) ? ' <small class="pre-buy blink">수량 0</small>' : ''}</span><span class="num">${won(r.value)}</span></div>
           ${isCash ? (r.cur === 'USD' && r.qty ? `<div class="holding-sub num"><span>${money(r.qty)}</span></div>` : '') : `
           <div class="holding-sub num">
             <span>${r.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${r.avg ? ` · 평단 ${money(r.avg)}` : ''} · 현재 ${money(r.price)}${r.src ? ` <small class="live" title="${esc(r.src)}"><i class="live-src">${esc(r.src.trim().charAt(0) === '네' ? 'N' : r.src.trim().charAt(0) === '업' ? 'U' : r.src.trim().charAt(0))}</i>실시간</small>` : ''}</span>
@@ -1674,7 +1677,7 @@
     '매도': '팔았을 때.<br>실현손익(익절·손절)이 자동 계산되어<br>월별 수익에 반영됩니다.',
     '입금': '계좌에 새 돈을 넣었을 때 (예: 월급에서 ISA로 이체).<br>원금과 예수금이 함께 늘어나<br>수익으로 잘못 잡히지 않습니다.',
     '출금': '계좌에서 돈을 뺐을 때.<br>원금과 예수금이 함께 줄어듭니다.',
-    '삭제': '분류 · 자산(계좌) · 종목을 지웁니다.<br>지운 뒤에도 거래기록·실현손익·가계부 내역은 남습니다.',
+    '추가·삭제': '분류 · 자산(계좌) · 예수금 · 종목을<br>매수 없이 미리 만들거나 지웁니다.',
     '금액 수정': '증권사 화면과 다를 때 지금 값으로 맞춥니다.<br>종목은 수량·평단·원금을,<br>예수금·금처럼 직접 관리하는 항목은<br>금액을 고칩니다.',
   };
 
@@ -1682,17 +1685,6 @@
   const qtyUnit = r => (!r ? '' : (r.kind === '코인' || /^(ETH|BMB|BTC|XRP|SOL|USDT)$/i.test(String(r.ticker || '')) ? '개' : String(r.ticker || '').trim() ? '주' : ''));
   const isTradable = r => !/예수금/.test(r.sub) && !r.method.startsWith('수동') && r.kind !== '현금';
   const isCashRow = r => /예수금/.test(r.sub) || r.kind === '현금';
-  // 새 종목의 자산(계좌) 자동 입력: 그 분류에 자기 예수금이 있는 계좌 하나뿐일 때만(ISA, TQQQ(나예)) 그 계좌 안에.
-  // 그 밖(기타 등 여러 종류가 섞인 분류)은 종목 이름으로 새 자산
-  const newAssetOf = F => (F.assetSel !== undefined ? F.assetSel : autoAsset(F.kind));   // 새 종목을 넣을 자산 ('' = 종목 이름으로 새 자산)
-  // 그 분류에서 '계좌'로 쓰는 자산: 종목 이름과 자산 이름이 다른 것 (ISA, TQQQ(나예), 나예 주식(NH증권) 등)
-  const kindAccounts = kind => { const D = state.data; return D ? [...new Set(D.rows.filter(r => r.kind === kind && r.asset !== r.sub).map(r => r.asset))] : []; };
-  const autoAsset = kind => {
-    const D = state.data; if (!D) return '';
-    const assets = [...new Set(D.rows.filter(r => r.kind === kind && isTradable(r)).map(r => r.asset))];
-    const c = assets.length === 1 && D.cashMap ? D.cashMap[assets[0]] : null;
-    return c && c.mode === 'internal' ? assets[0] : '';
-  };
   // 고르기 목록 이름: 'ISA 예수금' → '예수금 · ISA', '메인 계좌 예수금' → '예수금 · 메인 계좌', '달러 예수금' → '예수금 · 자산 이름'
   const pickLabel = r => { const m = /^(.+?)\s*예수금$/.exec(r.sub || ''); if (m) return `예수금 · ${m[1] === '달러' ? r.asset : m[1]}`;
     return `${r.sub || r.asset}${r.asset !== r.sub && r.asset !== r.kind ? ` · ${r.asset}` : ''}`; };
@@ -1702,8 +1694,14 @@
   const findRow = key => state.data.rows.find(r => rowKey(r) === key);
 
   // 종목·자산·분류 삭제: 미리보기(영향·막는 이유) → 삭제. req = { scope: 'sub'|'asset'|'kind', asset, sub, kind }
-  const delKinds = () => [...new Set((state.data ? state.data.rows : []).map(r => r.kind).filter(Boolean))];
-  const delAssets = kind => [...new Set((state.data ? state.data.rows : []).filter(r => r.kind === kind).map(r => r.asset))];
+  // 추가만 해 둔(아직 종목 줄이 없는) 분류·자산: 서버 data.shells
+  const shellsOf = () => (state.data && state.data.shells) || { kinds: [], assets: [] };
+  const allKinds = () => { const s = shellsOf(); return [...new Set([...(state.data ? state.data.rows : []).map(r => r.kind), ...s.assets.map(x => x.kind), ...s.kinds].filter(Boolean))]; };
+  const assetsOfKind = kind => { const s = shellsOf(); return [...new Set([...(state.data ? state.data.rows : []).filter(r => r.kind === kind).map(r => r.asset), ...s.assets.filter(x => x.kind === kind).map(x => x.asset)])]; };
+  // 예수금을 새로 붙일 수 있는 자산: 예수금 연결이 없고, 예수금 줄·보유 종목이 없는 것
+  const cashFree = a => { const D = state.data, c = (D.cashMap || {})[a]; return !(c && c.mode && c.mode !== 'none') && !D.rows.some(r => r.asset === a && (isCashRow(r) || r.method.startsWith('수동') || (isTradable(r) && r.qty > 0))); };
+  const delKinds = allKinds;
+  const delAssets = assetsOfKind;
   async function runHoldDel(req) {
     openSheet('<div class="ask"><h2 id="sheetTitle">확인 중…</h2><p class="note ask-note">지울 내용을 확인하고 있습니다.</p></div>', 'pop');
     let p; try { p = await api('holdDel', { ...req, dry: true }); } catch (e) { toast(`확인 실패: ${e.message}`, true); closeSheet(); return; }
@@ -1713,8 +1711,11 @@
       p.trades ? `거래기록 ${p.trades}건은 남지만, 지운 뒤에는 그 기록을 고치거나 지울 수 없습니다.` : '',
       p.hh ? `가계부 투자 연결 내역 ${p.hh}건은 남지만, 금액·투자 연결을 고치거나 지울 수 없게 됩니다.` : '',
     ].filter(Boolean);
-    const list = p.rows.map(x => `<li>${esc(x.asset === x.sub ? x.sub : `${x.asset} · ${x.sub}`)} <span class="num">${won(x.cost)}</span></li>`).join('');
-    openSheet(`<div class="ask"><h2 id="sheetTitle">${p.blockers.length ? '지울 수 없습니다' : `${p.rows.length}줄을 지울까요?`}</h2>
+    const list = p.rows.map(x => `<li>${esc(x.asset === x.sub ? x.sub : `${x.asset} · ${x.sub}`)} <span class="num">${won(x.cost)}</span></li>`).join('')
+      + (p.shells || []).map(a => `<li>${esc(a)} <span class="num">종목 없음</span></li>`).join('')
+      + (p.shellKind && !p.rows.length && !(p.shells || []).length ? `<li>${esc(req.kind)} <span class="num">빈 분류</span></li>` : '');
+    const nDel = p.rows.length + (p.shells || []).length;
+    openSheet(`<div class="ask"><h2 id="sheetTitle">${p.blockers.length ? '지울 수 없습니다' : p.rows.length ? `${p.rows.length}줄을 지울까요?` : nDel ? '지울까요?' : '빈 분류를 지울까요?'}</h2>
       ${p.blockers.length ? `<p class="note ask-note">${p.blockers.map(esc).join('<br>')}</p><div class="sheet-actions"><button class="btn" data-close>닫기</button></div>`
         : `<ul class="del-list">${list}</ul>${warns.map(w => `<p class="note ask-note del-warn">${w}</p>`).join('')}
           <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn danger" id="hdOk">삭제</button></div>`}</div>`, 'pop');
@@ -1731,25 +1732,166 @@
   const linkCash = () => (state.data ? state.data.rows.filter(r => /예수금/.test(r.sub) && (r.cur !== 'USD' || r.kind === '현금')) : []);
   const linkOpts = () => linkCash().map(r => ({ asset: r.asset, sub: r.sub })).sort((a, b) => (/메인/.test(b.sub) ? 1 : 0) - (/메인/.test(a.sub) ? 1 : 0));
   const linkLabel = l => (l && l.sub ? `${l.sub}에서 빼기` : '예수금 없음');
+  // 예수금 표시 이름: TQQQ(나예)의 '달러 예수금' → 'TQQQ(나예) 예수금'
+  const cashName = (asset, sub) => (sub === '달러 예수금' ? `${asset} 예수금` : sub);
+  const CHEV = '<i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i>';
+
+  /* ───────────── 추가·삭제 탭 → 추가 (2026-11-03): 분류 · 자산(계좌) · 예수금 · 종목을 매수 없이 만들기 ─────────────
+   * 자산의 예수금 연결은 자산을 추가할 때 한 번 정하고 바꾸지 않음. 종목은 수량 0으로 생기고 첫 매수 때 채워짐 */
+  // 기본 예수금 이름: '키움 계좌' → '키움 예수금'
+  const cashDefault = a => `${String(a || '계좌').replace(/\s*계좌$/, '') || a} 예수금`;
+  const AD_WHAT = { kind: '분류', asset: '자산(계좌)', cash: '예수금', sub: '종목' };
+  const adSeg = () => { const F = state.form; return `<div class="seg ad-seg" role="group" aria-label="추가 또는 삭제"><button type="button" data-ad="add" class="${F.adMode !== 'del' ? 'on' : ''}">추가</button><button type="button" data-ad="del" class="${F.adMode === 'del' ? 'on' : ''}">삭제</button></div>`; };
+  const aLinkText = l => (!l ? '선택' : l.type === 'own' ? '이 계좌에 새 예수금 만들기' : l.type === 'none' ? '예수금 없음' : `${cashName(l.asset, l.sub)}에서 빠짐`);
+  function addBody() {
+    const F = state.form, D = state.data;
+    if (!AD_WHAT[F.aWhat]) F.aWhat = 'sub';
+    const kinds = allKinds().filter(k => k !== '현금');
+    if ((F.aWhat === 'asset' || F.aWhat === 'sub') && !kinds.includes(F.aKind)) F.aKind = kinds[0] || '';
+    const pick = (id, label, small, val) => `<div class="field"><span>${label}</span><button type="button" class="pick-btn" id="${id}"><small>${small}</small><b>${val ? esc(val) : '선택'}</b>${CHEV}</button></div>`;
+    const curSeg = () => `<div class="field"><span>통화</span><div class="seg ad-cur" role="group"><button type="button" data-acur="KRW" class="${F.aCur !== 'USD' ? 'on' : ''}">원화</button><button type="button" data-acur="USD" class="${F.aCur === 'USD' ? 'on' : ''}">달러</button></div></div>`;
+    let f = '';
+    if (F.aWhat === 'kind') {
+      f = `<label class="field"><span>분류 이름</span><input id="aKindName" maxlength="20" autocomplete="off" placeholder="예: 연금, 해외 배당주" value="${esc(F.aKindName || '')}"></label>
+        <p class="help">분류만 먼저 만들어 둡니다.<br>자산(계좌)과 종목은 이어서 추가하십시오.</p>`;
+    } else if (F.aWhat === 'asset') {
+      const l = F.aLink;
+      f = `${pick('aKindBtn', '분류', '어느 분류에 넣을까요', F.aKind)}
+        <label class="field"><span>자산(계좌) 이름</span><input id="aAssetName" maxlength="40" autocomplete="off" placeholder="예: 키움 계좌, 나예 주식(NH증권)" value="${esc(F.aAssetName || '')}"></label>
+        ${pick('aLinkBtn', '예수금', '종목을 사면 빠지는 돈 · 나중에 바꿀 수 없음', l ? aLinkText(l) : '')}
+        ${l && l.type === 'own' ? `<label class="field"><span>새 예수금 이름</span><input id="aCashName" maxlength="40" autocomplete="off" placeholder="${esc(cashDefault(F.aAssetName))}" value="${esc(F.aCashName || '')}"></label>${curSeg()}` : ''}
+        <p class="help">${!l ? '같은 증권 계좌의 종목은 한 자산으로 모입니다.<br>새 증권 계좌라면 \'이 계좌에 새 예수금 만들기\'를 고르십시오.'
+          : l.type === 'own' ? '예수금은 0원에서 시작합니다.<br>돈은 가계부 이체에서 \'예수금 입금\'으로 넣으십시오.'
+          : l.type === 'none' ? '예수금과 연결하지 않습니다.<br>가계부 이체에서 \'바로 매수\'로 사는 종목용입니다. (TIGER처럼)'
+          : `이 자산의 종목을 사면 ${esc(cashName(l.asset, l.sub))}에서 빠집니다.`}</p>`;
+    } else if (F.aWhat === 'cash') {
+      const ok = [...new Set([...D.rows.map(r => r.asset), ...shellsOf().assets.map(x => x.asset)])].filter(a => { const k = (D.rows.find(r => r.asset === a) || shellsOf().assets.find(x => x.asset === a) || {}).kind; return k && k !== '현금' && cashFree(a); });
+      if (!ok.includes(F.aCashAsset)) F.aCashAsset = '';
+      f = ok.length ? `${pick('aCashAssetBtn', '자산(계좌)', '예수금이 없는 자산만 나옵니다', F.aCashAsset)}
+        <label class="field"><span>예수금 이름</span><input id="aCashName" maxlength="40" autocomplete="off" placeholder="${esc(cashDefault(F.aCashAsset))}" value="${esc(F.aCashName || '')}"></label>
+        ${curSeg()}
+        <p class="help">이 자산의 종목을 사면 이 예수금에서 빠지고, 팔면 들어옵니다.<br>0원에서 시작하니 돈은 가계부 이체 '예수금 입금'으로 넣으십시오.<br>한 번 만들면 연결은 바꿀 수 없습니다.</p>`
+        : `<p class="help">예수금을 붙일 수 있는 자산이 없습니다.<br>(이미 예수금과 연결됐거나 보유 종목이 있는 자산)<br>새 계좌라면 '자산(계좌)'을 추가하면서 예수금을 함께 만드십시오.</p>`;
+    } else {
+      const assets = assetsOfKind(F.aKind).filter(a => !D.rows.some(r => r.asset === a && r.kind === '현금'));
+      if (!assets.includes(F.aSubAsset)) F.aSubAsset = assets.length === 1 ? assets[0] : '';
+      const c = F.aSubAsset && D.cashMap ? D.cashMap[F.aSubAsset] : null;
+      f = `${pick('aKindBtn', '분류', '어느 분류에 넣을까요', F.aKind)}
+        ${assets.length ? pick('aSubAssetBtn', '자산(계좌)', '이 분류의 자산', F.aSubAsset) : `<p class="help">이 분류에 자산(계좌)이 없습니다. '자산(계좌)'을 먼저 추가하십시오.</p>`}
+        ${F.aSubAsset ? `<p class="cash-flow">${c && c.sub ? `매수하면 <b>${esc(cashName(F.aSubAsset, c.sub))}</b>에서 빠집니다` : '예수금과 연결 없음 · 매수하면 원금만 늘어납니다'}</p>` : ''}
+        <div class="two">
+          <label class="field"><span>종목 이름</span><input id="aSubName" maxlength="40" autocomplete="off" placeholder="예: NAVER" value="${esc(F.aSubName || '')}"></label>
+          <label class="field"><span>티커 (선택)</span><input id="aTicker" maxlength="20" autocomplete="off" autocapitalize="characters" placeholder="예: SOXL, 005930" value="${esc(F.aTicker || '')}"></label>
+        </div>
+        <p class="help">티커를 넣으면 시세가 자동으로 들어옵니다.<br>미국 주식: <b>SOXL</b><br>국내 주식: <b>005930</b>(종목코드 6자리)<br>비워 두면 산 단가가 현재가가 되고, '수정'에서 고칠 수 있습니다.</p>
+        ${curSeg()}`;
+    }
+    return `<div class="field"><span>무엇을 추가할까요?</span><div class="seg ad-what" role="group">${Object.keys(AD_WHAT).map(k => `<button type="button" data-aw="${k}" class="${F.aWhat === k ? 'on' : ''}">${k === 'asset' ? '자산' : AD_WHAT[k]}</button>`).join('')}</div></div>
+      ${f}
+      <p class="form-error" id="fErr" role="alert"></p>
+      <button class="btn primary" id="fAddGo">${AD_WHAT[F.aWhat]} 추가하기</button>`;
+  }
+  function bindAdd(el) {
+    const F = state.form, D = state.data;
+    const keep = () => { [['aKindName', 'aKindName'], ['aAssetName', 'aAssetName'], ['aCashName', 'aCashName'], ['aSubName', 'aSubName'], ['aTicker', 'aTicker']].forEach(([id, k]) => { const x = $(`#${id}`, el); if (x) F[k] = x.value; }); };
+    $$('[data-ad]', el).forEach(b => b.onclick = () => { keep(); F.adMode = b.dataset.ad; renderRecord(); });
+    $$('[data-aw]', el).forEach(b => b.onclick = () => { keep(); F.aWhat = b.dataset.aw; renderRecord(); });
+    $$('[data-acur]', el).forEach(b => b.onclick = () => { keep(); F.aCur = b.dataset.acur; renderRecord(); });
+    ['aKindName', 'aAssetName', 'aCashName', 'aSubName', 'aTicker'].forEach(id => { const x = $(`#${id}`, el); if (x) x.addEventListener('input', () => { F[id] = x.value; if (id === 'aAssetName') { const c = $('#aCashName', el); if (c) c.placeholder = cashDefault(x.value); } }); });
+    const sheetPick = (title, items, cur, set) => {
+      keep();
+      openSheet(`<h2 id="sheetTitle">${esc(title)}</h2><div class="pick-list">${items.map((it, i) => it.g ? `<div class="pick-g">${esc(it.g)}</div>` : `<button class="pick-i ${it.new ? 'new' : ''} ${it.on ? 'on' : ''}" data-ai="${i}"><span>${esc(it.l)}</span>${it.on ? '<b>✓</b>' : ''}</button>`).join('')}</div>`);
+      $$('#sheet [data-ai]').forEach(b => b.onclick = () => { set(items[Number(b.dataset.ai)]); closeSheet(); renderRecord(); });
+    };
+    const kindItems = () => allKinds().filter(k => k !== '현금').map(k => ({ l: k, v: k, on: k === F.aKind }));
+    const k1 = $('#aKindBtn', el); if (k1) k1.onclick = () => sheetPick('분류', kindItems(), F.aKind, it => { F.aKind = it.v; F.aSubAsset = ''; });
+    const lb = $('#aLinkBtn', el); if (lb) lb.onclick = () => {
+      const same = (a, b) => a && b && a.type === b.type && a.asset === b.asset && a.sub === b.sub;
+      const items = [{ g: '있는 예수금에서 빠짐' }, ...linkOpts().map(o => { const v = { type: 'shared', asset: o.asset, sub: o.sub }; return { l: `${cashName(o.asset, o.sub)}`, v, on: same(v, F.aLink) }; }),
+        { g: '새 증권 계좌' }, { l: '+ 이 계좌에 새 예수금 만들기', v: { type: 'own' }, new: true, on: F.aLink && F.aLink.type === 'own' },
+        { g: '기타' }, { l: '예수금 없음 (가계부 이체로 바로 매수)', v: { type: 'none' }, on: F.aLink && F.aLink.type === 'none' }];
+      sheetPick('예수금', items, F.aLink, it => { F.aLink = it.v; });
+    };
+    const cb = $('#aCashAssetBtn', el); if (cb) cb.onclick = () => {
+      const ok = [...new Set([...D.rows.map(r => r.asset), ...shellsOf().assets.map(x => x.asset)])].filter(a => { const k = (D.rows.find(r => r.asset === a) || shellsOf().assets.find(x => x.asset === a) || {}).kind; return k && k !== '현금' && cashFree(a); });
+      sheetPick('예수금을 붙일 자산', ok.map(a => ({ l: a, v: a, on: a === F.aCashAsset })), F.aCashAsset, it => { F.aCashAsset = it.v; });
+    };
+    const sb = $('#aSubAssetBtn', el); if (sb) sb.onclick = () => {
+      const assets = assetsOfKind(F.aKind).filter(a => !D.rows.some(r => r.asset === a && r.kind === '현금'));
+      sheetPick(`${F.aKind}의 자산`, assets.map(a => ({ l: a, v: a, on: a === F.aSubAsset })), F.aSubAsset, it => { F.aSubAsset = it.v; });
+    };
+    const go = $('#fAddGo', el); if (go) go.onclick = async () => {
+      keep();
+      const err = $('#fErr', el); err.textContent = '';
+      const fail = m => { err.textContent = m; };
+      let req;
+      if (F.aWhat === 'kind') {
+        const k = (F.aKindName || '').trim();
+        if (!k) return fail('분류 이름을 적으십시오.');
+        if (allKinds().includes(k)) return fail(`'${k}' 분류가 이미 있습니다.`);
+        req = { what: 'kind', kind: k };
+      } else if (F.aWhat === 'asset') {
+        const a = (F.aAssetName || '').trim();
+        if (!F.aKind) return fail('분류를 고르십시오.');
+        if (!a) return fail('자산(계좌) 이름을 적으십시오.');
+        if (assetsOfKind(F.aKind).includes(a) || D.rows.some(r => r.asset === a) || shellsOf().assets.some(x => x.asset === a)) return fail(`'${a}' 자산이 이미 있습니다.`);
+        if (!F.aLink) return fail('예수금을 고르십시오.');
+        const link = F.aLink.type === 'own' ? { type: 'own', sub: (F.aCashName || '').trim() || cashDefault(a), cur: F.aCur === 'USD' ? 'USD' : 'KRW' } : F.aLink;
+        if (link.type === 'own' && !/예수금/.test(link.sub)) return fail("예수금 이름에 '예수금'을 넣으십시오. (예: 키움 예수금)");
+        req = { what: 'asset', kind: F.aKind, asset: a, link };
+      } else if (F.aWhat === 'cash') {
+        if (!F.aCashAsset) return fail('자산(계좌)을 고르십시오.');
+        const sub = (F.aCashName || '').trim() || cashDefault(F.aCashAsset);
+        if (!/예수금/.test(sub)) return fail("예수금 이름에 '예수금'을 넣으십시오. (예: 키움 예수금)");
+        req = { what: 'cash', asset: F.aCashAsset, sub, cur: F.aCur === 'USD' ? 'USD' : 'KRW' };
+      } else {
+        const sub = (F.aSubName || '').trim(), tk = (F.aTicker || '').trim().toUpperCase().replace(/^([0-9][0-9A-Z]{5})$/, 'KRX:$1');
+        if (!F.aSubAsset) return fail('자산(계좌)을 고르십시오.');
+        if (!sub) return fail('종목 이름을 적으십시오.');
+        if (/예수금/.test(sub)) return fail("종목 이름에는 '예수금'을 쓸 수 없습니다.");
+        if (D.rows.some(r => r.asset === F.aSubAsset && r.sub === sub)) return fail(`'${F.aSubAsset}'에 '${sub}'가 이미 있습니다.`);
+        const cur = F.aCur === 'USD' ? 'USD' : 'KRW';
+        if (cur === 'KRW' && /^[A-Z][A-Z.\-]*$/.test(tk) && F.aKrwOk !== tk) { F.aKrwOk = tk; return fail(`티커 ${tk}는 해외 종목으로 보입니다. 통화를 달러로 바꾸십시오. 원화가 맞으면 한 번 더 누르십시오.`); }
+        req = { what: 'sub', asset: F.aSubAsset, sub, ticker: tk, cur };
+      }
+      go.disabled = true; go.textContent = '추가하는 중…';
+      try {
+        const r = await api('holdAdd', req);
+        // 다음 추가를 위해 입력칸 비우기 (분류·자산 고른 것은 남김)
+        if (req.what === 'kind') { F.aKindName = ''; F.aKind = req.kind; }
+        if (req.what === 'asset') { F.aAssetName = ''; F.aCashName = ''; F.aLink = null; F.aSubAsset = req.asset; }
+        if (req.what === 'cash') { F.aCashName = ''; F.aCashAsset = ''; }
+        if (req.what === 'sub') { F.aSubName = ''; F.aTicker = ''; F.aKrwOk = ''; }
+        await load({ quiet: true });
+        toast(r.message);
+        if (r.warn) openSheet(`<div class="ask"><h2 id="sheetTitle">시세를 불러오지 못했습니다</h2><p class="note ask-note">${esc(r.warn)}</p><div class="sheet-actions"><button class="btn primary" data-close>확인</button></div></div>`, 'pop');
+      } catch (e) {
+        if (e.code === 'auth') { logout('비밀번호를 다시 입력하십시오.'); return; }
+        go.disabled = false; go.textContent = `${AD_WHAT[F.aWhat]} 추가하기`; fail(e.message);
+      }
+    };
+  }
   const pcurKey = F => `dh_pcur_${F.key || ''}`;
   const pcurOf = F => { try { return store.get(pcurKey(F)) === 'KRW' ? 'KRW' : 'USD'; } catch { return 'USD'; } };
   function renderRecord() {
     const D = state.data, F = state.form;
-    if (!F.cashLink) F.cashLink = linkOpts()[0] || null;   // 새 자산은 항상 예수금에서 빠짐 (기본: 메인 계좌)
     const el = $('#view-record');
-    const types = ['매수', '매도', '금액 수정', '삭제'];   // 입금·출금은 가계부 이체에서 자동 기록 (2차 ①)
+    const types = ['매수', '매도', '금액 수정', '추가·삭제'];   // 입금·출금은 가계부 이체에서 자동 기록 (2차 ①)
+    if (F.type === '삭제') { F.type = '추가·삭제'; F.adMode = 'del'; }
     if (!types.includes(F.type)) F.type = '매수';
     const kindsOf = rows => [...new Set(rows.map(r => r.kind))];
 
     let body = '';
-    if (F.type === '삭제') {
+    if (F.type === '추가·삭제' && F.adMode !== 'del') {
+      body = `${adSeg()}${addBody()}`;
+    } else if (F.type === '추가·삭제') {
       const ks = delKinds();
       if (!ks.includes(F.delKind)) { F.delKind = ks[0] || ''; F.delAsset = '__all'; F.delSub = '__all'; }
       if (F.delAsset !== '__all' && !delAssets(F.delKind).includes(F.delAsset)) { F.delAsset = '__all'; F.delSub = '__all'; }
       if (F.delSub !== '__all' && !D.rows.some(r => r.asset === F.delAsset && r.sub === F.delSub)) F.delSub = '__all';
       const chev = '<i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i>';
       const what = F.delAsset === '__all' ? `분류 '${F.delKind}' 전체` : F.delSub === '__all' ? `자산 '${F.delAsset}' 전체` : `종목 '${F.delSub}'`;
-      body = `
+      body = `${adSeg()}
         <div class="field"><span>분류</span><button type="button" class="pick-btn" id="dKind"><small>지울 분류</small><b>${esc(F.delKind || '선택')}</b>${chev}</button></div>
         <div class="field"><span>자산(계좌)</span><button type="button" class="pick-btn" id="dAsset"><small>${F.delAsset === '__all' ? '고르지 않으면 분류 전체' : '지울 자산'}</small><b>${F.delAsset === '__all' ? '분류 전체' : esc(F.delAsset)}</b>${chev}</button></div>
         ${F.delAsset !== '__all' ? `<div class="field"><span>종목</span><button type="button" class="pick-btn" id="dSub"><small>${F.delSub === '__all' ? '고르지 않으면 자산 전체' : '지울 종목'}</small><b>${F.delSub === '__all' ? '자산 전체' : esc(F.delSub)}</b>${chev}</button></div>` : ''}
@@ -1778,6 +1920,8 @@
           <label class="field"><span>자산(계좌) 이름</span><input id="fxAsset" autocomplete="off" placeholder="${esc(cur.asset)}"></label>
         </div>
         <label class="field"><span>원금 = 매입금액 (원)</span><input id="fxCost" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="${Math.round(cur.cost).toLocaleString('ko-KR')}"></label>
+        ${String(cur.ticker || '').trim() ? '' : `<label class="field"><span>현재가 (${usd ? '달러' : '원'}) · 티커 없는 종목</span><input id="fxPrice" class="dec" type="text" inputmode="decimal" autocomplete="off" placeholder="${Number(cur.price || 0).toLocaleString('ko-KR', { maximumFractionDigits: 4 })}"></label>
+        <p class="help">시세를 받아올 곳이 없어 마지막으로 사고판 단가가 현재가입니다.<br>지금 가격을 알면 여기에 넣으십시오.</p>`}
         <p class="preview num">지금 기록: ${cur.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${qtyUnit(cur)} · 평단 ${sym}${(cur.avg || 0).toLocaleString('ko-KR')}${usd ? '' : '원'} · 원금 ${won(cur.cost)}</p>
         <p class="preview num" id="fxHint"></p>` : `
         <label class="field"><span>${usd ? '지금 금액 (달러)' : '지금 금액 (원)'}</span>
@@ -1806,42 +1950,20 @@
         <button class="btn primary" id="fSubmit">${F.type} 기록하기</button>`;
     } else {
       const trad = D.rows.filter(isTradable).filter(r => F.type === '매수' || r.qty > 0);
-      // 매수는 모든 구성(현금 제외)에 새 종목을 넣을 수 있음 — 예: 기타 구성에 새 계좌
-      const kinds = F.type === '매수' ? [...new Set([...kindsOf(trad), ...D.rows.filter(r => r.kind && r.kind !== '현금').map(r => r.kind)])] : kindsOf(trad);
-      if (!kinds.includes(F.kind) && !(F.type === '매수' && F.key === '__new' && F.kind)) F.kind = kinds[0] || '';   // 새 분류로 새 종목을 적는 중이면 유지
+      const kinds = kindsOf(trad);
+      if (!kinds.includes(F.kind)) F.kind = kinds[0] || '';
       const inKind = trad.filter(r => r.kind === F.kind);
-      if (F.key !== '__new' && !inKind.some(r => rowKey(r) === F.key)) F.key = inKind[0] ? rowKey(inKind[0]) : '__new';
-      if (F.type !== '매수' && F.key === '__new') F.key = inKind[0] ? rowKey(inKind[0]) : '';
+      if (!inKind.some(r => rowKey(r) === F.key)) F.key = inKind[0] ? rowKey(inKind[0]) : '';
       const row = findRow(F.key);
-      const curr = F.key === '__new' ? (F.newCur || 'KRW') : (row?.cur || 'KRW');
-      const unit = row ? qtyUnit(row) : (F.kind === '코인' ? '개' : '주');
-      body = `
+      const curr = row?.cur || 'KRW';
+      const unit = row ? qtyUnit(row) : '';
+      if (!trad.length) body = `<p class="empty">${F.type === '매수' ? "살 종목이 없습니다.<br>'추가·삭제'에서 종목을 먼저 추가하십시오." : '팔 수 있는 종목이 없습니다.'}</p>`;
+      else body = `
         <div class="field"><span>종목</span>
-          <button type="button" class="pick-btn" id="fRowBtn"><small>${esc(F.kind)}</small><b>${F.key === '__new' ? '+ 새 종목 추가' : row ? esc(row.sub) : '선택'}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>
-        ${F.key === '__new' ? `
-          ${(() => { const A = newAssetOf(F), ex = A && D.rows.some(r => r.asset === A), c = ex && D.cashMap ? D.cashMap[A] : null;
-            return `<div class="field"><span>자산(계좌)</span>
-            <button type="button" class="pick-btn" id="fAssetBtn"><small>${!A ? '기존 계좌를 고르거나 새 이름을 적으십시오' : ex ? '기존 계좌에 넣기' : '새 자산(계좌) 만들기'}</small><b id="fAssetLbl">${A ? esc(A) : '선택'}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button>
-            <input type="hidden" id="fNewAsset" value="${esc(A || '')}"></div>
-            ${ex ? `<p class="cash-flow">${c && c.sub ? `매수한 종목은 <b>${esc(c.sub === '달러 예수금' ? `${A} 예수금` : c.sub)}</b>에서 빠집니다` : '예수금과 연결 없음 · 원금만 늘어납니다'}</p>` : ''}`; })()}
-          <div class="two">
-            <label class="field"><span>종목 이름</span><input id="fNewName" placeholder="예: NAVER" value="${esc(F.newName || '')}"></label>
-            <label class="field"><span>티커 (선택)</span><input id="fNewTicker" placeholder="예: SOXL, 005930" value="${esc(F.newTicker || '')}" autocapitalize="characters"></label>
-          </div>
-          <p class="help">티커를 넣으면 시세가 자동으로 들어옵니다.<br>미국 주식: <b>SOXL</b><br>국내 주식: <b>005930</b>(종목코드 6자리)<br>비워 두면 시세 없이 '수정'에서 금액을 직접 고칩니다.</p>
-          <div class="two">
-            <label class="field"><span>통화</span>
-              <select id="fNewCur"><option ${curr === 'KRW' ? 'selected' : ''}>KRW</option><option ${curr === 'USD' ? 'selected' : ''}>USD</option></select>
-            </label>
-          </div>
-          ${(() => { const A = newAssetOf(F), ex = A && D.rows.some(r => r.asset === A), c = ex && D.cashMap ? D.cashMap[A] : null;
-            return `
-            ${ex ? '' : `
-          <div class="field"><span>어느 돈으로 샀나요?</span>
-            <button type="button" class="pick-btn" id="fLinkBtn"><small>새 자산일 때만 적용</small><b>${esc(linkLabel(F.cashLink))}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>`}`; })()}` : `
-          <p class="preview num">${row ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''}</p>
+          <button type="button" class="pick-btn" id="fRowBtn"><small>${esc(F.kind)}</small><b>${row ? esc(row.sub) : '선택'}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>
+          <p class="preview num">${row ? (row.qty > 0 ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : '지금 수량 0') : ''}</p>
           ${row && D.cashMap ? (() => { const c = D.cashMap[row.asset], buy = F.type === '매수';
-            return `<p class="cash-flow">${c && c.sub ? `${buy ? '매수한 종목은' : '매도한 종목은'} <b>${esc(c.sub === '달러 예수금' ? `${row.asset} 예수금` : c.sub)}</b>${buy ? '에서 빠집니다' : '으로 들어갑니다'}` : `예수금과 연결 없음 · ${buy ? '원금만 늘어납니다' : '원금만 줄어듭니다'}`}</p>`; })() : ''}`}
+            return `<p class="cash-flow">${c && c.sub ? `${buy ? '매수한 종목은' : '매도한 종목은'} <b>${esc(cashName(row.asset, c.sub))}</b>${buy ? '에서 빠집니다' : '으로 들어갑니다'}` : `예수금과 연결 없음 · ${buy ? '원금만 늘어납니다' : '원금만 줄어듭니다'}`}</p>`; })() : ''}
         <div class="two">
           <label class="field"><span>수량</span><input id="fQty" class="dec" type="text" inputmode="decimal" autocomplete="off"></label>
           <label class="field"><span>단가 ${curr === 'USD' ? `<button type="button" class="pcur-btn" id="fPcur" aria-label="단가 통화 바꾸기">${pcurOf(F) === 'KRW' ? '원' : '달러'} ⇄</button>` : '(원)'}</span><input id="fPrice" class="dec" type="text" inputmode="decimal" autocomplete="off"></label>
@@ -1889,34 +2011,15 @@
     $$('.tr-btn', el).forEach(b => b.onclick = () => { const t = D.trades[Number(b.dataset.ti)]; if (t) openTrade(t); });
     const on = (id, ev, fn) => { const x = $(id, el); if (x) x.addEventListener(ev, fn); };
     on('#fRowBtn', 'click', () => {
-      // 매수·매도 종목 고르기: 구성별로 묶은 목록 (매수는 구성마다 '+ 새 종목 추가')
+      // 매수·매도 종목 고르기: 분류별로 묶은 목록. 새 종목은 '추가·삭제 → 추가'에서
       const buy = F.type === '매수';
       const trad = D.rows.filter(isTradable).filter(r => buy || r.qty > 0);
-      const kinds = buy ? [...new Set([...kindsOf(trad), ...D.rows.filter(r => r.kind && r.kind !== '현금').map(r => r.kind)])] : kindsOf(trad);
       const lab = r => `${r.sub}${r.asset !== r.sub && r.asset !== r.kind ? ` · ${r.asset}` : ''}`;
-      // 매수: 오른쪽 위 '+ 새 종목' → 분류(메인투자·코인 등)를 고르면 새 종목 입력
-      openSheet(`<div class="pick-head"><h2 id="sheetTitle">${buy ? '매수할 종목' : '매도할 종목'}</h2>${buy ? '<button class="btn sm" id="pkNew">+ 새 종목</button>' : ''}</div><div class="pick-list">${kinds.map(k => { const rs = trad.filter(r => r.kind === k); return rs.length ? `<div class="pick-g">${esc(k)}</div>${rs.map(r => {
+      openSheet(`<h2 id="sheetTitle">${buy ? '매수할 종목' : '매도할 종목'}</h2><div class="pick-list">${kindsOf(trad).map(k => `<div class="pick-g">${esc(k)}</div>${trad.filter(r => r.kind === k).map(r => {
         const on = F.kind === k && rowKey(r) === F.key;
-        return `<button class="pick-i ${on ? 'on' : ''}" data-pk="${esc(rowKey(r))}" data-k="${esc(k)}"><span>${esc(lab(r))}</span>${on ? '<b>✓</b>' : ''}</button>`;
-      }).join('')}` : ''; }).join('')}</div>`);
+        return `<button class="pick-i ${on ? 'on' : ''}" data-pk="${esc(rowKey(r))}" data-k="${esc(k)}"><span>${esc(lab(r))}${r.qty > 0 ? '' : ' <small class="pre-buy">수량 0</small>'}</span>${on ? '<b>✓</b>' : ''}</button>`;
+      }).join('')}`).join('')}</div>`);
       $$('#sheet [data-pk]').forEach(b => b.onclick = () => { F.kind = b.dataset.k; F.key = b.dataset.pk; closeSheet(); renderRecord(); });
-      const nb = $('#pkNew'); if (nb) nb.onclick = () => {
-        openSheet(`<h2 id="sheetTitle">어느 분류에 추가할까요?</h2><div class="pick-list">${kinds.map(k => `<button class="pick-i" data-nk="${esc(k)}"><span>${esc(k)}</span></button>`).join('')}<button class="pick-i new" id="nkAdd"><span>+ 새 분류 만들기</span></button></div>`);
-        $$('#sheet [data-nk]').forEach(b => b.onclick = () => { F.kind = b.dataset.nk; F.key = '__new'; F.assetSel = undefined; closeSheet(); renderRecord(); });
-        // 새 분류: 이름만 정하면 그 분류로 새 종목 입력. 종목을 저장하는 순간 분류가 생김 (시트 '종류' 칸)
-        $('#nkAdd').onclick = () => {
-          openSheet(`<div class="ask"><h2 id="sheetTitle">새 분류 이름</h2><p class="note ask-note">예: 연금, 해외 배당주<br>이 분류로 첫 종목을 저장하면 분류가 만들어집니다.</p>
-            <label class="field"><input id="nkName" maxlength="20" autocomplete="off" placeholder="분류 이름"></label><p class="form-error" id="nkErr" role="alert"></p>
-            <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn primary" id="nkOk">다음</button></div></div>`, 'pop');
-          setTimeout(() => { const i = $('#nkName'); if (i) i.focus(); }, 250);
-          $('#nkOk').onclick = () => {
-            const v = $('#nkName').value.trim();
-            if (!v) { $('#nkErr').textContent = '분류 이름을 적으십시오'; return; }
-            if (v === '현금') { $('#nkErr').textContent = "'현금'은 예수금 전용 분류입니다"; return; }
-            F.kind = v; F.key = '__new'; F.assetSel = undefined; closeSheet(); renderRecord();
-          };
-        };
-      };
     });
     on('#fManualBtn', 'click', () => {
       const rows = D.rows.filter(r => r.asset);
@@ -1925,38 +2028,10 @@
       $$('#sheet [data-pk]').forEach(b => b.onclick = () => { F.key = b.dataset.pk; closeSheet(); renderRecord(); });
     });
     on('#fCash', 'change', e => { F.cashAsset = e.target.value; });
-    on('#fLinkBtn', 'click', () => {
-      const keep = { n: $('#fNewName')?.value, t: $('#fNewTicker')?.value, a: $('#fNewAsset')?.value, q: $('#fQty')?.value, p: $('#fPrice')?.value, k: $('#fKrw')?.value };
-      const opts = linkOpts();
-      const same = (a, b) => (!a && !b) || (a && b && a.asset === b.asset && a.sub === b.sub);
-      openSheet(`<h2 id="sheetTitle">어느 돈으로 샀나요?</h2><div class="pick-list">${opts.map((o, i) => `<button class="pick-i ${same(o, F.cashLink) ? 'on' : ''}" data-li="${i}"><span>${esc(linkLabel(o))}</span>${same(o, F.cashLink) ? '<b>✓</b>' : ''}</button>`).join('')}</div>`);
-      $$('#sheet [data-li]').forEach(b => b.onclick = () => {
-        F.cashLink = opts[Number(b.dataset.li)]; F.newName = keep.n; F.newTicker = keep.t; F.newAsset = keep.a; closeSheet(); renderRecord();
-        if ($('#fQty')) { $('#fQty').value = keep.q || ''; $('#fPrice').value = keep.p || ''; $('#fKrw').value = keep.k || ''; }
-      });
-    });
-    // 자산(계좌) 고르기: 이 분류의 계좌 / 종목 이름으로 새 자산 / 새 계좌 이름 적기
-    on('#fAssetBtn', 'click', () => {
-      const keep = { n: $('#fNewName')?.value, t: $('#fNewTicker')?.value, q: $('#fQty')?.value, p: $('#fPrice')?.value };
-      const cur = newAssetOf(F), accts = kindAccounts(F.kind);
-      const back = () => { F.newName = keep.n; F.newTicker = keep.t; closeSheet(); renderRecord(); if ($('#fQty')) { $('#fQty').value = keep.q || ''; $('#fPrice').value = keep.p || ''; } };
-      openSheet(`<h2 id="sheetTitle">어느 자산에 넣을까요?</h2><div class="pick-list">
-        ${accts.length ? `<div class="pick-g">${esc(F.kind)}의 계좌</div>${accts.map(a => `<button class="pick-i ${cur === a ? 'on' : ''}" data-as="${esc(a)}"><span>${esc(a)}</span>${cur === a ? '<b>✓</b>' : ''}</button>`).join('')}` : ''}
-        <div class="pick-g">새로 만들기</div>
-        <button class="pick-i new ${cur && !accts.includes(cur) ? 'on' : ''}" id="asNew"><span>+ 새 자산(계좌) 이름 적기${cur && !accts.includes(cur) ? ` (지금: ${esc(cur)})` : ''}</span></button></div>`);
-      $$('#sheet [data-as]').forEach(b => b.onclick = () => { F.assetSel = b.dataset.as; back(); });
-      $('#asNew').onclick = () => {
-        openSheet(`<div class="ask"><h2 id="sheetTitle">새 자산(계좌) 이름</h2><p class="note ask-note">예: 나예 주식(키움증권), 아람코<br>같은 계좌에서 산 종목은 한 자산으로 모입니다.</p>
-          <label class="field"><input id="asName" maxlength="40" autocomplete="off" placeholder="계좌 이름" value="${esc(cur && !accts.includes(cur) ? cur : '')}"></label><p class="form-error" id="asErr" role="alert"></p>
-          <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn primary" id="asOk">확인</button></div></div>`, 'pop');
-        $('#asOk').onclick = () => { const v = $('#asName').value.trim(); if (!v) { $('#asErr').textContent = '자산(계좌) 이름을 적으십시오'; return; } F.assetSel = v; back(); };
-      };
-    });
-    on('#fNewCur', 'change', e => { F.newCur = e.target.value; F.newName = $('#fNewName').value; F.newTicker = $('#fNewTicker').value; F.newAsset = $('#fNewAsset').value; renderRecord(); });
     const upd = () => {
       const p = $('#fPreview', el); if (!p) return;
       const q = num($('#fQty').value), pr = num($('#fPrice').value);
-      const usd = (F.key === '__new' ? (F.newCur || 'KRW') : findRow(F.key)?.cur) === 'USD';
+      const usd = findRow(F.key)?.cur === 'USD';
       if (usd && pcurOf(F) === 'KRW') { p.textContent = q && pr ? `원화로 매수 · ${won(q * pr)} (평단은 $${(pr / D.rate).toLocaleString('en-US', { maximumFractionDigits: 4 })}로 기록)` : '원화로 산 단가를 넣으십시오. 평단은 환율로 달러 환산합니다.'; return; }
       p.textContent = q && pr ? `${usd ? `$${(q * pr).toLocaleString('en-US', { maximumFractionDigits: 2 })} · ` : ''}약 ${won(q * pr * (usd ? D.rate : 1))}` : '';
     };
@@ -1994,6 +2069,7 @@
     on('#dKind', 'click', () => pickDel('분류', delKinds().map(k => ({ v: k, l: k })), F.delKind, v => { F.delKind = v; F.delAsset = '__all'; F.delSub = '__all'; }));
     on('#dAsset', 'click', () => pickDel('자산(계좌)', [{ v: '__all', l: `분류 전체 (${F.delKind})` }, ...delAssets(F.delKind).map(a => ({ v: a, l: a }))], F.delAsset, v => { F.delAsset = v; F.delSub = '__all'; }));
     on('#dSub', 'click', () => pickDel('종목', [{ v: '__all', l: `자산 전체 (${F.delAsset})` }, ...state.data.rows.filter(r => r.asset === F.delAsset).map(r => ({ v: r.sub, l: r.sub }))], F.delSub, v => { F.delSub = v; }));
+    if (F.type === '추가·삭제') bindAdd(el);
     on('#fDelGo', 'click', () => {
       const req = F.delAsset === '__all' ? { scope: 'kind', kind: F.delKind } : F.delSub === '__all' ? { scope: 'asset', asset: F.delAsset } : { scope: 'sub', asset: F.delAsset, sub: F.delSub };
       runHoldDel(req);
@@ -2262,6 +2338,8 @@
       if (!row) { err.textContent = '수정할 항목을 선택하십시오.'; return; }
       const fix = {}; const q = $('#fxQty').value.replace(/,/g, '').trim(), a = $('#fxAvg').value.replace(/,/g, '').trim(), c = String($('#fxCost').value).replace(/,/g, '').trim();
       if (q !== '') fix.qty = Number(q); if (a !== '') fix.avg = Number(a); if (c !== '') fix.cost = Number(c);
+      const px = $('#fxPrice') ? $('#fxPrice').value.replace(/,/g, '').trim() : '';
+      if (px !== '') { fix.price = Number(px); if (!(fix.price > 0)) { err.textContent = '현재가를 올바르게 입력하십시오.'; return; } }
       const nc = $('#fxCur').value, na = $('#fxAsset').value.trim();
       if (nc !== (row.cur || 'KRW')) { fix.cur = nc; if (!('avg' in fix)) { err.textContent = `통화를 바꾸면 평단가도 ${nc === 'USD' ? '달러' : '원화'}로 다시 넣으십시오.`; return; } }
       if (na && na !== row.asset) fix.asset = na;
@@ -2286,24 +2364,11 @@
       if (krw !== '') t.amountKrw = Number(krw);
       t.qty = num($('#fQty').value); t.price = num($('#fPrice').value);
       // 달러 종목을 원화로 산 경우: 평단은 환율로 달러 환산, 원화 금액을 비우면 수량 × 원화 단가
-      const usdRow = (F.key === '__new' ? $('#fNewCur').value : findRow(F.key)?.cur) === 'USD';
+      const usdRow = findRow(F.key)?.cur === 'USD';
       if (usdRow && pcurOf(F) === 'KRW' && t.price > 0) { if (!(t.amountKrw > 0)) t.amountKrw = Math.round(t.qty * t.price); t.price = Math.round(t.price / D.rate * 10000) / 10000; }
       if (!(t.qty > 0)) { err.textContent = '수량을 입력하십시오.'; return; }
       if (!(t.price > 0)) { err.textContent = '단가를 입력하십시오.'; return; }
-      if (F.key === '__new') {
-        // 티커: 국내 종목코드 6자리만 적어도 'KRX:'를 붙임
-        t.sub = $('#fNewName').value.trim(); t.ticker = $('#fNewTicker').value.trim().toUpperCase().replace(/^([0-9][0-9A-Z]{5})$/, 'KRX:$1'); t.currency = $('#fNewCur').value; t.kind = F.kind;
-        if (!t.sub) { err.textContent = '새 종목 이름을 입력하십시오.'; return; }
-        if (t.currency === 'KRW' && /^[A-Z][A-Z.\-]*$/.test(t.ticker) && !F.krwOk) { F.krwOk = true; err.textContent = `티커 ${t.ticker}는 해외 종목으로 보입니다. 통화를 USD로 바꾸십시오. KRW가 맞으면 한 번 더 누르십시오.`; return; }
-        // 자산(계좌)은 반드시 고르거나 적어야 함 (ISA 처럼 계좌가 하나로 정해진 분류는 미리 골라져 있음)
-        const named = $('#fNewAsset').value.trim();
-        if (!named) {
-          openSheet(`<div class="ask"><h2 id="sheetTitle">자산(계좌)이 비어 있습니다</h2><p class="note ask-note">새 자산(계좌) 이름을 입력하십시오.</p><div class="sheet-actions"><button class="btn primary" data-close>확인</button></div></div>`, 'pop');
-          return;
-        }
-        t.asset = named;
-        if (F.cashLink) t.cashLink = { asset: F.cashLink.asset, sub: F.cashLink.sub };
-      } else {
+      {
         const row = findRow(F.key);
         if (!row) { err.textContent = '종목을 선택하십시오.'; return; }
         t.asset = row.asset; t.sub = row.sub;
@@ -2315,7 +2380,6 @@
     try {
       const r = await api(action, payload);
       const msg = r.realized !== null && r.realized !== undefined ? `${r.message} (${r.realized >= 0 ? '익절' : '손절'} ${signWon(r.realized)})` : r.message;
-      if (F.key === '__new') { F.key = ''; F.newName = ''; F.newTicker = ''; F.newAsset = ''; F.krwOk = false; F.assetSel = undefined; }
       await load({ quiet: true });
       toast(msg);
       // 저장은 됐지만 새 종목 티커로 시세를 못 불러온 경우: 막지 않고 알려만 줌
@@ -2505,10 +2569,8 @@
     $('#appSwitch').onclick = () => setApp(state.app === 'hh' ? 'inv' : 'hh');
     $('#invFab').onclick = () => {
       // 보유자산 + 버튼 = 새 자산 추가 (매수 → 새 종목)
-      const F = state.form; F.type = '매수'; F.key = '__new';
-      if (!F.kind || F.kind === '현금') F.kind = (state.data?.rows.find(r => r.kind && r.kind !== '현금') || {}).kind || '';
+      const F = state.form; F.type = '추가·삭제'; F.adMode = 'add'; F.aWhat = 'sub';
       state.rPage = 0; renderRecord(); go('record');
-      setTimeout(() => { const n = $('#fNewName'); if (n) n.focus(); }, 50);
     };
     $('#maskBtn').onclick = () => setMask(!document.body.classList.contains('masked'));
     setMask(store.get('dh_mask') === '1', true);

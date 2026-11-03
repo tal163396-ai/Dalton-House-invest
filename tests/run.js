@@ -143,5 +143,61 @@ test('종목·자산·분류 삭제', () => {
   ok(r.ok && !t.row('새 계좌') && !/새 계좌/.test(t.G.__props.CASH_LINKS || ''), '분류 삭제 + 예수금 연결 정리', r.error);
 });
 
+test('분류·자산·예수금·종목 추가 (매수 없이)', () => {
+  const t = fresh();
+  const add = b => t.call({ action: 'holdAdd', ...b });
+  let r = add({ what: 'kind', kind: '연금' });
+  ok(r.ok, '분류 추가', r.error);
+  ok(!add({ what: 'kind', kind: '연금' }).ok, '같은 분류 막힘');
+  ok(!add({ what: 'kind', kind: '현금' }).ok, "'현금' 분류 막힘");
+  let d = t.call({ action: 'data' }).data;
+  ok(d.shells && d.shells.kinds.includes('연금'), '빈 분류가 앱에 전달됨', JSON.stringify(d.shells));
+  // 자산: 메인 계좌 예수금 연결 (줄 없이 보관)
+  r = add({ what: 'asset', kind: '연금', asset: '연금 계좌', link: { type: 'shared', asset: '예수금', sub: '메인 계좌 예수금' } });
+  ok(r.ok && !t.row('연금 계좌'), '자산 추가 (아직 줄 없음)', r.error);
+  d = t.call({ action: 'data' }).data;
+  ok(d.shells.assets.some(x => x.asset === '연금 계좌' && x.kind === '연금') && !d.shells.kinds.includes('연금'), '빈 자산 전달, 분류는 자산에 포함');
+  ok(d.cashMap['연금 계좌'] && d.cashMap['연금 계좌'].sub === '메인 계좌 예수금', '예수금 연결 저장');
+  ok(!add({ what: 'asset', kind: '연금', asset: 'ISA', link: { type: 'none' } }).ok, '같은 자산 이름 막힘');
+  ok(!add({ what: 'cash', asset: '연금 계좌', sub: '연금 예수금' }).ok, '이미 연결된 자산은 예수금 추가 막힘');
+  // 자산 + 자기 예수금
+  r = add({ what: 'asset', kind: '연금', asset: '키움 계좌', link: { type: 'own', sub: '키움 예수금', cur: 'KRW' } });
+  const kc = t.row('키움 계좌', '키움 예수금');
+  ok(r.ok && kc && kc['직접평가(원)'] === 0 && kc['원금(원)'] === 0 && kc['시세방식'] === '수동', '자산 + 원화 예수금 줄', r.error || JSON.stringify(kc));
+  r = add({ what: 'asset', kind: '연금', asset: '달러 계좌', link: { type: 'own', sub: '달러 계좌 예수금', cur: 'USD' } });
+  const uc = t.row('달러 계좌', '달러 계좌 예수금');
+  ok(r.ok && uc && uc['통화'] === 'USD' && uc['현재가'] === 1 && uc['수량'] === 0, '달러 예수금 줄', JSON.stringify(uc));
+  // 예수금만 따로: 연결 없는 자산에
+  add({ what: 'asset', kind: '연금', asset: '빈 계좌', link: { type: 'none' } });
+  r = add({ what: 'cash', asset: '빈 계좌', sub: '빈 계좌 예수금', cur: 'KRW' });
+  ok(r.ok && t.row('빈 계좌', '빈 계좌 예수금'), '연결 없는 자산에 예수금 추가', r.error);
+  ok(!add({ what: 'cash', asset: '키움 계좌', sub: '두번째 예수금' }).ok, '예수금 연결은 바꿀 수 없음');
+  // 종목: 수량 0, 티커 없음 = 거래가
+  r = add({ what: 'sub', asset: '키움 계좌', sub: '아람코', cur: 'KRW' });
+  const ar = t.row('키움 계좌', '아람코');
+  ok(r.ok && ar && ar['수량'] === 0 && ar['원금(원)'] === 0 && ar['시세방식'] === '거래가' && ar['종류'] === '연금', '종목 추가 (수량 0 · 거래가)', r.error || JSON.stringify(ar));
+  ok(!add({ what: 'sub', asset: '키움 계좌', sub: '아람코' }).ok, '같은 종목 막힘');
+  r = add({ what: 'sub', asset: '연금 계좌', sub: '삼성전자', ticker: '005930' });
+  ok(r.ok && t.row('연금 계좌', '삼성전자')['티커'] === 'KRX:005930', '6자리 → KRX: (빈 자산에 첫 종목)', r.error);
+  // 첫 매수: 키움 예수금에서 빠짐, 현재가 = 거래 단가
+  r = t.call({ action: 'trade', trade: { type: '매수', asset: '키움 계좌', sub: '아람코', qty: 3, price: 10000, date: '2026-11-03T09:00:00+09:00' } });
+  ok(r.ok && t.row('키움 계좌', '아람코')['수량'] === 3 && t.row('키움 계좌', '아람코')['현재가'] === 10000, '첫 매수', r.error);
+  ok(t.row('키움 계좌', '키움 예수금')['직접평가(원)'] === -30000 && t.row('키움 계좌', '키움 예수금')['원금(원)'] === -30000, '키움 예수금에서 빠짐 (입금 전이라 마이너스)');
+  // 현재가 직접 고치기 (티커 없는 종목만)
+  r = t.call({ action: 'manual', manual: { asset: '키움 계좌', sub: '아람코', fix: { price: 12000 } } });
+  ok(r.ok && t.row('키움 계좌', '아람코')['현재가'] === 12000, '현재가 수정', r.error);
+  ok(!t.call({ action: 'manual', manual: { asset: 'QLD', sub: 'QLD', fix: { price: 1 } } }).ok, '티커 있는 종목은 현재가 수정 막힘');
+  // 삭제: 빈 자산·빈 분류
+  add({ what: 'kind', kind: '빈분류' });
+  let p = t.call({ action: 'holdDel', dry: true, scope: 'kind', kind: '빈분류' });
+  ok(p.ok && !p.blockers.length && p.shellKind, '빈 분류 삭제 미리보기', JSON.stringify(p));
+  r = t.call({ action: 'holdDel', scope: 'kind', kind: '빈분류' });
+  ok(r.ok && !t.call({ action: 'data' }).data.shells.kinds.includes('빈분류'), '빈 분류 삭제', r.error);
+  add({ what: 'asset', kind: '연금', asset: '지울 계좌', link: { type: 'shared', asset: '예수금', sub: '메인 계좌 예수금' } });
+  r = t.call({ action: 'holdDel', scope: 'asset', asset: '지울 계좌' });
+  ok(r.ok && !/지울 계좌/.test(t.G.__props.CASH_LINKS || '') && !t.call({ action: 'data' }).data.shells.assets.some(x => x.asset === '지울 계좌'), '빈 자산 삭제 + 연결 정리', r.error);
+  ok(/연금 계좌/.test(t.G.__props.CASH_LINKS || ''), '다른 빈 자산 연결은 남음');
+});
+
 console.log(`\n${fail ? `✗ 실패 ${fail}건` : '모두 통과'} (확인 ${pass + fail}건)`);
 process.exit(fail ? 1 : 0);

@@ -176,6 +176,7 @@ function doPost(e) {
       case 'tradeDel':  return json_(withLock_(() => tradeDel_(req)));
       case 'tradeEdit': return json_(withLock_(() => tradeEdit_(req)));
       case 'holdDel':   return json_(req.dry ? holdDelPlan_(req) : withLock_(() => holdDel_(req)));
+      case 'holdAdd':   return json_(withLock_(() => holdAdd_(req)));
       case 'hh':        renameOnce_(); usdOnce_(); return json_({ ok: true, hh: readHH_() });
       case 'hhSave':    return json_(withLock_(() => hhSave_(req)));
       case 'hhDel':     return json_(withLock_(() => hhDel_(req)));
@@ -203,6 +204,7 @@ function readAll_() {
     index: readIndex_(),
     household: SpreadsheetApp.getActive().getSheetByName('가계부월별') ? rowsAsObjects_('가계부월별', o => !o['연도']) : [],
     hhAuto: hhAutoMonths_(),
+    shells: shellsLive_(),
   };
 }
 
@@ -472,6 +474,12 @@ function setManual_(m) {
     if (f.qty !== undefined && f.qty !== '') { if (!(num_(f.qty) >= 0)) throw new Error('수량이 올바르지 않습니다'); setCell_(t, r, '수량', round_(num_(f.qty), 6)); done.push('수량'); }
     if (f.avg !== undefined && f.avg !== '') { if (!(num_(f.avg) >= 0)) throw new Error('평단가가 올바르지 않습니다'); setCell_(t, r, '평단가', round_(num_(f.avg), 4)); done.push('평단가'); }
     if (f.cost !== undefined && f.cost !== '') { if (!(num_(f.cost) >= 0)) throw new Error('원금이 올바르지 않습니다'); setCell_(t, r, '원금(원)', Math.round(num_(f.cost))); done.push('원금'); }
+    if (f.price !== undefined && f.price !== '') {
+      // 티커 없는 종목만: 현재가 직접 입력 (시세를 받아올 곳이 없음)
+      if (String(t.values[r][t.col['티커']]).trim()) throw new Error('티커가 있는 종목은 현재가가 자동으로 들어옵니다');
+      if (!(num_(f.price) > 0)) throw new Error('현재가가 올바르지 않습니다');
+      setCell_(t, r, '현재가', round_(num_(f.price), 4)); done.push('현재가');
+    }
     if (f.cur === 'USD' || f.cur === 'KRW') { if (f.cur !== cur) { setCell_(t, r, '통화', f.cur); done.push('통화'); } }
     if (f.asset !== undefined && String(f.asset).trim() && String(f.asset).trim() !== String(m.asset).trim()) { setCell_(t, r, '자산', String(f.asset).trim().slice(0, 80)); done.push('자산 이름'); }
     if (!done.length) throw new Error('바꿀 값이 없습니다');
@@ -516,7 +524,10 @@ function holdDelPlan_(req) {
     if ((scope === 'sub' && a === A && sb === S) || (scope === 'asset' && a === A) || (scope === 'kind' && k === K)) rows.push(r);
   }
   const blockers = [];
-  if (!rows.length) blockers.push('지울 항목을 찾지 못했습니다. 새로고침 후 다시 하십시오.');
+  // 아직 종목이 없는 분류·자산 (추가만 해 둔 것)
+  const sh = shells_(), shellAssets = Object.keys(sh.assets).filter(a => findFirstRow_(t, a) < 0 && ((scope === 'asset' && a === A) || (scope === 'kind' && sh.assets[a] === K)));
+  const shellKind = scope === 'kind' && sh.kinds.indexOf(K) >= 0;
+  if (!rows.length && !shellAssets.length && !shellKind) blockers.push('지울 항목을 찾지 못했습니다. 새로고침 후 다시 하십시오.');
   if (scope === 'kind' && K === '현금') blockers.push("'현금' 분류는 지울 수 없습니다.");
   const gone = new Set(rows.map(r => `${String(v(r, '자산')).trim()}|${String(v(r, '세부종목')).trim()}`));
   const goneAssets = new Set(rows.map(r => String(v(r, '자산')).trim()));
@@ -550,7 +561,7 @@ function holdDelPlan_(req) {
     }
   }
   const list = rows.map(r => ({ asset: String(v(r, '자산')).trim(), sub: String(v(r, '세부종목')).trim(), qty: num_(v(r, '수량')), cost: Math.round(num_(v(r, '원금(원)'))) }));
-  return { ok: true, rows: list, cost: list.reduce((x, o) => x + o.cost, 0), trades, hh, blockers };
+  return { ok: true, rows: list, shells: shellAssets, shellKind, cost: list.reduce((x, o) => x + o.cost, 0), trades, hh, blockers };
 }
 function holdDel_(req) {
   const plan = holdDelPlan_(req);
@@ -560,12 +571,124 @@ function holdDel_(req) {
   const del = [];
   for (let r = 1; r < t.values.length; r++) if (keys.has(`${String(t.values[r][t.col['자산']]).trim()}|${String(t.values[r][t.col['세부종목']]).trim()}`)) del.push(r + 1);
   del.sort((a, b) => b - a).forEach(row => t.sh.deleteRow(row));
-  // 자산이 통째로 없어졌으면 새 종목 예수금 연결(CASH_LINKS)도 정리
+  // 추가만 해 둔 분류·자산도 지움
+  const sh = shells_();
+  plan.shells.forEach(a => { delete sh.assets[a]; });
+  if (plan.shellKind) sh.kinds = sh.kinds.filter(k => k !== String(req.kind || '').trim());
+  if (String(req.scope) === 'kind') { const K = String(req.kind || '').trim(); Object.keys(sh.assets).forEach(a => { if (sh.assets[a] === K) delete sh.assets[a]; }); }
+  saveShells_(sh);
+  // 자산이 통째로 없어졌으면 예수금 연결(CASH_LINKS)도 정리 (아직 종목 없이 추가만 해 둔 자산은 남김)
   const left = new Set(holdings_().values.slice(1).map(x => String(x[0]).trim()));
+  Object.keys(sh.assets).forEach(a => left.add(a));
   const links = cashLinks_(); let changed = false;
   Object.keys(links).forEach(a => { if (!left.has(a)) { delete links[a]; changed = true; } });
   if (changed) PropertiesService.getScriptProperties().setProperty('CASH_LINKS', JSON.stringify(links));
-  return { ok: true, message: `${plan.rows.length}줄을 지웠습니다`, removed: plan.rows.length };
+  const n = plan.rows.length, what = n ? `${n}줄을 지웠습니다` : '지웠습니다';
+  return { ok: true, message: what, removed: n };
+}
+
+/* ───────────────────────── 분류·자산·예수금·종목 추가 (2026-11-03) ─────────────────────────
+ * 기록 탭 '추가·삭제 → 추가'. 매수 없이 미리 만들어 둠
+ * - 분류·자산은 종목이 생기기 전까지 시트 줄이 없으므로 스크립트 속성 INV_SHELLS = { kinds: [], assets: { 자산: 분류 } } 에 보관
+ * - 자산의 예수금 연결은 추가할 때 한 번 정하고 바꾸지 않음 (CASH_LINKS)
+ * - 예수금: 그 자산 안에 새 줄 (원화 = 직접평가 0 / 달러 = 수량 0 · 현재가 1). 원금 0에서 시작, 돈은 가계부 이체 '예수금 입금'으로
+ * - 종목: 수량 0인 줄. 첫 매수 때 수량·평단·원금이 생김 */
+function shells_() {
+  try { const o = JSON.parse(PropertiesService.getScriptProperties().getProperty('INV_SHELLS') || '{}'); return { kinds: o.kinds || [], assets: o.assets || {} }; }
+  catch (e) { return { kinds: [], assets: {} }; }
+}
+function saveShells_(sh) { PropertiesService.getScriptProperties().setProperty('INV_SHELLS', JSON.stringify(sh)); }
+/** 앱에 보낼 것: 시트에 아직 줄이 없는 분류·자산만 */
+function shellsLive_() {
+  const sh = shells_(), t = holdings_();
+  const kindsInRows = new Set(), assetsInRows = new Set();
+  for (let r = 1; r < t.values.length; r++) { const a = String(t.values[r][t.col['자산']]).trim(); if (!a || a === '합계') continue; assetsInRows.add(a); kindsInRows.add(String(t.values[r][t.col['종류']]).trim()); }
+  const assets = Object.keys(sh.assets).filter(a => !assetsInRows.has(a)).map(a => ({ asset: a, kind: sh.assets[a] }));
+  const kinds = sh.kinds.filter(k => !kindsInRows.has(k) && !assets.some(x => x.kind === k));
+  return { kinds, assets };
+}
+function allKinds_(t) {
+  const set = new Set(); for (let r = 1; r < t.values.length; r++) { const k = String(t.values[r][t.col['종류']]).trim(); if (k) set.add(k); }
+  const sh = shells_(); sh.kinds.forEach(k => set.add(k)); Object.keys(sh.assets).forEach(a => set.add(sh.assets[a]));
+  return set;
+}
+function kindOfAsset_(t, asset) {
+  const r = findFirstRow_(t, asset); if (r >= 0) return String(t.values[r][t.col['종류']]).trim();
+  return shells_().assets[asset] || '';
+}
+function holdAdd_(req) {
+  const what = String(req.what || ''), t = holdings_();
+  const name = (v, max) => String(v || '').trim().slice(0, max || 60);
+  const sh = shells_();
+  if (what === 'kind') {
+    const k = name(req.kind, 30);
+    if (!k) throw new Error('분류 이름을 적으십시오');
+    if (k === '현금') throw new Error("'현금'은 예수금 전용 분류입니다");
+    if (allKinds_(t).has(k)) throw new Error(`'${k}' 분류가 이미 있습니다`);
+    sh.kinds.push(k); saveShells_(sh);
+    return { ok: true, message: `분류 '${k}'를 추가했습니다` };
+  }
+  if (what === 'asset') {
+    const k = name(req.kind, 30), a = name(req.asset, 80), link = req.link || {};
+    if (!k || !allKinds_(t).has(k)) throw new Error('분류를 고르십시오');
+    if (k === '현금') throw new Error("'현금' 분류에는 자산을 추가할 수 없습니다");
+    if (!a) throw new Error('자산(계좌) 이름을 적으십시오');
+    if (a === '합계' || CASH[a] || findFirstRow_(t, a) >= 0 || sh.assets[a]) throw new Error(`'${a}' 자산이 이미 있습니다`);
+    if (link.type === 'shared') {
+      const la = name(link.asset, 80), ls = name(link.sub, 60), r = findRow_(t, la, ls);
+      if (r < 0 || !/예수금/.test(ls)) throw new Error(`예수금 '${ls}'을 찾지 못했습니다`);
+      setCashLink_(a, { asset: la, sub: ls });
+    } else if (link.type === 'own') {
+      const ls = name(link.sub, 60), cur = link.cur === 'USD' ? 'USD' : 'KRW';
+      if (!/예수금/.test(ls)) throw new Error("예수금 이름에 '예수금'을 넣으십시오 (예: 키움 예수금)");
+      sh.assets[a] = k; saveShells_(sh);
+      addCashRow_(t, a, k, ls, cur);
+      setCashLink_(a, { asset: a, sub: ls });
+      return { ok: true, message: `자산 '${a}'와 '${ls}'를 추가했습니다` };
+    } else if (link.type !== 'none') throw new Error('예수금을 고르십시오');
+    sh.assets[a] = k; saveShells_(sh);
+    return { ok: true, message: `자산 '${a}'를 추가했습니다` };
+  }
+  if (what === 'cash') {
+    const a = name(req.asset, 80), ls = name(req.sub, 60), cur = req.cur === 'USD' ? 'USD' : 'KRW';
+    const k = kindOfAsset_(t, a);
+    if (!a || !k) throw new Error('자산(계좌)을 고르십시오');
+    if (k === '현금') throw new Error("'현금' 분류의 예수금은 추가할 수 없습니다");
+    if (cashOf_(a).mode !== 'none') throw new Error(`'${a}'는 이미 예수금과 연결되어 있습니다. 예수금 연결은 바꿀 수 없습니다`);
+    if (!/예수금/.test(ls)) throw new Error("예수금 이름에 '예수금'을 넣으십시오 (예: 키움 예수금)");
+    if (findRow_(t, a, ls) >= 0) throw new Error(`'${ls}'가 이미 있습니다`);
+    for (let r = 1; r < t.values.length; r++) if (String(t.values[r][t.col['자산']]).trim() === a && num_(t.values[r][t.col['수량']]) > 0) throw new Error(`'${a}'에 보유 중인 종목이 있어 예수금을 새로 연결할 수 없습니다`);
+    for (let r = 1; r < t.values.length; r++) if (String(t.values[r][t.col['자산']]).trim() === a && /^수동/.test(String(t.values[r][t.col['시세방식']] || ''))) throw new Error(`'${a}'는 금액만 직접 관리하는 자산이라 예수금을 붙일 수 없습니다`);
+    addCashRow_(t, a, k, ls, cur);
+    setCashLink_(a, { asset: a, sub: ls });
+    return { ok: true, message: `'${ls}'를 추가했습니다` };
+  }
+  if (what === 'sub') {
+    const a = name(req.asset, 80), sb = name(req.sub, 80), k = kindOfAsset_(t, a);
+    let tk = name(req.ticker, 30).toUpperCase(); if (/^\d{6}$/.test(tk)) tk = `KRX:${tk}`;
+    if (!a || !k) throw new Error('자산(계좌)을 고르십시오');
+    if (k === '현금') throw new Error("'현금' 분류에는 종목을 추가할 수 없습니다");
+    if (!sb) throw new Error('종목 이름을 적으십시오');
+    if (/예수금/.test(sb)) throw new Error("종목 이름에는 '예수금'을 쓸 수 없습니다");
+    if (findRow_(t, a, sb) >= 0) throw new Error(`'${a}'에 '${sb}'가 이미 있습니다`);
+    const row = addHolding_(t, a, sb, { kind: k, ticker: tk, currency: req.cur === 'USD' ? 'USD' : req.cur === 'KRW' ? 'KRW' : '' });
+    let warn = '';
+    if (tk) {
+      const st = quoteCheck_(tk, row);
+      if (st === 'bad') warn = `티커 '${tk}'를 찾지 못했습니다. 추가는 됐지만 시세가 들어오지 않습니다. 삭제 후 다시 추가하십시오.`;
+      else if (st === 'pending') warn = `티커 '${tk}'의 시세가 아직 들어오지 않았습니다. 몇 분 뒤 보유자산에서 확인하십시오.`;
+    }
+    return { ok: true, message: `종목 '${sb}'를 추가했습니다`, warn };
+  }
+  throw new Error('무엇을 추가할지 고르십시오');
+}
+/** 예수금 줄 만들기: 원화 = 직접평가 0 (수동) / 달러 = 수량 0 · 현재가 1 (수동(달러 금액)). 원금 0 */
+function addCashRow_(t, asset, kind, sub, cur) {
+  const row = addHolding_(t, asset, sub, { kind, ticker: '', currency: cur });
+  const h = holdings_();
+  if (cur === 'USD') { setCell_(h, row, '티커', 'USD'); setCell_(h, row, '수량', 0); setCell_(h, row, '현재가', 1); setCell_(h, row, '직접평가(원)', ''); if ('시세방식' in h.col) setCell_(h, row, '시세방식', '수동(달러 금액)'); }
+  else { setCell_(h, row, '수량', ''); setCell_(h, row, '직접평가(원)', 0); if ('시세방식' in h.col) setCell_(h, row, '시세방식', '수동'); }
+  return row;
 }
 
 /* ───────────────────────── 보유현황 도우미 ───────────────────────── */
@@ -648,7 +771,8 @@ function addHolding_(t, asset, sub, tr) {
   set('통화', cur); set('수량', 0); set('평단가', ''); set('원금(원)', 0); set('직접평가(원)', '');
   if (ticker) sh.getRange(row, C('현재가')).setFormula(`=GOOGLEFINANCE("${ticker}","price")`);
   else set('현재가', '');
-  if ('시세방식' in t.col) set('시세방식', ticker ? '자동(구글)' : '수동');
+  // 티커 없는 종목 = '거래가': 매수·매도한 단가가 현재가 (수정 탭에서 직접 고칠 수 있음). '수동'은 예수금·금처럼 금액만 관리하는 줄
+  if ('시세방식' in t.col) set('시세방식', ticker ? '자동(구글)' : '거래가');
 
   if (totalIdx > 0) {
     const tr2 = row + 1;

@@ -1668,3 +1668,10 @@ button.cm-sr:active { background: var(--fill); }
 
 #fDelGo { width: 100%; }
 
+
+/* 추가·삭제 탭 (2026-11-03) */
+.seg.ad-seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+.seg.ad-what { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; }
+.seg.ad-cur { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+.seg.ad-seg button, .seg.ad-what button, .seg.ad-cur button { padding-left: 0; padding-right: 0; }
+.pre-buy { display: inline-block; font-size: 11px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 6px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }
