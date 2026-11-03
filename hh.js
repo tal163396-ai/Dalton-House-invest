@@ -132,8 +132,6 @@
   // 투자 앱 연결 표시: 'ISA 입금', 'TIGER … 3주 매수'
   const INV_OLD_UNTIL = '2026-10';   // 이 달까지의 월별 투자 원금은 편한가계부 기준 (11월부터 증권사 기준)
   const INV_KEEP = '기존';   // 이미 투자 앱에 반영된 이체: 연결 표시만, 투자 앱 숫자는 그대로
-  // 투자 계좌 이체에서 '연결 안 함'일 때 경고 (같은 돈이 가계부·투자 앱에 함께 잡힘)
-  const INV_NONE_WARN = "⚠️ 투자 앱에 기록되지 않습니다.<br>투자 계좌의 돈이 실제로 움직였다면 '예수금 입금·출금'을 고르십시오.<br>그대로 저장하면 같은 돈이 가계부와 투자 앱에 함께 잡혀 순자산이 틀어집니다.";
   const invLabel = (t, opts) => {
     if (!t.invType) return '';
     if (t.invType === INV_KEEP) return '이미 반영됨 (기록만 연결)';
@@ -1488,15 +1486,17 @@
       rdate: rule ? (ruleNext(rule) || ruleAnchor(rule)) : (opts.date || today()),
       day: rule ? rule.day : +(opts.date || today()).slice(8, 10),
       start: rule ? rule.start : ymOf(new Date()), end: rule ? ruleEnd(rule) : '',
-      // 투자 앱 연결: null = 아직 안 고름, { type: '' } = 연결 안 함
+      // 투자 앱 연결: null = 아직 안 고름, { type: '' } = 연결 없음 (예전 기록에만 남아 있음, 새로 고를 수 없음)
       inv: (() => {
         const x = e || rule || opts.copy;
         if (x && x.type === '수정') return x.invType === '비용' ? { type: '비용', acct: x.invAcct, sub: x.invSub, qty: '', price: '' } : null;
         if (!x || x.type !== '이체') return null;
         if (x.invType) return { type: x.invType, acct: x.invAcct, sub: x.invSub, qty: x.invQty || '', price: x.invPrice || '' };
-        return { type: '' };
+        return e && (H.inv.has(x.to) || H.inv.has(x.asset)) ? { type: '' } : null;
       })(),
     };
+    // 연결 없이 저장된 예전 투자 계좌 이체: 다시 열어도 그대로 저장할 수 있게 둠 (복사·반복·새 내역은 반드시 골라야 함)
+    const legacyNone = !!(f.inv && f.inv.type === '');
     const invDir = () => (f.type !== '이체' ? '' : H.inv.has(f.to) ? 'in' : H.inv.has(f.asset) ? 'out' : '');
     const invOk = () => {
       const d = invDir();
@@ -1525,7 +1525,7 @@
       const num4 = v => Number(v).toLocaleString('ko-KR', { maximumFractionDigits: 4 });
       const pShow = () => (!f.inv || !f.inv.price ? '' : usd && pK() ? num4(f.inv.pk || Math.round(f.inv.price * rt())) : num4(f.inv.price));
       const pPh = () => (usd && pK() ? (f.amt && f.inv && f.inv.qty > 0 ? num4(Math.round(Math.abs(f.amt) / f.inv.qty)) : '비우면 금액 ÷ 수량') : item && item.price ? num4(item.price) : '0');
-      const invTxt = !f.inv ? '계좌 고르기' : !f.inv.type ? '연결 안 함' : invLabel({ invType: f.inv.type, invAcct: f.inv.acct, invSub: f.inv.sub }, io);
+      const invTxt = !f.inv ? '계좌 고르기' : !f.inv.type ? '연결 안 함 (예전 기록)' : invLabel({ invType: f.inv.type, invAcct: f.inv.acct, invSub: f.inv.sub }, io);
       root.dataset.type = { 수입: 'in', 지출: 'out', 이체: 'tr', 수정: 'adj' }[f.type];
       $('.hh-ph h2', pg).textContent = isRule ? title : e ? '내역 수정' : f.type;
       root.innerHTML = `
@@ -1559,8 +1559,8 @@
           ${trade ? `<div class="hf-row"><span class="hf-l">수량</span><div class="hf-v"><input id="hfQty" class="dec" type="text" inputmode="decimal" autocomplete="off" placeholder="0" value="${f.inv.qty ? Number(f.inv.qty).toLocaleString('ko-KR', { maximumFractionDigits: 8 }) : ''}"><span class="hf-unit">${item ? item.unit : ''}</span></div></div>
           <div class="hf-row"><span class="hf-l">단가</span><div class="hf-v"><input id="hfPrice" class="dec" type="text" inputmode="decimal" autocomplete="off" data-krw="${usd && pK() ? 1 : 0}" placeholder="${pPh()}" value="${pShow()}">${usd ? `<button type="button" class="hf-unit pcur-btn" id="hfPcur" aria-label="단가 통화 바꾸기">${pK() ? '원' : '달러'} ⇄</button>` : '<span class="hf-unit">원</span>'}</div></div>
           ${usd && pK() ? `<p class="hf-info">원화로 산 단가입니다. 평단은 환율 ${fmt(D.rate ? D.rate() || 0 : 0)}원으로 달러 환산해 기록합니다.</p>` : ''}` : ''}
-          <p class="hf-info">${!f.inv ? `투자 계좌${dir === 'in' ? '로 보내는' : '에서 찾는'} 이체입니다. 투자 앱의 어느 계좌${dir === 'in' ? '에 들어가는지' : '에서 나오는지'} 고르십시오.<br>투자 앱에 따로 적을 거면 '연결 안 함'을 고르십시오.`
-            : !f.inv.type ? `<span class="hf-warn">${INV_NONE_WARN}</span>`
+          <p class="hf-info">${!f.inv ? `투자 계좌${dir === 'in' ? '로 보내는' : '에서 찾는'} 이체입니다. 투자 앱의 어느 계좌${dir === 'in' ? '에 들어가는지' : '에서 나오는지'} 고르십시오.${isRule ? '' : "<br>이미 원금에 들어간 이체라면 '이미 반영됨'을 고르십시오."}`
+            : !f.inv.type ? '예전에 연결 없이 저장된 내역입니다. 그대로 두면 투자 앱 숫자는 바뀌지 않습니다.'
             : f.inv.type === INV_KEEP ? '이미 투자 앱 원금에 들어간 이체로 표시만 합니다. 투자 앱 숫자는 바뀌지 않습니다.'
             : `${isRule ? '매달 자동으로 들어갈 때 투자 앱에도 같은 금액으로 기록됩니다.' : '저장하면 투자 앱에도 같은 금액으로 기록됩니다.'}${item && f.inv.type === '매도' ? `<br>지금 보유 ${item.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}주` : ''}${trade ? `<br>금액은 투자 앱의 실제 원화 금액(원금)으로 들어갑니다.` : ''}`}</p>` : ''}
         <div class="hf-row"><span class="hf-l">내용</span><div class="hf-v"><textarea id="hfText" class="hf-text" rows="1" maxlength="200" autocomplete="off" enterkeyhint="done" placeholder="${tr ? '예: 생활비 이체' : '예: 점심'}">${esc(f.text)}</textarea></div></div>
@@ -1766,7 +1766,7 @@
             ${(o.manual || []).length ? `<div class="pk-g">원금 ${dir === 'in' ? '추가' : '빼기'} <small>금액만 직접 관리하는 항목 · 원금과 평가금이 함께 바뀜</small></div><div class="pk-list">${o.manual.map(x => btn(inT, x.asset, x.sub, x.label, `${x.kind} · 원금 ${won(x.cost)}`)).join('')}</div>` : ''}
             ${items.length ? `<div class="pk-g">바로 ${trT} <small>예수금 없이 사고파는 종목 · 수량·단가 입력</small></div><div class="pk-list">${items.map(x => btn(trT, x.asset, x.sub, x.label, `${x.kind} · 보유 ${x.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${x.unit || ''}`)).join('')}</div>` : ''}
             <div class="pk-list">${isRule ? '' : `<button class="pk-inv ${cur.type === '기존' ? 'on' : ''}" data-ty="기존" data-a="" data-s=""><span>이미 반영됨 (기록만 연결)</span><small>투자 앱 숫자는 그대로 · 10/27 이전처럼 이미 원금에 들어간 이체</small></button>`}
-              <button class="pk-inv none ${f.inv && !f.inv.type ? 'on' : ''}" data-ty="" data-a="" data-s=""><span>연결 안 함</span><small>투자 앱에 따로 적거나 기록하지 않을 때</small></button></div>
+              ${legacyNone ? `<button class="pk-inv none ${f.inv && !f.inv.type ? 'on' : ''}" data-ty="" data-a="" data-s=""><span>연결 안 함 (예전 기록)</span><small>예전에 연결 없이 저장된 그대로 둠</small></button>` : ''}</div>
           </div>`;
         $$('[data-ty]', box).forEach(b => b.onclick = () => {
           const ty = b.dataset.ty;
@@ -1774,8 +1774,6 @@
           f.inv = ty ? { type: ty, acct: b.dataset.a, sub: b.dataset.s, qty: keep ? f.inv.qty : '', price: keep ? f.inv.price : '' } : { type: '' };
           done(null);
           if (ty === '매수' || ty === '매도') setTimeout(() => { const q = $('#hfQty', root); if (q && !q.value) q.focus(); }, 280);
-          // '연결 안 함'을 고르면 빨간 경고 창 (확인을 눌러야 닫힘)
-          if (!ty && !isRule) setTimeout(() => D.openSheet(`<div class="ask warn-pop"><h2 id="sheetTitle">투자 앱과 연결하지 않습니다</h2><p class="warn-box">${INV_NONE_WARN}</p><div class="sheet-actions"><button class="btn primary" data-close>확인</button></div></div>`, 'pop'), 300);
         });
         $('#pkX', box).onclick = () => back();
         return;
@@ -1829,7 +1827,7 @@
         if (!f.to) return fail('입금 자산을 고르십시오.');
         if (f.asset === f.to) return fail('출금·입금 자산이 같습니다.');
         if (invDir()) {
-          if (!f.inv) return fail('투자 앱 계좌를 고르십시오. 기록하지 않으려면 연결 안 함을 고르십시오.');
+          if (!f.inv || (!f.inv.type && !legacyNone)) return fail('투자 앱 계좌를 고르십시오. 이미 원금에 들어간 이체라면 이미 반영됨을 고르십시오.');
           if (f.inv.type === '매수' || f.inv.type === '매도') {
             if (!(f.inv.qty > 0)) return fail('수량을 입력하십시오.');
             if (!(f.inv.price > 0)) return fail('단가를 입력하십시오.');

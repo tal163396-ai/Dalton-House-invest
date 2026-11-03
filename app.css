@@ -1668,5 +1668,3 @@ button.cm-sr:active { background: var(--fill); }
 
 #fDelGo { width: 100%; }
 
-.hf-warn { display: block; background: color-mix(in srgb, var(--exp, #F04452) 16%, transparent); color: var(--exp, #F04452); border-radius: 10px; padding: 9px 12px; font-weight: 600; line-height: 1.55; }
-.warn-pop .warn-box { background: color-mix(in srgb, var(--exp, #F04452) 16%, transparent); color: var(--exp, #F04452); border: 1px solid color-mix(in srgb, var(--exp, #F04452) 45%, transparent); border-radius: 14px; padding: 12px 14px; font-weight: 600; line-height: 1.6; margin: 10px 0 0; }
