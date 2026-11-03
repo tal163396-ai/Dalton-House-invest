@@ -1700,6 +1700,42 @@
   const rowKey = r => `${r.asset}|${r.sub}`;
   const findRow = key => state.data.rows.find(r => rowKey(r) === key);
 
+  // 종목·자산·분류 삭제: 고르기 → 미리보기(영향·막는 이유) → 삭제
+  function openHoldDel(cur) {
+    if (!cur) return;
+    const D = state.data;
+    const nAsset = D.rows.filter(r => r.asset === cur.asset).length;
+    const kindAssets = [...new Set(D.rows.filter(r => r.kind === cur.kind).map(r => r.asset))];
+    const opts = [{ scope: 'sub', label: `이 종목만: ${cur.sub}` }];
+    if (nAsset > 1) opts.push({ scope: 'asset', label: `자산 전체: ${cur.asset} (${nAsset}줄)` });
+    if (cur.kind !== '현금' && (kindAssets.length > 1 || nAsset > 1)) opts.push({ scope: 'kind', label: `분류 전체: ${cur.kind} (자산 ${kindAssets.length}개)` });
+    const go = async o => {
+      const req = { scope: o.scope, asset: cur.asset, sub: cur.sub, kind: cur.kind };
+      openSheet('<div class="ask"><h2 id="sheetTitle">확인 중…</h2><p class="note ask-note">지울 내용을 확인하고 있습니다.</p></div>', 'pop');
+      let p; try { p = await api('holdDel', { ...req, dry: true }); } catch (e) { toast(`확인 실패: ${e.message}`, true); closeSheet(); return; }
+      const held = p.rows.some(x => x.qty > 0 || x.cost !== 0);
+      const warns = [
+        held ? `보유 중인 종목이 있습니다. <b>팔았다면 지우지 말고 '매도'로 기록</b>하십시오. 지우면 원금 ${won(p.cost)}이 장부에서 빠지고, 이번 달 월 마감에 기타 보정으로 잡힙니다.` : '',
+        p.trades ? `거래기록 ${p.trades}건은 남지만, 지운 뒤에는 그 기록을 고치거나 지울 수 없습니다.` : '',
+        p.hh ? `가계부 투자 연결 내역 ${p.hh}건은 남지만, 금액·투자 연결을 고치거나 지울 수 없게 됩니다.` : '',
+      ].filter(Boolean);
+      const list = p.rows.map(x => `<li>${esc(x.asset === x.sub ? x.sub : `${x.asset} · ${x.sub}`)} <span class="num">${won(x.cost)}</span></li>`).join('');
+      openSheet(`<div class="ask"><h2 id="sheetTitle">${p.blockers.length ? '지울 수 없습니다' : `${p.rows.length}줄을 지울까요?`}</h2>
+        ${p.blockers.length ? `<p class="note ask-note">${p.blockers.map(esc).join('<br>')}</p><div class="sheet-actions"><button class="btn" data-close>닫기</button></div>`
+          : `<ul class="del-list">${list}</ul>${warns.map(w => `<p class="note ask-note del-warn">${w}</p>`).join('')}
+            <div class="sheet-actions two"><button class="btn" data-close>취소</button><button class="btn danger" id="hdOk">삭제</button></div>`}</div>`, 'pop');
+      const okb = $('#hdOk'); if (okb) okb.onclick = async () => {
+        okb.disabled = true; okb.textContent = '지우는 중…';
+        try { const r = await api('holdDel', req); closeSheet(); F_reset(); await load({ quiet: true }); toast(r.message); }
+        catch (e) { okb.disabled = false; okb.textContent = '삭제'; toast(`삭제 실패: ${e.message}`, true); }
+      };
+    };
+    if (opts.length === 1) { go(opts[0]); return; }
+    openSheet(`<h2 id="sheetTitle">무엇을 지울까요?</h2><div class="pick-list">${opts.map((o, i) => `<button class="pick-i" data-hd="${i}"><span>${esc(o.label)}</span></button>`).join('')}</div>`);
+    $$('#sheet [data-hd]').forEach(b => b.onclick = () => go(opts[Number(b.dataset.hd)]));
+  }
+  const F_reset = () => { state.form.key = ''; };
+
   // 달러 종목 단가 통화: 종목마다 기억 (원화로 사는 종목이 많음)
   // 새 자산을 살 때 고를 수 있는 예수금: 원화 예수금 줄 (원금을 그 줄에서 관리하는 것만)
   const linkCash = () => (state.data ? state.data.rows.filter(r => /예수금/.test(r.sub) && (r.cur !== 'USD' || r.kind === '현금')) : []);
@@ -1748,7 +1784,8 @@
           <div class="seg pnl-seg" role="group"><button type="button" data-pnl="1" class="${F.pnl !== false ? 'on' : ''}">기타 손익으로 기록</button><button type="button" data-pnl="0" class="${F.pnl === false ? 'on' : ''}">원금만 맞춤</button></div></div>
           <p class="preview num" id="fPnlHint"></p>` : ''}`}
         <p class="form-error" id="fErr" role="alert"></p>
-        <button class="btn primary" id="fSubmit">저장하기</button>`;
+        <button class="btn primary" id="fSubmit">저장하기</button>
+        ${cur ? '<button class="btn danger-line del-hold" id="fDelHold">삭제…</button>' : ''}`;
     } else if (F.type === '입금' || F.type === '출금') {
       // 돈을 넣고 뺄 수 있는 계좌 = 예수금 줄이 있는 자산
       const accts = [...new Set(D.rows.filter(isCashRow).map(r => r.asset))].map(a => ({ a, kind: D.rows.find(r => r.asset === a).kind }));
@@ -1946,6 +1983,7 @@
     $$('[data-pnl]', el).forEach(b => b.onclick = () => { F.pnl = b.dataset.pnl === '1'; $$('[data-pnl]', el).forEach(x => x.classList.toggle('on', x === b)); pnlUpd(); });
     on('#fValue', 'input', pnlUpd);
     on('#fSubmit', 'click', submitForm);
+    on('#fDelHold', 'click', () => openHoldDel(findRow(F.key)));
     bindMonthClose(el);
     bindMoney(el);
   }

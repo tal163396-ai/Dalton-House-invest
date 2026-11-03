@@ -121,7 +121,26 @@ test('티커 없는 새 종목 · 시세 못 불러온 새 종목', () => {
   ok(!r.warn, '티커 없으면 경고 없음');
   // 가짜 시트는 GOOGLEFINANCE 를 계산하지 않음 → 시세를 못 불러온 경우와 같음
   r = t.call({ action: 'trade', trade: { type: '매수', asset: '시세없음', sub: '시세없음', ticker: 'ZZZZ', currency: 'USD', kind: '메인투자', qty: 1, price: 10, date: '2026-11-03T09:00:00+09:00' } });
-  ok(r.ok && /시세를 불러오지 못했습니다/.test(r.warn || ''), '시세 없으면 저장은 되고 경고', r.warn || r.error);
+  ok(r.ok && /티커 'ZZZZ'/.test(r.warn || ''), '시세 없으면 저장은 되고 경고', r.warn || r.error);
+});
+
+test('종목·자산·분류 삭제', () => {
+  const t = fresh();
+  let p = t.call({ action: 'holdDel', dry: true, scope: 'sub', asset: 'ISA', sub: 'ISA 예수금' });
+  ok(p.ok && p.blockers.length && /쓰고 있어/.test(p.blockers[0]), '종목이 남은 계좌의 예수금만 지우기 막힘', JSON.stringify(p.blockers));
+  p = t.call({ action: 'holdDel', dry: true, scope: 'asset', asset: '예수금' });
+  ok(p.blockers.length > 0, '공용 예수금 지우기 막힘');
+  p = t.call({ action: 'holdDel', dry: true, scope: 'kind', kind: '현금' });
+  ok(p.blockers.some(b => /현금/.test(b)), "'현금' 분류 막힘");
+  p = t.call({ action: 'holdDel', dry: true, scope: 'sub', asset: 'QLD', sub: 'QLD' });
+  ok(p.ok && !p.blockers.length && p.rows.length === 1 && p.cost === 1100000, '미리보기', JSON.stringify(p));
+  let r = t.call({ action: 'holdDel', scope: 'sub', asset: 'QLD', sub: 'QLD' });
+  ok(r.ok && !t.row('QLD'), '종목 삭제', r.error);
+  r = t.call({ action: 'holdDel', scope: 'asset', asset: 'ISA' });
+  ok(r.ok && !t.row('ISA'), '자산(종목+예수금) 통째 삭제', r.error);
+  t.call({ action: 'trade', trade: { type: '매수', asset: '새 계좌', sub: '새 종목', kind: '테스트분류', qty: 1, price: 1000, date: '2026-11-03T09:00:00+09:00', cashLink: { asset: '예수금', sub: '메인 계좌 예수금' } } });
+  r = t.call({ action: 'holdDel', scope: 'kind', kind: '테스트분류' });
+  ok(r.ok && !t.row('새 계좌') && !/새 계좌/.test(t.G.__props.CASH_LINKS || ''), '분류 삭제 + 예수금 연결 정리', r.error);
 });
 
 console.log(`\n${fail ? `✗ 실패 ${fail}건` : '모두 통과'} (확인 ${pass + fail}건)`);

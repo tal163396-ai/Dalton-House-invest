@@ -175,6 +175,7 @@ function doPost(e) {
       case 'month':  return json_(withLock_(() => saveMonth_(req.month)));
       case 'tradeDel':  return json_(withLock_(() => tradeDel_(req)));
       case 'tradeEdit': return json_(withLock_(() => tradeEdit_(req)));
+      case 'holdDel':   return json_(req.dry ? holdDelPlan_(req) : withLock_(() => holdDel_(req)));
       case 'hh':        renameOnce_(); usdOnce_(); return json_({ ok: true, hh: readHH_() });
       case 'hhSave':    return json_(withLock_(() => hhSave_(req)));
       case 'hhDel':     return json_(withLock_(() => hhDel_(req)));
@@ -253,6 +254,26 @@ function applyLiveQuotes_(rows) {
     o['시세출처'] = q.src + ' 실시간';
   });
   return rows;
+}
+
+/** 새 종목 티커 확인: 'ok' | 'bad'(없는 티커) | 'pending'(아직 모름)
+ *  국내(KRX:) = 네이버에 바로 물어봄. 해외 = 구글 시세 칸을 최대 3번(약 4초) 다시 읽음 — 처음 몇 초 늦게 들어오는 경우 때문 */
+function quoteCheck_(tk, row) {
+  const m = tk.match(/^KRX:(\w{6})$/i);
+  if (m) {
+    try {
+      const r = UrlFetchApp.fetch(`https://polling.finance.naver.com/api/realtime/domestic/stock/${m[1]}`, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (r.getResponseCode() === 200) return parseNaver_(r.getContentText()) > 0 ? 'ok' : 'bad';
+    } catch (e) { /* 아래 구글 시세로 */ }
+  }
+  for (let i = 0; i < 3; i++) {
+    SpreadsheetApp.flush();
+    const h = holdings_(), raw = h.values[row] ? h.values[row][h.col['현재가']] : '';
+    if (num_(raw) > 0) return 'ok';
+    if (/#N\/A|#ERROR|#REF|#VALUE/i.test(String(raw))) return 'bad';
+    if (i < 2) Utilities.sleep(1500);
+  }
+  return 'pending';
 }
 
 function parseNaver_(text) {
@@ -421,11 +442,9 @@ function recordTrade_(tr) {
   let warn = '';
   if (newRow >= 0) {
     const tk = String(tr.ticker || '').trim();
-    if (tk) {
-      SpreadsheetApp.flush();
-      const h = holdings_(), p = num_(h.values[newRow] && h.values[newRow][h.col['현재가']]);
-      if (!(p > 0)) warn = `티커 '${tk}'로 시세를 불러오지 못했습니다. 티커가 맞는지 확인하십시오. 맞다면 몇 분 뒤 시세가 들어옵니다. 계속 안 되면 '수정'에서 티커를 고치십시오.`;
-    }
+    const st = tk ? quoteCheck_(tk, newRow) : 'ok';
+    if (st === 'bad') warn = `티커 '${tk}'를 찾지 못했습니다. 저장은 됐지만 시세가 들어오지 않습니다. '수정'에서 티커를 고치십시오.`;
+    else if (st === 'pending') warn = `티커 '${tk}'의 시세가 아직 들어오지 않았습니다. 몇 분 뒤 보유자산에서 확인하십시오. 계속 0원이면 '수정'에서 티커를 고치십시오.`;
   }
   return { ok: true, message: `${asset} ${type} 기록 완료`, amountKrw, realized, warn };
 }
@@ -479,6 +498,74 @@ function setManual_(m) {
     }
   }
   return { ok: true, message: '저장했습니다' };
+}
+
+/* ───────────────────────── 종목·자산·분류 삭제 (2026-11-03) ─────────────────────────
+ * req = { scope: 'sub' | 'asset' | 'kind', asset, sub, kind, dry }
+ * dry = 지우기 전 영향 미리보기 (지울 줄, 원금 합계, 연결된 거래기록·가계부 수, 막는 이유)
+ * 막는 경우: '현금' 분류, 다른 자산이 쓰는 공용 예수금, 종목이 남아 있는 계좌의 예수금만 지우기
+ * 지워도 거래기록·실현손익·가계부 내역은 기록으로 남음 (그 기록을 나중에 고치거나 지우면 줄을 못 찾아 거절됨) */
+function holdDelPlan_(req) {
+  const t = holdings_(), scope = String(req.scope || 'sub');
+  const A = String(req.asset || '').trim(), S = String(req.sub || '').trim(), K = String(req.kind || '').trim();
+  const v = (r, h) => t.values[r][t.col[h]];
+  const rows = [];
+  for (let r = 1; r < t.values.length; r++) {
+    const a = String(v(r, '자산')).trim(), sb = String(v(r, '세부종목')).trim(), k = String(v(r, '종류')).trim();
+    if (!a || a === '합계') continue;
+    if ((scope === 'sub' && a === A && sb === S) || (scope === 'asset' && a === A) || (scope === 'kind' && k === K)) rows.push(r);
+  }
+  const blockers = [];
+  if (!rows.length) blockers.push('지울 항목을 찾지 못했습니다. 새로고침 후 다시 하십시오.');
+  if (scope === 'kind' && K === '현금') blockers.push("'현금' 분류는 지울 수 없습니다.");
+  const gone = new Set(rows.map(r => `${String(v(r, '자산')).trim()}|${String(v(r, '세부종목')).trim()}`));
+  const goneAssets = new Set(rows.map(r => String(v(r, '자산')).trim()));
+  // 남는 자산들이 쓰는 예수금 줄은 못 지움
+  const users = {};
+  const assetsLeft = new Set();
+  for (let r = 1; r < t.values.length; r++) { const a = String(v(r, '자산')).trim(); if (a && a !== '합계' && !rows.includes(r)) assetsLeft.add(a); }
+  const allAssets = new Set([...assetsLeft, ...goneAssets]);
+  allAssets.forEach(a => {
+    const c = cashOf_(a); if (c.mode === 'none') return;
+    const key = `${c.mode === 'internal' ? a : c.asset}|${c.sub}`;
+    if (!gone.has(key)) return;
+    // 그 자산의 '예수금이 아닌' 줄이 남아 있으면 막음
+    const stillUses = c.mode === 'internal'
+      ? t.values.some((x, r) => r > 0 && !rows.includes(r) && String(x[t.col['자산']]).trim() === a && String(x[t.col['세부종목']]).trim() !== c.sub)
+      : assetsLeft.has(a) && a !== c.asset;
+    if (stillUses) (users[key] = users[key] || []).push(a);
+  });
+  Object.keys(users).forEach(k => blockers.push(`예수금 '${k.split('|')[1]}'은(는) ${users[k].join(', ')}이(가) 쓰고 있어 지울 수 없습니다.`));
+  // 연결된 기록 수
+  let trades = 0, hh = 0;
+  const lt = table_('거래기록');
+  for (let r = 1; r < lt.values.length; r++) if (gone.has(`${String(lt.values[r][lt.col['자산']]).trim()}|${String(lt.values[r][lt.col['세부종목']]).trim()}`)) trades++;
+  const hs = SpreadsheetApp.getActive().getSheetByName('가계부');
+  if (hs && hs.getLastRow() > 1) {
+    const hv = hs.getDataRange().getValues(), hh0 = hv[0].map(String), ia = hh0.indexOf('투자계좌'), is = hh0.indexOf('투자종목'), it = hh0.indexOf('투자구분');
+    if (ia >= 0) for (let r = 1; r < hv.length; r++) {
+      const ty = String(hv[r][it] || '').trim(); if (!ty || ty === '기존') continue;
+      const a = String(hv[r][ia]).trim(), sb = String(hv[r][is] || hv[r][ia]).trim();
+      if (gone.has(`${a}|${sb}`) || (scope !== 'sub' && goneAssets.has(a))) hh++;
+    }
+  }
+  const list = rows.map(r => ({ asset: String(v(r, '자산')).trim(), sub: String(v(r, '세부종목')).trim(), qty: num_(v(r, '수량')), cost: Math.round(num_(v(r, '원금(원)'))) }));
+  return { ok: true, rows: list, cost: list.reduce((x, o) => x + o.cost, 0), trades, hh, blockers };
+}
+function holdDel_(req) {
+  const plan = holdDelPlan_(req);
+  if (plan.blockers.length) throw new Error(plan.blockers[0]);
+  const t = holdings_();
+  const keys = new Set(plan.rows.map(o => `${o.asset}|${o.sub}`));
+  const del = [];
+  for (let r = 1; r < t.values.length; r++) if (keys.has(`${String(t.values[r][t.col['자산']]).trim()}|${String(t.values[r][t.col['세부종목']]).trim()}`)) del.push(r + 1);
+  del.sort((a, b) => b - a).forEach(row => t.sh.deleteRow(row));
+  // 자산이 통째로 없어졌으면 새 종목 예수금 연결(CASH_LINKS)도 정리
+  const left = new Set(holdings_().values.slice(1).map(x => String(x[0]).trim()));
+  const links = cashLinks_(); let changed = false;
+  Object.keys(links).forEach(a => { if (!left.has(a)) { delete links[a]; changed = true; } });
+  if (changed) PropertiesService.getScriptProperties().setProperty('CASH_LINKS', JSON.stringify(links));
+  return { ok: true, message: `${plan.rows.length}줄을 지웠습니다`, removed: plan.rows.length };
 }
 
 /* ───────────────────────── 보유현황 도우미 ───────────────────────── */

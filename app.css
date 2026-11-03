@@ -1660,3 +1660,8 @@ button.cm-sr:active { background: var(--fill); }
 .pick-head h2 { margin: 0; }
 
 #fAssetLbl .sub { font-weight: 500; color: var(--ink-3); font-size: .85em; }
+
+.del-hold { width: 100%; margin-top: 10px; }
+.del-list { margin: 6px 0 4px; padding-left: 18px; font-size: 14.5px; line-height: 1.7; }
+.del-list .num { color: var(--ink-3); margin-left: 6px; }
+.del-warn { text-align: left; }
