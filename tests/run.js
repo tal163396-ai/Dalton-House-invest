@@ -172,6 +172,9 @@ test('분류·자산·예수금·종목 추가 (매수 없이)', () => {
   r = add({ what: 'cash', asset: '빈 계좌', sub: '빈 계좌 예수금', cur: 'KRW' });
   ok(r.ok && t.row('빈 계좌', '빈 계좌 예수금'), '연결 없는 자산에 예수금 추가', r.error);
   ok(!add({ what: 'cash', asset: '키움 계좌', sub: '두번째 예수금' }).ok, '예수금 연결은 바꿀 수 없음');
+  add({ what: 'asset', kind: '연금', asset: '이름 계좌', link: { type: 'none' } });
+  r = add({ what: 'cash', asset: '이름 계좌', sub: '아라람코', cur: 'KRW' });
+  ok(r.ok && t.row('이름 계좌', '아라람코 예수금'), "이름에 '예수금' 자동으로 붙음", r.error);
   // 종목: 수량 0, 티커 없음 = 거래가
   r = add({ what: 'sub', asset: '키움 계좌', sub: '아람코', cur: 'KRW' });
   const ar = t.row('키움 계좌', '아람코');

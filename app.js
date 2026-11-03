@@ -1739,6 +1739,8 @@
   /* ───────────── 추가·삭제 탭 → 추가 (2026-11-03): 분류 · 자산(계좌) · 예수금 · 종목을 매수 없이 만들기 ─────────────
    * 자산의 예수금 연결은 자산을 추가할 때 한 번 정하고 바꾸지 않음. 종목은 수량 0으로 생기고 첫 매수 때 채워짐 */
   // 기본 예수금 이름: '키움 계좌' → '키움 예수금'
+  // 예수금 이름에 '예수금'이 없으면 끝에 붙임 (앱이 '예수금' 글자로 예수금 줄을 알아봄)
+  const withCash = v => (/예수금/.test(v) ? v : `${v} 예수금`);
   const cashDefault = a => `${String(a || '계좌').replace(/\s*계좌$/, '') || a} 예수금`;
   const AD_WHAT = { kind: '분류', asset: '자산(계좌)', cash: '예수금', sub: '종목' };
   const adSeg = () => { const F = state.form; return `<div class="seg ad-seg" role="group" aria-label="추가 또는 삭제"><button type="button" data-ad="add" class="${F.adMode !== 'del' ? 'on' : ''}">추가</button><button type="button" data-ad="del" class="${F.adMode === 'del' ? 'on' : ''}">삭제</button></div>`; };
@@ -1759,7 +1761,7 @@
       f = `${pick('aKindBtn', '분류', '어느 분류에 넣을까요', F.aKind)}
         <label class="field"><span>자산(계좌) 이름</span><input id="aAssetName" maxlength="40" autocomplete="off" placeholder="예: 키움 계좌, 나예 주식(NH증권)" value="${esc(F.aAssetName || '')}"></label>
         ${pick('aLinkBtn', '예수금', '종목을 사면 빠지는 돈 · 나중에 바꿀 수 없음', l ? aLinkText(l) : '')}
-        ${l && l.type === 'own' ? `<label class="field"><span>새 예수금 이름</span><input id="aCashName" maxlength="40" autocomplete="off" placeholder="${esc(cashDefault(F.aAssetName))}" value="${esc(F.aCashName || '')}"></label>${curSeg()}` : ''}
+        ${l && l.type === 'own' ? `<label class="field"><span>새 예수금 이름</span><input id="aCashName" maxlength="40" autocomplete="off" placeholder="${esc(cashDefault(F.aAssetName))}" value="${esc(F.aCashName || '')}"></label><p class="note ad-note">이름 끝에 '예수금'이 없으면 자동으로 붙습니다.</p>${curSeg()}` : ''}
         <p class="help">${!l ? '같은 증권 계좌의 종목은 한 자산으로 모입니다.<br>새 증권 계좌라면 \'이 계좌에 새 예수금 만들기\'를 고르십시오.'
           : l.type === 'own' ? '예수금은 0원에서 시작합니다.<br>돈은 가계부 이체에서<br>\'예수금 입금\'으로 넣으십시오.'
           : l.type === 'none' ? '예수금과 연결하지 않습니다.<br>가계부 이체에서 \'바로 매수\'로 사는 종목용입니다. (TIGER처럼)'
@@ -1769,6 +1771,7 @@
       if (!ok.includes(F.aCashAsset)) F.aCashAsset = '';
       f = ok.length ? `${pick('aCashAssetBtn', '자산(계좌)', '예수금이 없는 자산만 나옵니다', F.aCashAsset)}
         <label class="field"><span>예수금 이름</span><input id="aCashName" maxlength="40" autocomplete="off" placeholder="${esc(cashDefault(F.aCashAsset))}" value="${esc(F.aCashName || '')}"></label>
+        <p class="note ad-note">이름 끝에 '예수금'이 없으면 자동으로 붙습니다.</p>
         ${curSeg()}
         <p class="help">이 자산의 종목을 사면 이 예수금에서 빠지고,<br>팔면 들어옵니다.<br>0원에서 시작하니 돈은 가계부 이체<br>'예수금 입금'으로 넣으십시오.<br>한 번 만들면 연결은 바꿀 수 없습니다.</p>`
         : `<p class="help">예수금을 붙일 수 있는 자산이 없습니다.<br>(이미 예수금과 연결됐거나 보유 종목이 있는 자산)<br>새 계좌라면 '자산(계좌)'을 추가하면서 예수금을 함께 만드십시오.</p>`;
@@ -1837,13 +1840,12 @@
         if (assetsOfKind(F.aKind).includes(a) || D.rows.some(r => r.asset === a) || shellsOf().assets.some(x => x.asset === a)) return fail(`'${a}' 자산이 이미 있습니다.`);
         if (!F.aLink) return fail('예수금을 고르십시오.');
         const link = F.aLink.type === 'own' ? { type: 'own', sub: (F.aCashName || '').trim() || cashDefault(a), cur: F.aCur === 'USD' ? 'USD' : 'KRW' } : F.aLink;
-        if (link.type === 'own' && !/예수금/.test(link.sub)) return fail("예수금 이름에 '예수금'을 넣으십시오. (예: 키움 예수금)");
+        if (link.type === 'own') link.sub = withCash(link.sub);
         req = { what: 'asset', kind: F.aKind, asset: a, link };
       } else if (F.aWhat === 'cash') {
         if (!F.aCashAsset) return fail('자산(계좌)을 고르십시오.');
         const sub = (F.aCashName || '').trim() || cashDefault(F.aCashAsset);
-        if (!/예수금/.test(sub)) return fail("예수금 이름에 '예수금'을 넣으십시오. (예: 키움 예수금)");
-        req = { what: 'cash', asset: F.aCashAsset, sub, cur: F.aCur === 'USD' ? 'USD' : 'KRW' };
+        req = { what: 'cash', asset: F.aCashAsset, sub: withCash(sub), cur: F.aCur === 'USD' ? 'USD' : 'KRW' };
       } else {
         const sub = (F.aSubName || '').trim(), tk = (F.aTicker || '').trim().toUpperCase().replace(/^([0-9][0-9A-Z]{5})$/, 'KRX:$1');
         if (!F.aSubAsset) return fail('자산(계좌)을 고르십시오.');

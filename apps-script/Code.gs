@@ -639,8 +639,9 @@ function holdAdd_(req) {
       if (r < 0 || !/예수금/.test(ls)) throw new Error(`예수금 '${ls}'을 찾지 못했습니다`);
       setCashLink_(a, { asset: la, sub: ls });
     } else if (link.type === 'own') {
-      const ls = name(link.sub, 60), cur = link.cur === 'USD' ? 'USD' : 'KRW';
-      if (!/예수금/.test(ls)) throw new Error("예수금 이름에 '예수금'을 넣으십시오 (예: 키움 예수금)");
+      let ls = name(link.sub, 60); const cur = link.cur === 'USD' ? 'USD' : 'KRW';
+      if (!ls) throw new Error('예수금 이름을 적으십시오');
+      if (!/예수금/.test(ls)) ls = `${ls} 예수금`;   // 앱이 '예수금' 글자로 예수금 줄을 알아봄
       sh.assets[a] = k; saveShells_(sh);
       addCashRow_(t, a, k, ls, cur);
       setCashLink_(a, { asset: a, sub: ls });
@@ -650,12 +651,12 @@ function holdAdd_(req) {
     return { ok: true, message: `자산 '${a}'를 추가했습니다` };
   }
   if (what === 'cash') {
-    const a = name(req.asset, 80), ls = name(req.sub, 60), cur = req.cur === 'USD' ? 'USD' : 'KRW';
+    const a = name(req.asset, 80), cur = req.cur === 'USD' ? 'USD' : 'KRW';
+    let ls = name(req.sub, 60); if (!ls) throw new Error('예수금 이름을 적으십시오'); if (!/예수금/.test(ls)) ls = `${ls} 예수금`;
     const k = kindOfAsset_(t, a);
     if (!a || !k) throw new Error('자산(계좌)을 고르십시오');
     if (k === '현금') throw new Error("'현금' 분류의 예수금은 추가할 수 없습니다");
     if (cashOf_(a).mode !== 'none') throw new Error(`'${a}'는 이미 예수금과 연결되어 있습니다. 예수금 연결은 바꿀 수 없습니다`);
-    if (!/예수금/.test(ls)) throw new Error("예수금 이름에 '예수금'을 넣으십시오 (예: 키움 예수금)");
     if (findRow_(t, a, ls) >= 0) throw new Error(`'${ls}'가 이미 있습니다`);
     for (let r = 1; r < t.values.length; r++) if (String(t.values[r][t.col['자산']]).trim() === a && num_(t.values[r][t.col['수량']]) > 0) throw new Error(`'${a}'에 보유 중인 종목이 있어 예수금을 새로 연결할 수 없습니다`);
     for (let r = 1; r < t.values.length; r++) if (String(t.values[r][t.col['자산']]).trim() === a && /^수동/.test(String(t.values[r][t.col['시세방식']] || ''))) throw new Error(`'${a}'는 금액만 직접 관리하는 자산이라 예수금을 붙일 수 없습니다`);
