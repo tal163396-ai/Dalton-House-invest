@@ -1786,7 +1786,7 @@
           <label class="field"><span>종목 이름</span><input id="aSubName" maxlength="40" autocomplete="off" placeholder="예: NAVER" value="${esc(F.aSubName || '')}"></label>
           <label class="field"><span>티커 (선택)</span><input id="aTicker" maxlength="20" autocomplete="off" autocapitalize="characters" placeholder="예: SOXL, 005930" value="${esc(F.aTicker || '')}"></label>
         </div>
-        <p class="help">티커를 넣으면 시세가 자동으로 들어옵니다.<br>미국 주식: <b>SOXL</b><br>국내 주식: <b>005930</b>(종목코드 6자리)<br>비워 두면 산 단가가 현재가가 되고, '수정'에서 고칠 수 있습니다.</p>
+        <p class="help">티커를 넣으면 시세가 자동으로 들어옵니다.<br>미국 주식: <b>SOXL</b><br>국내 주식: <b>005930</b>(종목코드 6자리)<br>티커를 비워두면 산 단가가 현재가가 되고,<br>'수정'에서 고칠 수 있습니다.</p>
         ${curSeg()}`;
     }
     return `<div class="field"><span>무엇을 추가할까요?</span><div class="seg ad-what" role="group">${Object.keys(AD_WHAT).map(k => `<button type="button" data-aw="${k}" class="${F.aWhat === k ? 'on' : ''}">${k === 'asset' ? '자산' : AD_WHAT[k]}</button>`).join('')}</div></div>
