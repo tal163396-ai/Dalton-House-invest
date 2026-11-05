@@ -1915,7 +1915,7 @@
         <p class="fix-note">증권사 앱의 <b>체결잔고·매입단가·매입금액</b>을<br>그대로 넣으십시오. 비워 둔 칸은 바뀌지 않습니다.</p>
         <div class="two">
           <label class="field"><span>수량</span><input id="fxQty" class="dec" type="text" inputmode="decimal" autocomplete="off" placeholder="${cur.qty.toLocaleString('ko-KR', { maximumFractionDigits: 8 })}"></label>
-          <label class="field"><span id="fxAvgL">평단가 (${usd ? '달러' : '원'})</span><input id="fxAvg" class="dec" type="text" inputmode="decimal" autocomplete="off" placeholder="${Number(cur.avg || '' || 0).toLocaleString('ko-KR', { maximumFractionDigits: 4 })}"></label>
+          <label class="field"><span id="fxAvgL">평단가 (${usd ? '달러' : '원'})</span><input id="fxAvg" class="dec" type="text" inputmode="decimal" autocomplete="off" placeholder="${Number(cur.avg || '' || 0).toLocaleString('ko-KR', { maximumFractionDigits: usd ? 4 : 0 })}"></label>
         </div>
         <div class="two">
           <label class="field"><span>통화</span><select id="fxCur"><option ${usd ? '' : 'selected'}>KRW</option><option ${usd ? 'selected' : ''}>USD</option></select></label>
@@ -1924,7 +1924,7 @@
         <label class="field"><span>원금 = 매입금액 (원)</span><input id="fxCost" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="${Math.round(cur.cost).toLocaleString('ko-KR')}"></label>
         ${String(cur.ticker || '').trim() ? '' : `<label class="field"><span>현재가 (${usd ? '달러' : '원'}) · 티커 없는 종목</span><input id="fxPrice" class="dec" type="text" inputmode="decimal" autocomplete="off" placeholder="${Number(cur.price || 0).toLocaleString('ko-KR', { maximumFractionDigits: 4 })}"></label>
         <p class="help">시세를 받아올 곳이 없어 마지막으로 사고판 단가가 현재가입니다.<br>지금 가격을 알면 여기에 넣으십시오.</p>`}
-        <p class="preview num">지금 기록: ${cur.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${qtyUnit(cur)} · 평단 ${sym}${(cur.avg || 0).toLocaleString('ko-KR')}${usd ? '' : '원'} · 원금 ${won(cur.cost)}</p>
+        <p class="preview num">지금 기록: ${cur.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${qtyUnit(cur)} · 평단 ${sym}${(cur.avg || 0).toLocaleString('ko-KR', { maximumFractionDigits: usd ? 4 : 0 })}${usd ? '' : '원'} · 원금 ${won(cur.cost)}</p>
         <p class="preview num" id="fxHint"></p>` : `
         <label class="field"><span>${usd ? '지금 금액 (달러)' : '지금 금액 (원)'}</span>
           <input id="fValue" class="${usd ? '' : 'money'}" type="${usd ? 'number' : 'text'}" inputmode="decimal" step="any" autocomplete="off" placeholder="${cur ? (usd ? cur.qty : Math.round(cur.value).toLocaleString('ko-KR')) : ''}">
@@ -1963,7 +1963,7 @@
       else body = `
         <div class="field"><span>종목</span>
           <button type="button" class="pick-btn" id="fRowBtn"><small>${esc(F.kind)}</small><b>${row ? esc(row.sub) : '선택'}</b><i><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></i></button></div>
-          <p class="preview num">${row ? (row.qty > 0 ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR')}${curr === 'USD' ? '' : '원'}` : '지금 수량 0') : ''}</p>
+          <p class="preview num">${row ? (row.qty > 0 ? `보유 ${row.qty.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}${unit}${row.avg ? ` · 평단 ${curr === 'USD' ? '$' : ''}${row.avg.toLocaleString('ko-KR', { maximumFractionDigits: curr === 'USD' ? 4 : 0 })}${curr === 'USD' ? '' : '원'}` : ''} · 현재 ${curr === 'USD' ? '$' : ''}${row.price.toLocaleString('ko-KR', { maximumFractionDigits: curr === 'USD' ? 4 : 0 })}${curr === 'USD' ? '' : '원'}` : '지금 수량 0') : ''}</p>
           ${row && D.cashMap ? (() => { const c = D.cashMap[row.asset], buy = F.type === '매수';
             return `<p class="cash-flow">${c && c.sub ? `${buy ? '매수한 종목은' : '매도한 종목은'} <b>${esc(cashName(row.asset, c.sub))}</b>${buy ? '에서 빠집니다' : '으로 들어갑니다'}` : `예수금과 연결 없음 · ${buy ? '원금만 늘어납니다' : '원금만 줄어듭니다'}`}</p>`; })() : ''}
         <div class="two">
