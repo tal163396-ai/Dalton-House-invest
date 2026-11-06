@@ -1683,7 +1683,7 @@ button.cm-sr:active { background: var(--fill); }
 .ar-years::-webkit-scrollbar { display: none; }
 .ar-years button { flex: none; border: 0; border-radius: 999px; padding: 8px 16px; font: inherit; font-weight: 700; font-size: 15px; background: var(--card); color: var(--ink-3); }
 .ar-years button.on { background: var(--ink); color: var(--bg); }
-.seg.ar-filter { display: grid; grid-template-columns: 1fr 1fr 1fr 1.3fr; width: 100%; margin-bottom: 12px; }
+.seg.ar-filter { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; margin-bottom: 12px; }
 .seg.ar-filter button { padding-left: 0; padding-right: 0; font-size: 13.5px; }
 .ar-month { margin-bottom: 12px; }
 .ar-mh { display: flex; align-items: baseline; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }

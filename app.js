@@ -2253,7 +2253,7 @@
           </button>`;
 
   /* ───────────── 전체 기록 (2026-11-06): 거래기록 전부를 연도 · 월별로. 화면을 열 때 서버에서 불러옴 ───────────── */
-  const REC_FILTER = { all: '전체', buy: '매수', sell: '매도', etc: '수정·비용' };   // 입금·출금은 가계부 투자 계좌 화면에서
+  const REC_FILTER = { all: '전체', buy: '매수', sell: '매도', etc: '비용' };   // 입금·출금은 빼고 보여 줌 (가계부 투자 계좌 화면에 모두 있음). '비용'에는 예전 '수정'(기타 손익) 기록도 함께
   const recMatch = (f, t) => { const ty = t['구분']; return f === 'all' || (f === 'buy' && ty === '매수') || (f === 'sell' && ty === '매도') || (f === 'flow' && (ty === '입금' || ty === '출금')) || (f === 'etc' && !['매수', '매도', '입금', '출금'].includes(ty)); };
   let allRecRefresh = null;
   function openAllRecords() {
@@ -2291,6 +2291,7 @@
         if (e.code === 'auth') { logout('비밀번호를 다시 입력하십시오.'); return; }
         st.list = state.data ? state.data.trades.slice().reverse() : []; st.partial = true;   // 서버가 아직 예전 버전
       }
+      st.list = st.list.filter(t => t['구분'] !== '입금' && t['구분'] !== '출금');
       st.list.sort((a, b) => String(b['날짜']).localeCompare(String(a['날짜'])) || (b._r || 0) - (a._r || 0));
       draw();
     };
