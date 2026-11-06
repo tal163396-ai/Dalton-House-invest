@@ -202,5 +202,12 @@ test('분류·자산·예수금·종목 추가 (매수 없이)', () => {
   ok(/연금 계좌/.test(t.G.__props.CASH_LINKS || ''), '다른 빈 자산 연결은 남음');
 });
 
+test('전체 기록 (tradesAll)', () => {
+  const t = fresh();
+  for (let i = 0; i < 3; i++) t.call({ action: 'trade', trade: { type: '매수', asset: 'QLD', sub: 'QLD', qty: 1, price: 80, date: `2026-11-0${i + 1}T09:00:00+09:00` } });
+  const r = t.call({ action: 'tradesAll' });
+  ok(r.ok && r.trades.length === 3 && r.trades.every(x => x._r && x['구분'] === '매수'), '전체 거래기록 + 줄 번호', JSON.stringify(r).slice(0, 200));
+});
+
 console.log(`\n${fail ? `✗ 실패 ${fail}건` : '모두 통과'} (확인 ${pass + fail}건)`);
 process.exit(fail ? 1 : 0);

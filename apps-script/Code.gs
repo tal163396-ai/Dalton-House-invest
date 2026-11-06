@@ -177,6 +177,7 @@ function doPost(e) {
       case 'tradeEdit': return json_(withLock_(() => tradeEdit_(req)));
       case 'holdDel':   return json_(req.dry ? holdDelPlan_(req) : withLock_(() => holdDel_(req)));
       case 'holdAdd':   return json_(withLock_(() => holdAdd_(req)));
+      case 'tradesAll': return json_({ ok: true, trades: tradeRows_() });   // 기록 탭 '전체 기록' (앱 처음 불러올 때는 최근 200건만)
       case 'hh':        renameOnce_(); usdOnce_(); return json_({ ok: true, hh: readHH_() });
       case 'hhSave':    return json_(withLock_(() => hhSave_(req)));
       case 'hhDel':     return json_(withLock_(() => hhDel_(req)));

@@ -1243,6 +1243,7 @@
     if (onMount) onMount(pg);
     return pg;
   }
+  D.hhPushPage = pushPage;   // 투자 앱 '전체 기록'도 같은 겹쳐 뜨는 화면을 씀
   function pushState(close) { stack.push({ close }); history.pushState({ hhp: stack.length }, ''); }
   function popOne() {
     const s = stack.pop();

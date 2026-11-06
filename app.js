@@ -1999,18 +1999,14 @@
       </div>
       <div class="card">
         <div class="card-head"><h2 class="card-title">최근 기록</h2></div>
-        ${D.trades.length ? D.trades.slice(0, 15).map((t, i) => `
-          <button class="trade tr-btn" data-ti="${i}">
-            <span><span class="tr-t"><span class="tag ${t['구분'] === '매수' ? 'buy' : t['구분'] === '매도' ? 'sell' : ''}">${esc(t['구분'])}</span><span class="tr-n">${esc(t['세부종목'] || t['자산'])}${t['수량'] ? ` ${esc(t['수량'])}주` : ''}${t['연결'] ? ' <span class="tag hh-link">가계부</span>' : ''}</span></span>
-              <small>${fmtDate(new Date(t['날짜']))}${t['입력자'] ? ` · ${esc(t['입력자'])}` : ''}${t['메모'] ? ` · ${esc(t['메모'])}` : ''}</small></span>
-            <span class="num" style="text-align:right">${won(num(t['금액(원)']))}${isNum(t['실현손익(원)']) && t['실현손익(원)'] !== '' ? `<br><small class="${cls(num(t['실현손익(원)']))}">${signWon(num(t['실현손익(원)']))}</small>` : ''}</span>
-          </button>`).join('') : `<p class="empty">아직 앱에서 기록한 거래가 없습니다.<br>매수·매도를 기록하면<br>보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
+        ${D.trades.length ? D.trades.slice(0, 15).map((t, i) => tradeRowHtml(t, i)).join('') + `<button class="btn all-rec-btn" id="allRecBtn">전체 기록 보기</button>` : `<p class="empty">아직 앱에서 기록한 거래가 없습니다.<br>매수·매도를 기록하면<br>보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
       </div>
       </div><div class="page">${monthCloseCard() || '<div class="card"><p class="empty">가계부월별 탭이 없습니다.</p></div>'}</div></div>`;
     recPagerApi = setupPager($('#rPager'), $$('#rTabs button'), { start: state.rPage || 0, onChange: i => { state.rPage = i; sess.set('dh_rpage', i); } });
 
     $$('.type-seg button', el).forEach(b => b.onclick = () => { F.type = b.dataset.type; renderRecord(); });
     $$('.tr-btn', el).forEach(b => b.onclick = () => { const t = D.trades[Number(b.dataset.ti)]; if (t) openTrade(t); });
+    { const ab = $('#allRecBtn', el); if (ab) ab.onclick = openAllRecords; }
     const on = (id, ev, fn) => { const x = $(id, el); if (x) x.addEventListener(ev, fn); };
     on('#fRowBtn', 'click', () => {
       // 매수·매도 종목 고르기: 분류별로 묶은 목록. 새 종목은 '추가·삭제 → 추가'에서
@@ -2248,6 +2244,61 @@
 
   /* ── 최근 기록 누르기: 상세 → 수정·삭제 (보유현황도 함께 되돌림) ── */
   const tradeSig = t => ({ type: t['구분'], asset: t['자산'], sub: t['세부종목'], amt: num(t['금액(원)']) });
+  // 거래기록 한 줄 (최근 기록 · 전체 기록 공통)
+  const tradeRowHtml = (t, i) => `
+          <button class="trade tr-btn" data-ti="${i}">
+            <span><span class="tr-t"><span class="tag ${t['구분'] === '매수' ? 'buy' : t['구분'] === '매도' ? 'sell' : ''}">${esc(t['구분'])}</span><span class="tr-n">${esc(t['세부종목'] || t['자산'])}${t['수량'] ? ` ${esc(t['수량'])}주` : ''}${t['연결'] ? ' <span class="tag hh-link">가계부</span>' : ''}</span></span>
+              <small>${fmtDate(new Date(t['날짜']))}${t['입력자'] ? ` · ${esc(t['입력자'])}` : ''}${t['메모'] ? ` · ${esc(t['메모'])}` : ''}</small></span>
+            <span class="num" style="text-align:right">${won(num(t['금액(원)']))}${isNum(t['실현손익(원)']) && t['실현손익(원)'] !== '' ? `<br><small class="${cls(num(t['실현손익(원)']))}">${signWon(num(t['실현손익(원)']))}</small>` : ''}</span>
+          </button>`;
+
+  /* ───────────── 전체 기록 (2026-11-06): 거래기록 전부를 연도 · 월별로. 화면을 열 때 서버에서 불러옴 ───────────── */
+  const REC_FILTER = { all: '전체', buy: '매수', sell: '매도', flow: '입금·출금', etc: '수정·비용' };
+  const recMatch = (f, t) => { const ty = t['구분']; return f === 'all' || (f === 'buy' && ty === '매수') || (f === 'sell' && ty === '매도') || (f === 'flow' && (ty === '입금' || ty === '출금')) || (f === 'etc' && !['매수', '매도', '입금', '출금'].includes(ty)); };
+  let allRecRefresh = null;
+  function openAllRecords() {
+    const push = window.DH.hhPushPage;
+    if (!push) { toast('잠시 뒤 다시 누르십시오', true); return; }
+    const st = { list: null, year: '', f: 'all', partial: false };
+    let pg = null;
+    const draw = () => {
+      if (!pg) return;
+      const body = $('.hh-pbody', pg);
+      if (!st.list) { body.innerHTML = '<p class="empty">불러오는 중…</p>'; return; }
+      const years = [...new Set(st.list.map(t => String(t['날짜']).slice(0, 4)))].sort().reverse();
+      if (!years.includes(st.year)) st.year = years[0] || '';
+      const inYear = st.list.filter(t => String(t['날짜']).slice(0, 4) === st.year && recMatch(st.f, t));
+      const months = [...new Set(inYear.map(t => String(t['날짜']).slice(5, 7)))].sort().reverse();
+      const sum = (l, ty) => l.filter(t => t['구분'] === ty).reduce((a, t) => a + num(t['금액(원)']), 0);
+      body.innerHTML = `
+        ${st.partial ? '<p class="note ar-note">Code.gs를 새 버전으로 배포하면 전체 기록이 보입니다. 지금은 최근 200건만 보입니다.</p>' : ''}
+        <div class="ar-years">${years.map(y => `<button type="button" data-ry="${y}" class="${y === st.year ? 'on' : ''}">${y}년</button>`).join('')}</div>
+        <div class="seg ar-filter" role="group">${Object.keys(REC_FILTER).map(k => `<button type="button" data-rf="${k}" class="${st.f === k ? 'on' : ''}">${REC_FILTER[k]}</button>`).join('')}</div>
+        ${months.length ? months.map(m => {
+          const l = inYear.filter(t => String(t['날짜']).slice(5, 7) === m), b = sum(l, '매수'), s2 = sum(l, '매도');
+          return `<section class="card ar-month"><div class="ar-mh"><b>${Number(m)}월</b><span>${l.length}건${b ? ` · 매수 ${won(b)}` : ''}${s2 ? ` · 매도 ${won(s2)}` : ''}</span></div>
+            ${l.map(t => tradeRowHtml(t, st.list.indexOf(t))).join('')}</section>`;
+        }).join('') : `<p class="empty">${st.year ? `${st.year}년에 ${st.f === 'all' ? '' : `${REC_FILTER[st.f]} `}기록이 없습니다.` : '기록이 없습니다.'}</p>`}`;
+      $$('[data-ry]', body).forEach(b => b.onclick = () => { st.year = b.dataset.ry; draw(); });
+      $$('[data-rf]', body).forEach(b => b.onclick = () => { st.f = b.dataset.rf; draw(); });
+      $$('.tr-btn', body).forEach(b => b.onclick = () => { const t = st.list[Number(b.dataset.ti)]; if (t) openTrade(t); });
+    };
+    const fetchAll = async () => {
+      try {
+        const j = await api('tradesAll');
+        st.list = (j.trades || []); st.partial = false;
+      } catch (e) {
+        if (e.code === 'auth') { logout('비밀번호를 다시 입력하십시오.'); return; }
+        st.list = state.data ? state.data.trades.slice().reverse() : []; st.partial = true;   // 서버가 아직 예전 버전
+      }
+      st.list.sort((a, b) => String(b['날짜']).localeCompare(String(a['날짜'])) || (b._r || 0) - (a._r || 0));
+      draw();
+    };
+    pg = push({ title: '전체 기록', body: '', cls: 'ar-page', onMount: p => { pg = p; draw(); }, onClose: () => { allRecRefresh = null; } });
+    allRecRefresh = fetchAll;
+    fetchAll();
+  }
+
   function openTrade(t) {
     const type = t['구분'], linked = !!String(t['연결'] || '').trim(), trade = type === '매수' || type === '매도';
     const locked = String(t['날짜'] || '').slice(0, 10) < '2026-11-01';   // 증권사 기준 출발점 전 기록 (Code.gs INV_BASE_DATE)
@@ -2323,6 +2374,7 @@
       const j = await api(action, extra);
       closeSheet(); toast(j.message || '완료했습니다');
       await load({ quiet: true });
+      if (allRecRefresh) allRecRefresh();   // 전체 기록 화면이 열려 있으면 다시 불러옴
     } catch (e) {
       toast(e.message, true);
       if (btn) { btn.disabled = false; btn.textContent = action === 'tradeDel' ? '삭제' : '저장'; }
