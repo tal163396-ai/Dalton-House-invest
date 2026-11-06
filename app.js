@@ -2244,6 +2244,19 @@
 
   /* ── 최근 기록 누르기: 상세 → 수정·삭제 (보유현황도 함께 되돌림) ── */
   const tradeSig = t => ({ type: t['구분'], asset: t['자산'], sub: t['세부종목'], amt: num(t['금액(원)']) });
+  // 불러오는 화면 (앱 아이콘 모양): 빨간 화면 전체에 그래프가 계속 올라가고 돼지가 걸음. 진행 막대는 .ar-bar / .ar-load b
+  const on2 = (x, fn) => { if (x) x.onclick = fn; };
+  const loadSplash = label => `<div class="ar-load" role="status" aria-live="polite">
+      <button class="ls-back" aria-label="뒤로"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div class="ls-art" aria-hidden="true">
+        <svg class="ls-chart" viewBox="118 52 246 202">
+          <rect class="lb lb1" x="143" y="194" width="34" height="53" rx="5"/><rect class="lb lb2" x="203" y="164" width="34" height="83" rx="5"/><rect class="lb lb3" x="262" y="134" width="34" height="113" rx="5"/>
+          <polyline class="ll" points="130,168 207,115 258,131 350,68" pathLength="100"/><polyline class="la" points="316,68 350,68 350,102"/>
+        </svg>
+        <div class="ls-pig"><img class="lp-leg lp-b" src="icons/pig-leg-b.png" alt=""><img class="lp-leg lp-f" src="icons/pig-leg-f.png" alt=""><img class="lp-body" src="icons/pig-body.png" alt=""></div>
+        <div class="ls-ground"></div>
+      </div>
+      <div class="ar-bar"><i></i></div><b class="num">0%</b><small>${label}</small></div>`;
   // 최근 기록·전체 기록에는 입금·출금을 뺌 (가계부 투자 계좌 화면에 모두 있음)
   const noFlow = t => t['구분'] !== '입금' && t['구분'] !== '출금';
   const recentTrades = () => (state.data ? state.data.trades.filter(noFlow) : []);
@@ -2268,7 +2281,8 @@
       if (!pg) return;
       const body = $('.hh-pbody', pg);
       if (!st.list) {
-        body.innerHTML = `<div class="ar-load" role="status" aria-live="polite"><img src="icons/icon-192.png?v=7" alt="" width="64" height="64"><div class="ar-bar"><i></i></div><b class="num">0%</b><small>전체 기록을 불러오는 중</small></div>`;
+        body.innerHTML = loadSplash('전체 기록을 불러오는 중');
+        on2($('.ls-back', body), () => history.back());
         startLoadBar(body);
         return;
       }
