@@ -2253,7 +2253,7 @@
           </button>`;
 
   /* ───────────── 전체 기록 (2026-11-06): 거래기록 전부를 연도 · 월별로. 화면을 열 때 서버에서 불러옴 ───────────── */
-  const REC_FILTER = { all: '전체', buy: '매수', sell: '매도', flow: '입금·출금', etc: '수정·비용' };
+  const REC_FILTER = { all: '전체', buy: '매수', sell: '매도', etc: '수정·비용' };   // 입금·출금은 가계부 투자 계좌 화면에서
   const recMatch = (f, t) => { const ty = t['구분']; return f === 'all' || (f === 'buy' && ty === '매수') || (f === 'sell' && ty === '매도') || (f === 'flow' && (ty === '입금' || ty === '출금')) || (f === 'etc' && !['매수', '매도', '입금', '출금'].includes(ty)); };
   let allRecRefresh = null;
   function openAllRecords() {
