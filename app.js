@@ -2253,7 +2253,23 @@
           <rect class="lb lb1" x="143" y="194" width="34" height="53" rx="5"/><rect class="lb lb2" x="203" y="164" width="34" height="83" rx="5"/><rect class="lb lb3" x="262" y="134" width="34" height="113" rx="5"/>
           <polyline class="ll" points="130,168 207,115 258,131 350,68" pathLength="100"/><polyline class="la" points="316,68 350,68 350,102"/>
         </svg>
-        <div class="ls-pig"><img class="lp-leg lp-b" src="icons/pig-leg-b.png" alt=""><img class="lp-leg lp-f" src="icons/pig-leg-f.png" alt=""><img class="lp-body" src="icons/pig-body.png" alt=""></div>
+        <div class="ls-pig"><svg class="lp" viewBox="0 0 270 200" aria-hidden="true">
+          <g fill="#F2CB5B">
+            <rect class="lg lg2" x="98" y="120" width="26" height="66" rx="11" fill="#DDB247"/>
+            <rect class="lg lg3" x="194" y="120" width="26" height="66" rx="11" fill="#DDB247"/>
+            <rect class="lg lg1" x="66" y="120" width="28" height="66" rx="12"/>
+            <rect class="lg lg4" x="164" y="120" width="28" height="66" rx="12"/>
+            <g class="lpb">
+              <path d="M46 98 C 30 92, 22 106, 34 112" fill="none" stroke="#F2CB5B" stroke-width="7" stroke-linecap="round"/>
+              <ellipse cx="128" cy="102" rx="90" ry="64"/>
+              <path d="M182 56 L 202 38 L 204 72 Z" stroke="#F2CB5B" stroke-width="12" stroke-linejoin="round"/>
+              <ellipse cx="196" cy="104" rx="48" ry="46"/>
+              <rect x="226" y="88" width="30" height="36" rx="13"/>
+              <path d="M90 56 Q 128 38 166 56" fill="none" stroke="#D3343A" stroke-width="10" stroke-linecap="round"/>
+              <circle cx="222" cy="94" r="5.5" fill="#D3343A"/>
+            </g>
+          </g>
+        </svg></div>
         <div class="ls-ground"></div>
       </div>
       <div class="ar-bar"><i></i></div><b class="num">0%</b><small>${label}</small></div>`;

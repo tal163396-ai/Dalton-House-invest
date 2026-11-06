@@ -1705,17 +1705,18 @@ button.cm-sr:active { background: var(--fill); }
 @keyframes lbGrow { 0% { transform: scaleY(.05); } 35%, 85% { transform: scaleY(1); } 100% { transform: scaleY(.05); } }
 @keyframes llDraw { 0%, 15% { stroke-dashoffset: 100; } 55%, 85% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 100; } }
 @keyframes laShow { 0%, 50% { opacity: 0; transform: translate(-6px, 6px); } 58%, 85% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-.ls-pig { position: relative; width: 150px; aspect-ratio: 255 / 189; margin-top: 14px; animation: lpBob .5s ease-in-out infinite alternate; }
-.ls-pig img { position: absolute; inset: 0; width: 100%; height: 100%; }
-.lp-leg { transform-origin: 50% 88%; }
-.lp-b { transform-origin: 28% 90%; animation: lpLeg .5s ease-in-out infinite alternate; }
-.lp-f { transform-origin: 63% 90%; animation: lpLeg .5s ease-in-out infinite alternate-reverse; }
-@keyframes lpBob { from { transform: translateY(0) rotate(-1.5deg); } to { transform: translateY(-5px) rotate(1.5deg); } }
-@keyframes lpLeg { from { transform: rotate(-16deg); } to { transform: rotate(16deg); } }
+.ls-pig { width: 150px; margin-top: 14px; }
+.ls-pig .lp { display: block; width: 100%; height: auto; overflow: visible; }
+/* 걷는 돼지 (벡터): 다리는 몸통 뒤에서 위쪽을 축으로 흔들고, 몸통은 살짝 오르내림 → 배가 갈라지지 않음 */
+.lp .lpb { animation: lpBob .5s ease-in-out infinite alternate; }
+.lp .lg { transform-box: fill-box; transform-origin: 50% 15%; animation: lpLeg .5s ease-in-out infinite alternate; }
+.lp .lg2, .lp .lg4 { animation-direction: alternate-reverse; }
+@keyframes lpBob { from { transform: translateY(0); } to { transform: translateY(-5px); } }
+@keyframes lpLeg { from { transform: rotate(-20deg); } to { transform: rotate(20deg); } }
 .ls-ground { width: 200px; height: 4px; margin-top: 4px; border-radius: 2px; background: repeating-linear-gradient(90deg, rgba(255,255,255,.55) 0 18px, transparent 18px 32px); background-size: 32px 4px; animation: lgMove .5s linear infinite; }
 @keyframes lgMove { to { background-position: -32px 0; } }
 .ar-load .ar-bar { width: min(240px, 70%); height: 6px; border-radius: 99px; background: rgba(255,255,255,.28); overflow: hidden; }
 .ar-load .ar-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: #fff; transition: width .2s linear; }
 .ar-load b { font-size: 16px; font-weight: 800; color: #fff; }
 .ar-load small { color: rgba(255,255,255,.85); font-size: 13.5px; }
-@media (prefers-reduced-motion: reduce) { .ls-chart *, .ls-pig, .ls-pig img, .ls-ground { animation: none !important; } .ls-chart .ll { stroke-dashoffset: 0; } .ls-chart .la { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ls-chart *, .lp *, .ls-ground { animation: none !important; } .ls-chart .ll { stroke-dashoffset: 0; } .ls-chart .la { opacity: 1; } }
