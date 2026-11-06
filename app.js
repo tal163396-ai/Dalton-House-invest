@@ -1999,7 +1999,7 @@
       </div>
       <div class="card">
         <div class="card-head"><h2 class="card-title">최근 기록</h2></div>
-        ${D.trades.length ? D.trades.slice(0, 15).map((t, i) => tradeRowHtml(t, i)).join('') + `<button class="btn all-rec-btn" id="allRecBtn">전체 기록 보기</button>` : `<p class="empty">아직 앱에서 기록한 거래가 없습니다.<br>매수·매도를 기록하면<br>보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
+        ${recentTrades().length ? recentTrades().slice(0, 15).map(t => tradeRowHtml(t, D.trades.indexOf(t))).join('') + `<button class="btn all-rec-btn" id="allRecBtn">전체 기록 보기</button>` : `<p class="empty">아직 앱에서 기록한 거래가 없습니다.<br>매수·매도를 기록하면<br>보유현황과 월별 수익이 자동으로 바뀝니다.</p>`}
       </div>
       </div><div class="page">${monthCloseCard() || '<div class="card"><p class="empty">가계부월별 탭이 없습니다.</p></div>'}</div></div>`;
     recPagerApi = setupPager($('#rPager'), $$('#rTabs button'), { start: state.rPage || 0, onChange: i => { state.rPage = i; sess.set('dh_rpage', i); } });
@@ -2244,6 +2244,9 @@
 
   /* ── 최근 기록 누르기: 상세 → 수정·삭제 (보유현황도 함께 되돌림) ── */
   const tradeSig = t => ({ type: t['구분'], asset: t['자산'], sub: t['세부종목'], amt: num(t['금액(원)']) });
+  // 최근 기록·전체 기록에는 입금·출금을 뺌 (가계부 투자 계좌 화면에 모두 있음)
+  const noFlow = t => t['구분'] !== '입금' && t['구분'] !== '출금';
+  const recentTrades = () => (state.data ? state.data.trades.filter(noFlow) : []);
   // 거래기록 한 줄 (최근 기록 · 전체 기록 공통)
   const tradeRowHtml = (t, i) => `
           <button class="trade tr-btn" data-ti="${i}">
@@ -2264,7 +2267,11 @@
     const draw = () => {
       if (!pg) return;
       const body = $('.hh-pbody', pg);
-      if (!st.list) { body.innerHTML = '<p class="empty">불러오는 중…</p>'; return; }
+      if (!st.list) {
+        body.innerHTML = `<div class="ar-load" role="status" aria-live="polite"><img src="icons/icon-192.png?v=7" alt="" width="64" height="64"><div class="ar-bar"><i></i></div><b class="num">0%</b><small>전체 기록을 불러오는 중</small></div>`;
+        startLoadBar(body);
+        return;
+      }
       const years = [...new Set(st.list.map(t => String(t['날짜']).slice(0, 4)))].sort().reverse();
       if (!years.includes(st.year)) st.year = years[0] || '';
       const inYear = st.list.filter(t => String(t['날짜']).slice(0, 4) === st.year && recMatch(st.f, t));
@@ -2283,7 +2290,24 @@
       $$('[data-rf]', body).forEach(b => b.onclick = () => { st.f = b.dataset.rf; draw(); });
       $$('.tr-btn', body).forEach(b => b.onclick = () => { const t = st.list[Number(b.dataset.ti)]; if (t) openTrade(t); });
     };
+    // 불러오기 막대: 서버가 진행률을 알려 주지 않아서 지난번 걸린 시간을 기준으로 채움 (끝나면 100%)
+    let barTimer = null, barT0 = 0;
+    const expectMs = () => { const v = Number(store.get('dh_allrec_ms')); return v > 300 && v < 30000 ? v : 2500; };
+    const startLoadBar = root => {
+      clearInterval(barTimer); barT0 = Date.now();
+      const bar = $('.ar-bar i', root), pct = $('.ar-load b', root), ex = expectMs();
+      const tick = () => { const p = Math.min(95, Math.round(95 * (1 - Math.exp(-2.2 * (Date.now() - barT0) / ex)))); if (bar) bar.style.width = `${p}%`; if (pct) pct.textContent = `${p}%`; };
+      tick(); barTimer = setInterval(tick, 80);
+    };
+    const finishLoadBar = async () => {
+      clearInterval(barTimer);
+      if (!pg) return;
+      const bar = $('.ar-bar i', pg), pct = $('.ar-load b', pg);
+      if (bar) { bar.style.width = '100%'; if (pct) pct.textContent = '100%'; await new Promise(r => setTimeout(r, 220)); }
+      if (barT0) store.set('dh_allrec_ms', String(Date.now() - barT0));
+    };
     const fetchAll = async () => {
+      if (st.list) { st.list = null; draw(); }   // 다시 불러올 때도 막대 표시
       try {
         const j = await api('tradesAll');
         st.list = (j.trades || []); st.partial = false;
@@ -2291,11 +2315,12 @@
         if (e.code === 'auth') { logout('비밀번호를 다시 입력하십시오.'); return; }
         st.list = state.data ? state.data.trades.slice().reverse() : []; st.partial = true;   // 서버가 아직 예전 버전
       }
-      st.list = st.list.filter(t => t['구분'] !== '입금' && t['구분'] !== '출금');
+      st.list = st.list.filter(noFlow);
       st.list.sort((a, b) => String(b['날짜']).localeCompare(String(a['날짜'])) || (b._r || 0) - (a._r || 0));
+      await finishLoadBar();
       draw();
     };
-    pg = push({ title: '전체 기록', body: '', cls: 'ar-page', onMount: p => { pg = p; draw(); }, onClose: () => { allRecRefresh = null; } });
+    pg = push({ title: '전체 기록', body: '', cls: 'ar-page', onMount: p => { pg = p; draw(); }, onClose: () => { allRecRefresh = null; clearInterval(barTimer); } });
     allRecRefresh = fetchAll;
     fetchAll();
   }
