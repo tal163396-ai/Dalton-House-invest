@@ -1707,12 +1707,12 @@ button.cm-sr:active { background: var(--fill); }
 @keyframes laShow { 0%, 50% { opacity: 0; transform: translate(-6px, 6px); } 58%, 85% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 .ls-pig { width: 150px; margin-top: 14px; }
 .ls-pig .lp { display: block; width: 100%; height: auto; overflow: visible; }
-/* 걷는 돼지 (벡터): 다리는 몸통 뒤에서 위쪽을 축으로 흔들고, 몸통은 살짝 오르내림 → 배가 갈라지지 않음 */
+/* 걷는 돼지: 앱 아이콘의 돼지를 그대로 벡터로 옮김(어느 크기에서도 선명). 다리는 몸통 뒤에서 윗부분을 축으로 흔들고 몸통은 살짝 오르내림 */
 .lp .lpb { animation: lpBob .5s ease-in-out infinite alternate; }
-.lp .lg { transform-box: fill-box; transform-origin: 50% 15%; animation: lpLeg .5s ease-in-out infinite alternate; }
-.lp .lg2, .lp .lg4 { animation-direction: alternate-reverse; }
-@keyframes lpBob { from { transform: translateY(0); } to { transform: translateY(-5px); } }
-@keyframes lpLeg { from { transform: rotate(-20deg); } to { transform: rotate(20deg); } }
+.lp .lg { transform-box: fill-box; transform-origin: 50% 8%; animation: lpLeg .5s ease-in-out infinite alternate; }
+.lp .lgf { animation-direction: alternate-reverse; }
+@keyframes lpBob { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+@keyframes lpLeg { from { transform: rotate(-12deg); } to { transform: rotate(12deg); } }
 .ls-ground { width: 200px; height: 4px; margin-top: 4px; border-radius: 2px; background: repeating-linear-gradient(90deg, rgba(255,255,255,.55) 0 18px, transparent 18px 32px); background-size: 32px 4px; animation: lgMove .5s linear infinite; }
 @keyframes lgMove { to { background-position: -32px 0; } }
 .ar-load .ar-bar { width: min(240px, 70%); height: 6px; border-radius: 99px; background: rgba(255,255,255,.28); overflow: hidden; }
