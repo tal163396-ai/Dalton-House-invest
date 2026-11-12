@@ -2261,7 +2261,9 @@
       <div class="ar-bar"><i></i></div><b class="num">0%</b><small>${label}</small></div>`;
   // 최근 기록·전체 기록에는 입금·출금을 뺌 (가계부 투자 계좌 화면에 모두 있음)
   const noFlow = t => t['구분'] !== '입금' && t['구분'] !== '출금';
-  const recentTrades = () => (state.data ? state.data.trades.filter(noFlow) : []);
+  // 거래 날짜 순 (같은 날이면 나중에 입력한 것이 위). 전체 기록과 같은 순서
+  const byTradeDate = (a, b) => String(b['날짜']).localeCompare(String(a['날짜'])) || (b._r || 0) - (a._r || 0);
+  const recentTrades = () => (state.data ? state.data.trades.filter(noFlow).sort(byTradeDate) : []);
   // 거래기록 한 줄 (최근 기록 · 전체 기록 공통)
   const tradeRowHtml = (t, i) => `
           <button class="trade tr-btn" data-ti="${i}">
@@ -2332,7 +2334,7 @@
         st.list = state.data ? state.data.trades.slice().reverse() : []; st.partial = true;   // 서버가 아직 예전 버전
       }
       st.list = st.list.filter(noFlow);
-      st.list.sort((a, b) => String(b['날짜']).localeCompare(String(a['날짜'])) || (b._r || 0) - (a._r || 0));
+      st.list.sort(byTradeDate);
       await finishLoadBar();
       draw();
     };
