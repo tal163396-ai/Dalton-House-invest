@@ -1720,3 +1720,7 @@ button.cm-sr:active { background: var(--fill); }
 .ar-load b { font-size: 16px; font-weight: 800; color: #fff; }
 .ar-load small { color: rgba(255,255,255,.85); font-size: 13.5px; }
 @media (prefers-reduced-motion: reduce) { .ls-chart *, .lp *, .ls-ground { animation: none !important; } .ls-chart .ll { stroke-dashoffset: 0; } .ls-chart .la { opacity: 1; } }
+
+/* 종류별 비교: 종목 줄 누르면 상세 */
+tr.rz-go { cursor: pointer; }
+tr.rz-go:active td { background: var(--fill); }

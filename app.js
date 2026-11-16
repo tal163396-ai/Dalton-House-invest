@@ -173,7 +173,7 @@
       const c = comp.get(`${year}|${asset}`);
       return {
         date, year, month: num(r['월']) || date.getMonth() + 1, asset, sub: r['세부종목'], text: withSubName(r['세부종목'], r['내용']),
-        amount: num(r['손익(원)']), kind: c ? c.kind : (byAsset.get(asset)?.kind || '기타'),
+        amount: num(r['손익(원)']), type: String(r['구분'] || ''), kind: c ? c.kind : (byAsset.get(asset)?.kind || '기타'),
       };
     }).filter(r => !Number.isNaN(r.date.getTime()));
     const years = [...new Set([...(d.composition || []).map(c => num(c['연도'])), ...realized.map(r => r.year)])]
@@ -443,6 +443,24 @@
       </div>
       <button class="btn pop-close" data-close>닫기</button>`, 'pop');
     $('#rzBack').onclick = () => openStat('rz');
+  }
+
+  // 종류별 비교 → 종목 줄: 그해 그 종목의 실현손익 거래 하나하나
+  function openRzSub(y, asset, sub) {
+    const D = state.data;
+    // sub가 비어 있으면 그 자산의 모든 종목
+    const list = D.realized.filter(r => r.year === Number(y) && r.asset === asset && (!sub || String(r.sub || r.asset) === sub)).sort((a, b) => b.date - a.date);
+    const sum = list.reduce((t, r) => t + r.amount, 0);
+    const g = list.filter(r => r.amount > 0), l = list.filter(r => r.amount < 0);
+    openSheet(`
+      <div class="pop-hero ${sum >= 0 ? 'gain' : 'loss'}">
+        <div><div class="pop-kind">${y}년 · ${esc(!sub || asset === sub ? asset : `${asset} · ${sub}`)}</div><h2 id="sheetTitle" class="num">${signWon(sum)}</h2>
+          <div class="pop-sub num">${list.length}건${g.length ? ` · 익절 ${g.length}건 ${compactSigned(g.reduce((t, r) => t + r.amount, 0))}` : ''}${l.length ? ` · 손절 ${l.length}건 ${compactSigned(l.reduce((t, r) => t + r.amount, 0))}` : ''}</div></div>
+      </div>
+      <div class="pop-list">
+        ${list.map(r => `<div class="trade"><span>${esc(r.text || r.sub)}<br><small>${fmtDate(r.date)}${r.type ? ` · ${esc(r.type)}` : ''}</small></span><span class="num ${cls(r.amount)}">${signWon(r.amount)}</span></div>`).join('') || '<p class="empty">거래가 없습니다.</p>'}
+      </div>
+      <button class="btn pop-close" data-close>닫기</button>`, 'pop');
   }
 
   function drawPlan() {
@@ -1538,6 +1556,7 @@
       store.set('dh_kindsort', state.kindSort || '');
       keepScroll(renderYearBody);
     });
+    $$('#yearBody tr.rz-go').forEach(tr => { tr.onclick = () => openRzSub(y, tr.dataset.rza, tr.dataset.rzs); tr.onkeydown = e => { if (e.key === 'Enter') tr.click(); }; });
     $$('#yearBody .kind-row').forEach(tr => tr.onclick = () => {
       const k = tr.dataset.kind;
       state.openKinds.has(k) ? state.openKinds.delete(k) : state.openKinds.add(k);
@@ -1547,12 +1566,13 @@
 
   // 종류를 펼치면: 자산 → 그 안의 종목별 손익까지
   function kindDetailRows(k) {
-    const subRow = (s, indent) => `<tr class="sub ${indent ? 'subsub' : ''}"><td>${esc(s.s)}<small class="cnt"> ${s.n}건</small></td><td class="${cls(s.amt)}">${signWon(s.amt)}</td><td></td></tr>`;
-    if (k.rows.length === 1 && k.rows[0].a === k.k) return k.rows[0].subs.map(s => subRow(s, false)).join('');
+    // 종목 줄을 누르면 그 종목의 실현손익 거래 목록 (openRzSub)
+    const subRow = (s, indent, a) => `<tr class="sub rz-go ${indent ? 'subsub' : ''}" data-rza="${esc(a)}" data-rzs="${esc(s.s)}" role="button" tabindex="0"><td>${esc(s.s)}<small class="cnt"> ${s.n}건 ›</small></td><td class="${cls(s.amt)}">${signWon(s.amt)}</td><td></td></tr>`;
+    if (k.rows.length === 1 && k.rows[0].a === k.k) return k.rows[0].subs.map(s => subRow(s, false, k.rows[0].a)).join('');
     return k.rows.map(r => {
       const showSubs = r.subs.length > 1 || (r.subs.length === 1 && r.subs[0].s !== r.a);
-      return `<tr class="sub"><td>${esc(r.a)}</td><td class="${cls(r.amt)}">${signWon(r.amt)}</td><td class="${cls(r.ret)}">${pct(r.ret)}</td></tr>
-        ${showSubs ? r.subs.map(s => subRow(s, true)).join('') : ''}`;
+      return `<tr class="sub ${r.subs.length ? 'rz-go' : ''}" data-rza="${esc(r.a)}" data-rzs="" ${r.subs.length ? 'role="button" tabindex="0"' : ''}><td>${esc(r.a)}${r.subs.length && !showSubs ? '<small class="cnt"> ›</small>' : ''}</td><td class="${cls(r.amt)}">${signWon(r.amt)}</td><td class="${cls(r.ret)}">${pct(r.ret)}</td></tr>
+        ${showSubs ? r.subs.map(s => subRow(s, true, r.a)).join('') : ''}`;
     }).join('');
   }
 
